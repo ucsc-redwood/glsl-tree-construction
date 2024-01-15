@@ -109,7 +109,7 @@ void GlobalHistogram() {
 
   // prefix_sum
   // prefix sum at warp/subgroup/wave level
-  // scan occurence of digits containg digit 1 in the first i+1 bins for each warp/subgroup/wave
+  // scan occurence of digits containg digit 1 in the first i+1 bins for each warp/subgroup/wave, and store the result in g_globalHist
   for (int i = SUBGROUP_IDX << LANE_LOG; i < RADIX_BIN; i += HIST_THREADS) {
     g_globalHist[((LANE + 1) & LANE_MASK) + i] =
         SubGroupPrefixSum(g_globalHist[LANE + i]) + g_globalHist[LANE + i];
@@ -169,9 +169,13 @@ void BinningPass()
             keys[i] = b_sort[t];
     }
 
+    // [ 2, 5, 6 , 1]
+    // output= [1, 2, 3, 0]
+    // [0, 2, 7, 13, 14]
     //Warp Level Multisplit
     // this step ranks the key in warp-level by computes both 
     // (1) a warp-wide histogram of digit-counts, and (2) the warp-relative digit prefix count for each key
+    
     uint offsets[BIN_KEYS_PER_THREAD];
     {
         const uint t = SUBGROUP_IDX << RADIX_LOG;
@@ -187,9 +191,9 @@ void BinningPass()
             {
                 // extracts the k-th bit of the key, t2 is true if the k-th bit of keys[i] is 1, and false otherwise.
                 const bool t2 = keys[i] >> k & 1;
-                // waveActiveBallot counts the number of thread in the subgroup that have the k-th bit of keys[i] set to 1
-                // if t2 is true, then 0 xor waveActiveBallot(t2), oherwise 0xFFFFFFFF xor waveActiveBallot(t2), we get inverse result for t2 = true and false
-                offsets[i] &= (t2 ? 0 : 0xFFFFFFFF) ^ WaveActiveBallot(t2);
+                // subgroupActiveBallot counts the number of thread in the subgroup that have the k-th bit of keys[i] set to 1
+                // if t2 is true, then 0 xor subgroupActiveBallot(t2), oherwise 0xFFFFFFFF xor subgroupActiveBallot(t2), we get inverse result for t2 = true and false
+                offsets[i] &= (t2 ? 0 : 0xFFFFFFFF) ^ subgroupActiveBallot(t2);
             }
             
             // counts the number of bits the current lane is responsible for, i.e. in a subgroup of 32 threads, 
@@ -241,7 +245,7 @@ void BinningPass()
     if (SUBGROUP_THREAD_IDX < RADIX_BIN && LANE)
         g_reductionHist[SUBGROUP_THREAD_IDX] += SubgroupReadLaneAt(g_reductionHist[SUBGROUP_THREAD_IDX - 1], 1);
     work_group_sync();
-        
+    //
     //Update offsets
     if (SUBGROUP_IDX)
     {
@@ -271,6 +275,9 @@ void BinningPass()
     work_group_sync();
         
     //Lookback
+    // block 31 scan = block 30 scan result + current block prefix sum
+    // block 31 = block 29 scan result + block 30 prefix sum + current block prefix sum
+     
     if (partitionIndex)
     {
         //Free up shared memory, because we are at max
