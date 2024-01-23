@@ -1,0 +1,163 @@
+#version 450
+#extension GL_KHR_shader_subgroup_basic: enable
+#extension GL_KHR_shader_subgroup_ballot: enable
+#extension GL_KHR_shader_subgroup_arithmetic: enable
+
+#define RADIX_BIN 256
+#define RADIX_LOG 8
+#define RADIX_BITS 8
+#define RADIX_MASK 255 // Mask of digit bins
+#define RADIX_DIGITS 1 << RADIX_BITS
+#define RADIX_PASS 4//(sizeof(uint) * 8 + RADIX_BITS - 1) / RADIX_BITS
+
+#define LANE_COUNT 32 // number of threads in a subgroup
+#define LANE_MASK 31
+#define LANE_LOG 5
+
+#define HIST_SUBGRUP                                                           \
+  2 // number of subgroups in a thread block/work group for executing histogram
+    // kernel
+#define HIST_THREADS                                                           \
+  64 // number of threads in a thread block/work group for executing histogram
+     // kernel
+#define HIST_TBLOCKS                                                           \
+  2048 // number of thread blocks/workgroups for executing histogram kernel
+#define HIST_BLOCK                                                             \
+  HIST_TBLOCKS / HIST_THREADS // number of blocks for executing histogram kernel
+
+#define HIST_PART_SIZE (input_size / HIST_TBLOCKS) // the size of each partition
+#define HIST_PART_START                                                        \
+  (gl_WorkGroupID.x * HIST_PART_SIZE) // the start index of each partition. work
+                                    // group id in vulkan, block idx in cuda
+
+#define HIST_PART_END                                                          \
+  (gl_WorkGroupID.x == HIST_TBLOCKS - 1 ? input_size                             \
+                                      : (gl_WorkGroupID.x + 1) * HIST_PART_SIZE)
+
+int input_size;
+
+//For the binning
+#define BIN_PART_SIZE       7680    //The partition tile size of a BinningPass threadblock
+#define BIN_HISTS_SIZE      4096    //The total size of all subgroup histograms in shared memory
+#define BIN_TBLOCKS         512     //The number of threadblocks dispatched in a BinningPass threadblock
+#define BIN_THREADS         512     //The number of threads in a BinningPass threadblock
+#define BIN_SUB_PART_SIZE   480     //The subpartition tile size of a single subgroup in a BinningPass threadblock
+#define BIN_SUBGROUPS       16      //The number of subgroup in a BinningPass threadblock
+#define BIN_KEYS_PER_THREAD 15      //The number of keys per thread in BinningPass threadblock
+
+#define BIN_PARTITIONS     (input_size / BIN_PART_SIZE)             //The number of partition tiles in a BinningPass
+#define BIN_SUB_PART_START (SUBGROUP_IDX * BIN_SUB_PART_SIZE)     //The starting offset of a subpartition tile
+#define BIN_PART_START     (partitionIndex * BIN_PART_SIZE)     //The starting offset of a partition tile
+
+
+#define LANE gl_SubgroupInvocationID // the idx of thread in the subgroup
+#define SUBGROUP_IDX gl_SubgroupID // the idx of subgroup the thread belongs to
+#define SUBGROUP_THREAD_IDX                                                             \
+  (LANE + (SUBGROUP_IDX << LANE_LOG)) // the subgroup relative thread idx
+
+
+#define FLAG_NOT_READY      0       //Flag value inidicating neither inclusive sum, or aggregate sum of a partition tile is ready
+#define FLAG_AGGREGATE      1       //Flag value indicating aggregate sum of a partition tile is ready
+#define FLAG_INCLUSIVE      2       //Flag value indicating inclusive sum of a partition tile is ready
+#define FLAG_MASK           3       //Mask used to retrieve flag values
+
+
+layout(set = 0, binding = 0) coherent buffer BSortBuffer {
+    uint b_sort[];
+};
+
+layout(set = 0, binding = 1) coherent buffer BAltBuffer {
+    uint b_alt[];
+};
+
+layout(set = 0, binding = 2) coherent buffer BGlobalHist {
+    uint b_globalHist[];
+};
+
+layout(set = 0, binding = 3)  buffer  GGlobalHist{
+    uint g_globalHist[RADIX_BIN][RADIX_PASS];
+};
+
+
+layout(set = 0, binding = 4)  buffer GLocalHist {
+    uint g_localHist[RADIX_BIN]; 
+};
+
+layout(set = 0, binding = 5)  buffer GSubgroupHists {
+    uint g_subgroupHists[BIN_PART_SIZE];                    //Shared memory for the per subgroup histograms during digit binning passes
+
+};
+
+
+//[numthreads(LANE_COUNT, G_HIST_WAVES, 1)]
+
+void GlobalHistogram() {
+  // initialization
+  for (uint i = SUBGROUP_THREAD_IDX; i < RADIX_BIN; i += HIST_THREADS) {
+    g_globalHist[i][0] = 0;
+    g_globalHist[i][1] = 0;
+    g_globalHist[i][2] = 0;
+    g_globalHist[i][3] = 0;
+    barrier();
+  }
+
+  // histogram
+  // add number of occurence of each 1 at different digit place to global histogram
+  // there are 8 digits place for each pass, so we have 8*4 digits place in total for 32 bits integer
+  const uint partitionEnd = HIST_PART_END;
+  for (uint i = SUBGROUP_THREAD_IDX + HIST_PART_START; i < partitionEnd;
+       i += HIST_THREADS) {
+    const uint key = b_sort[i];
+    atomicAdd(g_globalHist[key & RADIX_MASK][0], 1);
+    atomicAdd(g_globalHist[key >> RADIX_LOG & RADIX_MASK][1], 1);
+    atomicAdd(g_globalHist[key >> (2 * RADIX_LOG) & RADIX_MASK][2], 1);
+    atomicAdd(g_globalHist[key >> (3 * RADIX_LOG) & RADIX_MASK][3], 1);
+  }
+  barrier();
+
+  // prefix_sum
+  // prefix sum at warp/subgroup/wave level
+  // scan occurence of digits containg digit 1 in the first i+1 bins for each warp/subgroup/wave, and store the result in g_globalHist
+  for (uint i = SUBGROUP_IDX << LANE_LOG; i < RADIX_BIN; i += HIST_THREADS) {
+    g_globalHist[((LANE + 1) & LANE_MASK) + i][0] = subgroupExclusiveAdd(g_globalHist[LANE + i][0] +  g_globalHist[LANE + i][0]);
+    g_globalHist[((LANE + 1) & LANE_MASK) + i][1] = subgroupExclusiveAdd(g_globalHist[LANE + i][1] +  g_globalHist[LANE + i][1]);
+    g_globalHist[((LANE + 1) & LANE_MASK) + i][2] = subgroupExclusiveAdd(g_globalHist[LANE + i][2] +  g_globalHist[LANE + i][2]);
+    g_globalHist[((LANE + 1) & LANE_MASK) + i][3] = subgroupExclusiveAdd(g_globalHist[LANE + i][3] +  g_globalHist[LANE + i][3]);
+  //  g_globalHist[((LANE + 1) & LANE_MASK) + i] =
+   //     SubGroupPrefixSum(g_globalHist[LANE + i]) + g_globalHist[LANE + i];
+  }
+    barrier();
+
+  if (LANE < (RADIX_BIN >> LANE_LOG) && SUBGROUP_IDX == 0) {
+    g_globalHist[LANE << LANE_LOG][0] += subgroupExclusiveAdd(g_globalHist[LANE << LANE_LOG][0]);
+    g_globalHist[LANE << LANE_LOG][1] += subgroupExclusiveAdd(g_globalHist[LANE << LANE_LOG][1]);
+    g_globalHist[LANE << LANE_LOG][2] += subgroupExclusiveAdd(g_globalHist[LANE << LANE_LOG][2]);
+    g_globalHist[LANE << LANE_LOG][3] += subgroupExclusiveAdd(g_globalHist[LANE << LANE_LOG][3]);
+  }
+    barrier();
+
+    uint k = SUBGROUP_THREAD_IDX;
+    
+    // prefixsum at global level
+    // b_globalHist holds global bin offset, it is used to indicate where each block can begin scattering its keys into the different digit bins
+    // for example, b_globalHist[255] = 100 meanning that there are 100 keys that contain digit 1 in the first 255 bins(least signifcant 8 bits)
+    bool is_not_first_lane = (LANE != 0);
+    bool is_not_first_subgroup = (SUBGROUP_IDX != 0);
+    atomicAdd(b_globalHist[k], (is_not_first_lane ? g_globalHist[k][0] : 0) + (is_not_first_subgroup ? subgroupBroadcast(g_globalHist[k - LANE_COUNT][0], 0) : 0));
+    atomicAdd(b_globalHist[k + RADIX_BIN], (is_not_first_lane ? g_globalHist[k][1] : 0) + (is_not_first_subgroup ? subgroupBroadcast(g_globalHist[k - LANE_COUNT][1], 0) : 0));
+    atomicAdd(b_globalHist[k + RADIX_BIN*2], (is_not_first_lane ? g_globalHist[k][2] : 0) + (is_not_first_subgroup ? subgroupBroadcast(g_globalHist[k - LANE_COUNT][2], 0) : 0));
+    atomicAdd(b_globalHist[k + RADIX_BIN*3], (is_not_first_lane ? g_globalHist[k][3] : 0) + (is_not_first_subgroup ? subgroupBroadcast(g_globalHist[k - LANE_COUNT][3], 0) : 0));
+
+    for (k += HIST_THREADS; k < RADIX_BIN; k += HIST_THREADS)
+    {
+        atomicAdd(b_globalHist[k], (is_not_first_lane ? g_globalHist[k][0] : 0) + subgroupBroadcast(g_globalHist[k - LANE_COUNT][0], 0));
+        atomicAdd(b_globalHist[k + RADIX_BIN], (is_not_first_lane ? g_globalHist[k][1] : 0) + subgroupBroadcast(g_globalHist[k - LANE_COUNT][1], 0));
+        atomicAdd(b_globalHist[k + RADIX_BIN*2], (is_not_first_lane ? g_globalHist[k][2] : 0) + subgroupBroadcast(g_globalHist[k - LANE_COUNT][2], 0));
+        atomicAdd(b_globalHist[k + RADIX_BIN*3], (is_not_first_lane ? g_globalHist[k][3] : 0) + subgroupBroadcast(g_globalHist[k - LANE_COUNT][3], 0));
+    }
+}
+
+
+void main(){
+  GlobalHistogram();
+}
