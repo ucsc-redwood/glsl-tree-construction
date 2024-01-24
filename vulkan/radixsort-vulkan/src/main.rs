@@ -14,14 +14,14 @@
 // GPU", or *GPGPU*. This is what this example demonstrates.
 
 use rand::Rng;
-use std::{num::NonZeroU64, sync::Arc};
+use std::{sync::Arc};
 use vulkano::{
     buffer::{Buffer, BufferCreateInfo, BufferUsage},
     command_buffer::{
         allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CommandBufferUsage,
     },
     descriptor_set::{
-        allocator::StandardDescriptorSetAllocator, layout::{self, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo, DescriptorSetLayoutSupport}, PersistentDescriptorSet, WriteDescriptorSet
+        allocator::StandardDescriptorSetAllocator, layout::{self}, PersistentDescriptorSet, WriteDescriptorSet
     },
     device::{
         physical::PhysicalDeviceType, Device, DeviceCreateInfo, DeviceExtensions, QueueCreateInfo,
@@ -30,9 +30,8 @@ use vulkano::{
     instance::{Instance, InstanceCreateFlags, InstanceCreateInfo},
     memory::{
         allocator::{
-            AllocationCreateInfo, DeviceLayout, MemoryTypeFilter, StandardMemoryAllocator,
+            AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator,
         },
-        DeviceAlignment,
     },
     pipeline::{
         compute::ComputePipelineCreateInfo, layout::PipelineDescriptorSetLayoutCreateInfo,
@@ -40,14 +39,14 @@ use vulkano::{
         PipelineShaderStageCreateInfo,
     },
     sync::{self, GpuFuture},
-    DeviceSize, Version, VulkanLibrary,
+    DeviceSize, VulkanLibrary,
 };
 
 fn main() {
     // initialize the data
     let mut rng = rand::thread_rng();
-    let random_numbers: Vec<u32> = (0..50000).map(|_| rng.gen()).collect();
-    let input_size = std::mem::size_of::<u32>() * 50000;
+    let _random_numbers: Vec<u32> = (0..50000).map(|_| rng.gen()).collect();
+    let _input_size = std::mem::size_of::<u32>() * 50000;
 
     // As with other examples, the first step is to create an instance.
     let library = VulkanLibrary::new().unwrap();
@@ -190,7 +189,7 @@ fn main() {
     )
     .unwrap();
 
-    let b_alt_buffer = Buffer::new_slice::<u64>(
+    let _b_alt_buffer = Buffer::new_slice::<u64>(
         memory_allocator.clone(),
         BufferCreateInfo {
             usage: BufferUsage::STORAGE_BUFFER,
@@ -235,7 +234,7 @@ fn main() {
     )
     .unwrap();
 
-    let g_localhist_buffer = Buffer::new_slice::<u64>(
+    let _g_localhist_buffer = Buffer::new_slice::<u64>(
         memory_allocator.clone(),
         BufferCreateInfo {
             usage: BufferUsage::STORAGE_BUFFER,
@@ -250,7 +249,7 @@ fn main() {
     )
     .unwrap();
 
-    let b_subgroup_hist_buffer = Buffer::new_slice::<u64>(
+    let _b_subgroup_hist_buffer = Buffer::new_slice::<u64>(
         memory_allocator.clone(),
         BufferCreateInfo {
             usage: BufferUsage::STORAGE_BUFFER,
@@ -273,7 +272,7 @@ fn main() {
     //
     // If you want to run the pipeline on multiple different buffers, you need to create multiple
     // descriptor sets that each contain the buffer you want to run the shader on.
-    let layout = pipeline.layout().set_layouts().get(0).unwrap();
+    let layout = pipeline.layout().set_layouts().first().unwrap();
 
     let set = PersistentDescriptorSet::new(
         &descriptor_set_allocator,
@@ -347,7 +346,7 @@ fn main() {
     // Now that the GPU is done, the content of the buffer should have been modified. Let's check
     // it out. The call to `read()` would return an error if the buffer was still in use by the
     // GPU.
-    let data_buffer_content = b_sort_buffer.read().unwrap();
+    let _data_buffer_content = b_sort_buffer.read().unwrap();
     /*
     for n in 0..65536u32 {
         assert_eq!(data_buffer_content[n as usize], n * 12);

@@ -84,10 +84,13 @@ layout(set = 0, binding = 4)  buffer GLocalHist {
 };
 
 layout(set = 0, binding = 5)  buffer GSubgroupHists {
-    uint g_subgroupHists[BIN_PART_SIZE];                    //Shared memory for the per subgroup histograms during digit binning passes
+    uint g_subGroupHists[BIN_PART_SIZE];                    //Shared memory for the per subgroup histograms during digit binning passes
 
 };
 
+layout(set = 0, binding = 6) coherent buffer BIndex {
+    uint b_index[];
+};
 
 //[numthreads(LANE_COUNT, G_HIST_WAVES, 1)]
 
@@ -156,6 +159,258 @@ void GlobalHistogram() {
         atomicAdd(b_globalHist[k + RADIX_BIN*3], (is_not_first_lane ? g_globalHist[k][3] : 0) + subgroupBroadcast(g_globalHist[k - LANE_COUNT][3], 0));
     }
 }
+
+
+void BinningPass()
+{
+    //load the global histogram values into shared memory
+    if (SUBGROUP_THREAD_IDX < RADIX_BIN)
+        g_localHist[SUBGROUP_THREAD_IDX] = b_globalHist[SUBGROUP_THREAD_IDX];
+    
+    //atomically fetch and increment device memory index to assign partition tiles
+    //Take advantage of the barrier to also clear the shared memory
+    // g_localHist[0] is set to be the original value of b_index[0]
+    if (LANE == 0 && SUBGROUP_IDX == 0)
+        g_localHist[0] = atomicAdd(b_index[0], 1);
+    barrier();
+    // Returns the value of the local histogram at bin 0 for the given lane index within the specified subgroup.
+    // it returns the current partitionIndex 
+    uint partitionIndex = subgroupBroadcast(g_localHist[0], 0);
+    for (uint i = SUBGROUP_THREAD_IDX; i < BIN_HISTS_SIZE; i += BIN_THREADS)
+        g_subGroupHists[i] = 0;
+    barrier();
+    
+    //Load keys into registers
+    uint keys[BIN_KEYS_PER_THREAD];
+    {
+        //[unroll]
+        for (uint i = 0, t = LANE + BIN_SUB_PART_START + BIN_PART_START; i < BIN_KEYS_PER_THREAD; ++i, t += LANE_COUNT)
+            keys[i] = b_sort[t];
+    }
+
+    // [ 2, 5, 6 , 1]
+    // output= [1, 2, 3, 0]
+    // [0, 2, 7, 13, 14]
+    //Warp Level Multisplit
+    // this step ranks the key in warp-level by computes both 
+    // (1) a warp-wide histogram of digit-counts, and (2) the warp-relative digit prefix count for each key
+    
+    uint offsets[BIN_KEYS_PER_THREAD];
+    {
+        const uint t = SUBGROUP_IDX << RADIX_LOG;
+            
+        //[unroll]
+        for (uint i = 0; i < BIN_KEYS_PER_THREAD; ++i)
+        {   
+            // fill with 1 so we can do ascending sort
+            offsets[i] = 0xFFFFFFFF;
+
+            //    [unroll]
+            for (int k = 0; k < RADIX_LOG; ++k)
+            {
+                // extracts the k-th bit of the key, t2 is true if the k-th bit of keys[i] is 1, and false otherwise.
+                const bool t2 = (keys[i] >> k & 1) != 0;
+                // subgroupActiveBallot counts the number of thread in the subgroup that have the k-th bit of keys[i] set to 1
+                // if t2 is true, then 0 xor subgroupActiveBallot(t2), oherwise 0xFFFFFFFF xor subgroupActiveBallot(t2), we get inverse result for t2 = true and false
+                offsets[i] &= (t2 ? 0 : 0xFFFFFFFF) ^ (subgroupBallot(t2)[0]);
+            }
+            
+            // counts the number of bits the current lane is responsible for, i.e. in a subgroup of 32 threads, 
+            // if the current lane id is 0, then it is responsible for 1 bits, if it is 1, then it is responsible for 2 bits, and so on
+            const uint bits = countbits(offsets[i] << LANE_MASK - LANE);
+            // index = least significant 8 bits of keys[i] + subgroup id * radix bin
+            const int index = (keys[i] & RADIX_MASK) + t;
+            const uint prev = g_subgroupHists[index];
+            //the lowest ranked thread in each active digit
+            // population will  add the population’s count to the per-warp counter corresponding to that digit
+            if (bits == 1)
+                g_subgroupHists[index] += countbits(offsets[i]);
+            // updated to reflect the position where the i-th key should be placed in the sorted array.
+            offsets[i] = prev + bits - 1;
+        }
+    }
+    barrier();
+        
+    // block level exclusive prefix sum across the histograms
+    // This provides (1) tile-wide digit counts for participating in chained scan cooperation with other blocks, and 
+    // (2) tile-relative bin offsets for each warp to scatter its elements into local bins within shared memory.
+    if (SUBGROUP_THREAD_IDX < RADIX_BIN)
+    {
+        for (int k = SUBGROUP_THREAD_IDX + RADIX_BIN; k < BIN_HISTS_SIZE; k += RADIX_BIN)
+        {
+            g_subgroupHists[SUBGROUP_THREAD_IDX] += g_subgroupHists[k];
+            g_subgroupHists[k] = g_subgroupHists[SUBGROUP_THREAD_IDX] - g_subgroupHists[k];
+        }
+        g_reductionHist[SUBGROUP_THREAD_IDX] = g_subgroupHists[SUBGROUP_THREAD_IDX];
+        
+        // partitionIndex == 0 means it is the first partition, so  the value is the inclusive global prefix sum of the digit counts of this and all previous tiles
+        if (partitionIndex == 0)
+            atomic_add(b_passHist[SUBGROUP_THREAD_IDX * BIN_PARTITIONS + partitionIndex], FLAG_INCLUSIVE ^ (g_subgroupHists[SUBGROUP_THREAD_IDX] << 2));
+        else
+        // otherwsie,  value is the local, per-tile digit count
+            atomic_add(b_passHist[SUBGROUP_THREAD_IDX * BIN_PARTITIONS + partitionIndex], FLAG_AGGREGATE ^ (g_subgroupHists[SUBGROUP_THREAD_IDX] << 2));
+    }
+    barrier(); // a barrier must be placed between here and the lookback to prevent accidentally broadcasting an incorrect aggregate
+
+    //exclusive prefix sum across the reductions
+    if (SUBGROUP_THREAD_IDX < RADIX_BIN)
+        g_reductionHist[(LANE + 1 & LANE_MASK) + (SUBGROUP_IDX << LANE_LOG)] = SubgroupPrefixSum(g_reductionHist[SUBGROUP_THREAD_IDX]) + g_reductionHist[SUBGROUP_THREAD_IDX];
+    barrier();
+        
+    if (LANE < (RADIX_BIN >> LANE_LOG) && SUBGROUP_IDX == 0)
+        g_reductionHist[LANE << LANE_LOG] = SubgroupPrefixSum(g_reductionHist[LANE << LANE_LOG]);
+    barrier();
+
+    if (SUBGROUP_THREAD_IDX < RADIX_BIN && LANE)
+        g_reductionHist[SUBGROUP_THREAD_IDX] += SubgroupReadLaneAt(g_reductionHist[SUBGROUP_THREAD_IDX - 1], 1);
+    barrier();
+    //
+    //Update offsets
+    if (SUBGROUP_IDX)
+    {
+        const uint t = SUBGROUP_IDX << RADIX_LOG;
+            
+        [unroll]
+        for (int i = 0; i < BIN_KEYS_PER_THREAD; ++i)
+        {
+            const uint t2 = keys[i] & RADIX_MASK;
+            offsets[i] += g_subgroupHists[t2 + t] + g_reductionHist[t2];
+        }
+    }
+    else
+    {
+        [unroll]
+        for (int i = 0; i < BIN_KEYS_PER_THREAD; ++i)
+            offsets[i] += g_reductionHist[keys[i] & RADIX_MASK];
+    }
+    barrier();
+        
+    //Scatter keys into shared memory
+    // now the g_subgroupHists contain the offset of each scattered key in the subgroup
+    {
+        for (int i = 0; i < BIN_KEYS_PER_THREAD; ++i)
+            g_subgroupHists[offsets[i]] = keys[i];
+    }
+    barrier();
+        
+    //Lookback
+    // block 31 scan = block 30 scan result + current block prefix sum
+    // block 31 = block 29 scan result + block 30 prefix sum + current block prefix sum
+     
+    if (partitionIndex)
+    {
+        //Free up shared memory, because we are at max
+        // set t to be scattered key.
+        const uint t = g_subgroupHists[SUBGROUP_IDX];
+        // for loop at block level
+        for (int i = SUBGROUP_IDX; i < RADIX_BIN; i += BIN_SUBGROUPS)
+        {
+            uint aggregate = 0;
+
+            // set the prefix sum for current subgroup to be the partitionIndex
+            if (LANE == 0)
+                g_subgroupHists[SUBGROUP_IDX] = partitionIndex;
+            // Within the same block, look backward progressively to find the predecessors that record the global inclusive prefix up to and including current tile.
+            for (int k = partitionIndex - LANE - 1; 0 <= k;)
+            {
+                // get the reduction sum on the predecessors bin in current block
+                uint flagPayload = b_passHist[i * BIN_PARTITIONS + k];
+                // if the reduction sum on the predecessors bin is ready for all threads in current subgroup
+                if (subGroupActiveAllTrue((flagPayload & FLAG_MASK) > FLAG_NOT_READY))
+                {   
+                    // if the predecessors record the global inclusive prefix up to and including current tile
+                    if ((flagPayload & FLAG_MASK) == FLAG_INCLUSIVE)
+                    {   
+                        // if current lane is the first lane in the subgroup, then simply set the value to k as index k indicates that  represent the global inclusive prefix sum
+                        if (subGroupIsFirstLane())
+                            g_subgroupHists[SUBGROUP_IDX] = k;
+                    }
+                    
+                    // if the prefix sum of current subgroup is less than partitionIndex, which means we set g_subgroupHists[SUBGROUP_IDX] to be k in the previous if statement
+                    // which means the current subgroup hist record the global inclusive prefix up to and including current tile.
+                    if (g_subgroupHists[SUBGROUP_IDX] < partitionIndex)
+                    {
+                        // sum up the prefix sum of each lane in the subgroup that is ready (which we set to be k in the previous if statement)
+                        aggregate += subGroupActiveSum(k >= g_subgroupHists[SUBGROUP_IDX] ? (flagPayload >> 2) : 0);
+                        
+                        // if current lane is the first lane in the subgroup
+                        if (LANE == 0)
+                        {
+                            //  then we  add the aggregate sum to the reduction sum of current block and end the lookback for current block
+                            atomic_add(b_passHist[i * BIN_PARTITIONS + partitionIndex], 1 ^ (aggregate << 2));
+                            // if the subgroup is not the first subgroup, then we add the aggregate sum to the global prefix sum until the previous subgroup
+                            g_reductionHist[i] = aggregate + (i ? g_localHist[i] : 0) - g_reductionHist[i];
+                        }
+                        break;
+                    }
+                    // if the prefix sum of current subgroup is greater or equal to partitionIndex,
+                    // which means the current subgroup hist contains the aggregate prefix sum of the k-th bin in current block
+                    // 
+                    else
+                    {
+                        aggregate += subGroupActiveSum(flagPayload >> 2);
+                        k -= LANE_COUNT;
+                    }
+                }
+            }
+        }
+            
+        //place value back
+        if (LANE == 0)
+            g_subgroupHists[SUBGROUP_IDX] = t;
+    }
+    else
+    {
+        if (SUBGROUP_THREAD_IDX < RADIX_BIN)
+            g_reductionHist[SUBGROUP_THREAD_IDX] = (SUBGROUP_THREAD_IDX ? g_localHist[SUBGROUP_THREAD_IDX] : 0) - g_reductionHist[SUBGROUP_THREAD_IDX];
+    }
+    barrier();
+        
+    //Scatter runs of keys into device memory;
+    {
+        for (int i = SUBGROUP_THREAD_IDX; i < BIN_PART_SIZE; i += BIN_THREADS)
+            b_alt[g_reductionHist[g_subgroupHists[i] & RADIX_MASK] + i] = g_subgroupHists[i];
+    }
+        
+    //for input sizes which are not perfect multiples of the partition tile size
+    if (partitionIndex == BIN_PARTITIONS - 1)
+    {
+        if (SUBGROUP_THREAD_IDX < RADIX)
+            g_reductionHist[SUBGROUP_THREAD_IDX] = (b_passHist[SUBGROUP_THREAD_IDX * BIN_PARTITIONS + partitionIndex] >> 2) + (SUBGROUP_THREAD_IDX ? g_localHist[SUBGROUP_THREAD_IDX] : 0);
+        barrier();
+        
+        partitionIndex++;
+        for (int i = SUBGROUP_THREAD_IDX + BIN_PART_START; i < e_size; i += BIN_THREADS)
+        {
+            const uint key = b_sort[i];
+            uint offset = 0xFFFFFFFF;
+            
+            [unroll]
+            for (int k = 0; k < RADIX_LOG; ++k)
+            {
+                const bool t = key >> k & 1;
+                offset &= (t ? 0 : 0xFFFFFFFF) ^ WaveActiveBallot(t);
+            }
+            
+            [unroll]
+            for (int k = 0; k < BIN_SUBGROUPS; ++k)
+            {
+                if (SUBGROUP_IDX == k)
+                {
+                    const uint t = g_reductionHist[key & RADIX_MASK];
+                    if (countbits(offset << LANE_MASK - LANE) == 1)
+                        g_reductionHist[key & RADIX_MASK] += countbits(offset);
+                    offset = t + countbits((offset << LANE_MASK - LANE) << 1);
+                }
+                barrier();
+            }
+
+            b_alt[offset] = key;
+        }
+    }
+
+}
+
 
 
 void main(){
