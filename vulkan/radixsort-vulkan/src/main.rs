@@ -12,7 +12,8 @@
 // While graphics cards have traditionally been used for graphical operations, over time they have
 // been more or more used for general-purpose operations as well. This is called "General-Purpose
 // GPU", or *GPGPU*. This is what this example demonstrates.
-
+use std::{fs::File, io::Write};
+use byteorder::{LittleEndian, WriteBytesExt};
 use rand::Rng;
 use std::{sync::Arc};
 use vulkano::{
@@ -146,7 +147,7 @@ fn main() {
         let layout = {
             let mut layout_create_info = PipelineDescriptorSetLayoutCreateInfo::from_stages([&stage]);
             layout_create_info.set_layouts[0].bindings.get_mut(&0).unwrap().descriptor_type = layout::DescriptorType::StorageBuffer;
-            //layout_create_info.set_layouts[0].bindings.get_mut(&1).unwrap().descriptor_type = layout::DescriptorType::StorageBuffer;
+            layout_create_info.set_layouts[0].bindings.get_mut(&1).unwrap().descriptor_type = layout::DescriptorType::StorageBuffer;
             layout_create_info.set_layouts[0].bindings.get_mut(&2).unwrap().descriptor_type = layout::DescriptorType::StorageBuffer;
             layout_create_info.set_layouts[0].bindings.get_mut(&3).unwrap().descriptor_type = layout::DescriptorType::StorageBuffer;
             //layout_create_info.set_layouts[0].bindings.get_mut(&4).unwrap().descriptor_type = layout::DescriptorType::StorageBuffer;
@@ -174,7 +175,22 @@ fn main() {
         StandardCommandBufferAllocator::new(device.clone(), Default::default());
 
     // We start by creating the buffer that will store the data.
-    let b_sort_buffer = Buffer::new_slice::<u64>(
+    let b_sort_buffer = Buffer::from_iter(
+        memory_allocator.clone(),
+        BufferCreateInfo {
+            usage: BufferUsage::STORAGE_BUFFER,
+            ..Default::default()
+        },
+        AllocationCreateInfo {
+            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+            ..Default::default()
+        },
+        _random_numbers,
+    )
+    .unwrap();
+
+    let b_alt_buffer = Buffer::new_slice::<u32>(
         memory_allocator.clone(),
         BufferCreateInfo {
             usage: BufferUsage::STORAGE_BUFFER,
@@ -189,7 +205,7 @@ fn main() {
     )
     .unwrap();
 
-    let _b_alt_buffer = Buffer::new_slice::<u64>(
+    let b_globalhist_buffer = Buffer::new_slice::<u32>(
         memory_allocator.clone(),
         BufferCreateInfo {
             usage: BufferUsage::STORAGE_BUFFER,
@@ -204,22 +220,7 @@ fn main() {
     )
     .unwrap();
 
-    let b_globalhist_buffer = Buffer::new_slice::<u64>(
-        memory_allocator.clone(),
-        BufferCreateInfo {
-            usage: BufferUsage::STORAGE_BUFFER,
-            ..Default::default()
-        },
-        AllocationCreateInfo {
-            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
-                | MemoryTypeFilter::HOST_RANDOM_ACCESS,
-            ..Default::default()
-        },
-        50000 as DeviceSize,
-    )
-    .unwrap();
-
-    let g_globalhist_buffer = Buffer::new_slice::<u64>(
+    let b_index_buffer = Buffer::new_slice::<u32>(
         memory_allocator.clone(),
         BufferCreateInfo {
             usage: BufferUsage::STORAGE_BUFFER,
@@ -234,7 +235,7 @@ fn main() {
     )
     .unwrap();
 
-    let _g_localhist_buffer = Buffer::new_slice::<u64>(
+    let b_passhist_buffer = Buffer::new_slice::<u32>(
         memory_allocator.clone(),
         BufferCreateInfo {
             usage: BufferUsage::STORAGE_BUFFER,
@@ -249,20 +250,6 @@ fn main() {
     )
     .unwrap();
 
-    let _b_subgroup_hist_buffer = Buffer::new_slice::<u64>(
-        memory_allocator.clone(),
-        BufferCreateInfo {
-            usage: BufferUsage::STORAGE_BUFFER,
-            ..Default::default()
-        },
-        AllocationCreateInfo {
-            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
-                | MemoryTypeFilter::HOST_RANDOM_ACCESS,
-            ..Default::default()
-        },
-        7680 as DeviceSize,
-    )
-    .unwrap();
 
     // In order to let the shader access the buffer, we need to build a *descriptor set* that
     // contains the buffer.
@@ -279,11 +266,10 @@ fn main() {
         layout.clone(),
         [
             WriteDescriptorSet::buffer(0, b_sort_buffer.clone()),
-            //WriteDescriptorSet::buffer(1, b_alt_buffer.clone()),
+            WriteDescriptorSet::buffer(1, b_alt_buffer.clone()),
             WriteDescriptorSet::buffer(2, b_globalhist_buffer.clone()),
-            WriteDescriptorSet::buffer(3, g_globalhist_buffer.clone()),
-            //WriteDescriptorSet::buffer(4, g_localhist_buffer.clone()),
-            //WriteDescriptorSet::buffer(5, b_subgroup_hist_buffer.clone()),
+            WriteDescriptorSet::buffer(3, b_index_buffer.clone()),
+            WriteDescriptorSet::buffer(4, b_passhist_buffer.clone()),
         ],
         [],
     )
@@ -293,7 +279,7 @@ fn main() {
     let mut builder = AutoCommandBufferBuilder::primary(
         &command_buffer_allocator,
         queue.queue_family_index(),
-        CommandBufferUsage::OneTimeSubmit,
+        CommandBufferUsage::MultipleSubmit,
     )
     .unwrap();
     builder
@@ -348,10 +334,20 @@ fn main() {
     // GPU.
     let _data_buffer_content = b_sort_buffer.read().unwrap();
     /*
-    for n in 0..65536u32 {
-        assert_eq!(data_buffer_content[n as usize], n * 12);
+    let mut file = match File::create("output.txt") {
+        Err(why) => panic!("couldn't create: {}", why),
+        Ok(file) => file,
+    };
+
+    for data in _data_buffer_content.iter(){
+        file.write_u32::<LittleEndian>(*data).unwrap();
     }
     */
+    for n in 0..20000u32{
+        println!("{}", _data_buffer_content[n as usize]);
+    }
+
 
     println!("Success");
+    
 }

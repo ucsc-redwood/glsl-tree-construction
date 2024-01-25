@@ -62,6 +62,8 @@ int input_size;
 #define FLAG_INCLUSIVE      2       //Flag value indicating inclusive sum of a partition tile is ready
 #define FLAG_MASK           3       //Mask used to retrieve flag values
 
+// to change: change it from hardcoded to dynamic(e.g. passed from vulkan program)
+#define e_size 50000
 
 layout(set = 0, binding = 0)  buffer BSortBuffer {
     uint b_sort[];
@@ -80,8 +82,10 @@ layout(set = 0, binding = 3) coherent buffer BIndex {
 };
 
 layout(set = 0, binding = 4) coherent buffer BPassHist {
-    uint b_passHist[];
+    uint b_passHist[4][e_size];
 };
+
+
 
 /*
 layout(set = 0, binding = 3)  buffer  GGlobalHist{
@@ -174,11 +178,11 @@ void GlobalHistogram() {
 }
 
 
-void BinningPass()
+void BinningPass(int pass_num)
 {
     //load the global histogram values into shared memory
     if (SUBGROUP_THREAD_IDX < RADIX_BIN)
-        g_localHist[SUBGROUP_THREAD_IDX] = b_globalHist[SUBGROUP_THREAD_IDX];
+        g_localHist[SUBGROUP_THREAD_IDX] = b_globalHist[SUBGROUP_THREAD_IDX + RADIX_BIN * pass_num];
     
     //atomically fetch and increment device memory index to assign partition tiles
     //Take advantage of the barrier to also clear the shared memory
@@ -198,7 +202,7 @@ void BinningPass()
     {
         //[unroll]
         for (uint i = 0, t = LANE + BIN_SUB_PART_START + BIN_PART_START; i < BIN_KEYS_PER_THREAD; ++i, t += LANE_COUNT)
-            keys[i] = b_sort[t];
+            keys[i] = (pass_num % 2) == 0 ? b_sort[t] : b_alt[t];
     }
 
     // [ 2, 5, 6 , 1]
@@ -219,7 +223,7 @@ void BinningPass()
             offsets[i] = 0xFFFFFFFF;
 
             //    [unroll]
-            for (int k = 0; k < RADIX_LOG; ++k)
+            for (int k = RADIX_LOG * pass_num; k < (RADIX_LOG * (pass_num + 1)); ++k)
             {
                 // extracts the k-th bit of the key, t2 is true if the k-th bit of keys[i] is 1, and false otherwise.
                 const bool t2 = (keys[i] >> k & 1) != 0;
@@ -232,7 +236,7 @@ void BinningPass()
             // if the current lane id is 0, then it is responsible for 1 bits, if it is 1, then it is responsible for 2 bits, and so on
             const uint bits = bitCount(offsets[i] << LANE_MASK - LANE);
             // index = least significant 8 bits of keys[i] + subgroup id * radix bin
-            const uint index = (keys[i] & RADIX_MASK) + t;
+            const uint index = ((keys[i] >> (RADIX_LOG * pass_num)) & RADIX_MASK) + t;
             const uint prev = g_subgroupHists[index];
             //the lowest ranked thread in each active digit
             // population will  add the population’s count to the per-warp counter corresponding to that digit
@@ -258,10 +262,10 @@ void BinningPass()
         
         // partitionIndex == 0 means it is the first partition, so  the value is the inclusive global prefix sum of the digit counts of this and all previous tiles
         if (partitionIndex == 0)
-            atomicAdd(b_passHist[SUBGROUP_THREAD_IDX * BIN_PARTITIONS + partitionIndex], FLAG_INCLUSIVE ^ (g_subgroupHists[SUBGROUP_THREAD_IDX] << 2));
+            atomicAdd(b_passHist[pass_num][SUBGROUP_THREAD_IDX * BIN_PARTITIONS + partitionIndex], FLAG_INCLUSIVE ^ (g_subgroupHists[SUBGROUP_THREAD_IDX] << 2));
         else
         // otherwsie,  value is the local, per-tile digit count
-            atomicAdd(b_passHist[SUBGROUP_THREAD_IDX * BIN_PARTITIONS + partitionIndex], FLAG_AGGREGATE ^ (g_subgroupHists[SUBGROUP_THREAD_IDX] << 2));
+            atomicAdd(b_passHist[pass_num][SUBGROUP_THREAD_IDX * BIN_PARTITIONS + partitionIndex], FLAG_AGGREGATE ^ (g_subgroupHists[SUBGROUP_THREAD_IDX] << 2));
     }
     barrier(); // a barrier must be placed between here and the lookback to prevent accidentally broadcasting an incorrect aggregate
 
@@ -286,7 +290,7 @@ void BinningPass()
         //[unroll]
         for (int i = 0; i < BIN_KEYS_PER_THREAD; ++i)
         {
-            const uint t2 = keys[i] & RADIX_MASK;
+            const uint t2 = (keys[i] >> (RADIX_LOG * pass_num)) & RADIX_MASK;
             offsets[i] += g_subgroupHists[t2 + t] + g_reductionHist[t2];
         }
     }
@@ -294,7 +298,7 @@ void BinningPass()
     {
         //[unroll]
         for (int i = 0; i < BIN_KEYS_PER_THREAD; ++i)
-            offsets[i] += g_reductionHist[keys[i] & RADIX_MASK];
+            offsets[i] += g_reductionHist[(keys[i] >> (RADIX_LOG * pass_num)) & RADIX_MASK];
     }
     barrier();
         
@@ -327,7 +331,7 @@ void BinningPass()
             for (uint k = partitionIndex - LANE - 1; 0 <= k;)
             {
                 // get the reduction sum on the predecessors bin in current block
-                uint flagPayload = b_passHist[i * BIN_PARTITIONS + k];
+                uint flagPayload = b_passHist[pass_num][i * BIN_PARTITIONS + k];
                 // if the reduction sum on the predecessors bin is ready for all threads in current subgroup
                 if (subgroupAll((flagPayload & FLAG_MASK) > FLAG_NOT_READY))
                 {   
@@ -350,7 +354,7 @@ void BinningPass()
                         if (LANE == 0)
                         {
                             //  then we  add the aggregate sum to the reduction sum of current block and end the lookback for current block
-                            atomicAdd(b_passHist[i * BIN_PARTITIONS + partitionIndex], 1 ^ (aggregate << 2));
+                            atomicAdd(b_passHist[pass_num][i * BIN_PARTITIONS + partitionIndex], 1 ^ (aggregate << 2));
                             // if the subgroup is not the first subgroup, then we add the aggregate sum to the global prefix sum until the previous subgroup
                             g_reductionHist[i] = aggregate + (i != 0 ? g_localHist[i] : 0) - g_reductionHist[i];
                         }
@@ -382,50 +386,44 @@ void BinningPass()
     //Scatter runs of keys into device memory;
     {
         for (uint i = SUBGROUP_THREAD_IDX; i < BIN_PART_SIZE; i += BIN_THREADS)
-            b_alt[g_reductionHist[g_subgroupHists[i] & RADIX_MASK] + i] = g_subgroupHists[i];
+            pass_num % 2 == 0 ? b_alt[g_reductionHist[(g_subgroupHists[i] >> (RADIX_LOG * pass_num)) & RADIX_MASK] + i] = g_subgroupHists[i] : b_sort[g_reductionHist[(g_subgroupHists[i] >> (RADIX_LOG * pass_num)) & RADIX_MASK] + i] = g_subgroupHists[i];
     }
         
     //for input sizes which are not perfect multiples of the partition tile size
     if (partitionIndex == BIN_PARTITIONS - 1)
     {
         if (SUBGROUP_THREAD_IDX < RADIX_BIN)
-            g_reductionHist[SUBGROUP_THREAD_IDX] = (b_passHist[SUBGROUP_THREAD_IDX * BIN_PARTITIONS + partitionIndex] >> 2) + (SUBGROUP_THREAD_IDX != 0 ? g_localHist[SUBGROUP_THREAD_IDX] : 0);
+            g_reductionHist[SUBGROUP_THREAD_IDX] = (b_passHist[pass_num][SUBGROUP_THREAD_IDX * BIN_PARTITIONS + partitionIndex] >> 2) + (SUBGROUP_THREAD_IDX != 0 ? g_localHist[SUBGROUP_THREAD_IDX] : 0);
         barrier();
         
         partitionIndex++;
         for (uint i = SUBGROUP_THREAD_IDX + BIN_PART_START; i < e_size; i += BIN_THREADS)
         {
-            const uint key = b_sort[i];
+            const uint key = pass_num %2 == 0 ? b_sort[i] : b_alt[i];
             uint offset = 0xFFFFFFFF;
             
-            [unroll]
-            for (int k = 0; k < RADIX_LOG; ++k)
+           // [unroll]
+            for (uint k = pass_num * RADIX_LOG; k < ((pass_num + 1) * RADIX_LOG); ++k)
             {
-                const bool t = key >> k & 1;
-                offset &= (t ? 0 : 0xFFFFFFFF) ^ WaveActiveBallot(t);
+                const bool t = (key >> k & 1) != 0;
+                offset &= (t ? 0 : 0xFFFFFFFF) ^ subgroupBallot(t)[0];
             }
             
-            [unroll]
+            //[unroll]
             for (int k = 0; k < BIN_SUBGROUPS; ++k)
             {
                 if (SUBGROUP_IDX == k)
                 {
-                    const uint t = g_reductionHist[key & RADIX_MASK];
-                    if (countbits(offset << LANE_MASK - LANE) == 1)
-                        g_reductionHist[key & RADIX_MASK] += countbits(offset);
-                    offset = t + countbits((offset << LANE_MASK - LANE) << 1);
+                    const uint t = g_reductionHist[(key >> (RADIX_LOG*pass_num)) & RADIX_MASK];
+                    if (bitCount(offset << LANE_MASK - LANE) == 1)
+                        g_reductionHist[key & RADIX_MASK] += bitCount(offset);
+                    offset = t + bitCount((offset << LANE_MASK - LANE) << 1);
                 }
                 barrier();
             }
 
-            b_alt[offset] = key;
+            pass_num % 2 == 0 ? b_alt[offset] = key : b_sort[offset] = key;
         }
     }
-
 }
 
-
-
-void main(){
-  GlobalHistogram();
-}
