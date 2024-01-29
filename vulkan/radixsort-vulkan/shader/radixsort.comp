@@ -63,7 +63,7 @@ int input_size;
 #define FLAG_MASK           3       //Mask used to retrieve flag values
 
 // to change: change it from hardcoded to dynamic(e.g. passed from vulkan program)
-#define e_size 50000
+#define e_size 5000
 
 layout(set = 0, binding = 0)  buffer BSortBuffer {
     uint b_sort[];
@@ -427,3 +427,9 @@ void BinningPass(int pass_num)
     }
 }
 
+void main(){
+  GlobalHistogram();
+  for(int i = 0; i < 4; ++i){
+    BinningPass(i);
+  }
+}

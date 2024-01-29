@@ -201,7 +201,7 @@ fn main() {
                 | MemoryTypeFilter::HOST_RANDOM_ACCESS,
             ..Default::default()
         },
-        50000 as DeviceSize,
+        5000 as DeviceSize,
     )
     .unwrap();
 
@@ -216,7 +216,7 @@ fn main() {
                 | MemoryTypeFilter::HOST_RANDOM_ACCESS,
             ..Default::default()
         },
-        50000 as DeviceSize,
+        5000 as DeviceSize,
     )
     .unwrap();
 
@@ -246,7 +246,7 @@ fn main() {
                 | MemoryTypeFilter::HOST_RANDOM_ACCESS,
             ..Default::default()
         },
-        256 as DeviceSize,
+        5000*4 as DeviceSize,
     )
     .unwrap();
 
@@ -343,7 +343,7 @@ fn main() {
         file.write_u32::<LittleEndian>(*data).unwrap();
     }
     */
-    for n in 0..20000u32{
+    for n in 0..2000u32{
         println!("{}", _data_buffer_content[n as usize]);
     }
 
