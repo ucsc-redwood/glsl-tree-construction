@@ -12,33 +12,33 @@
 // While graphics cards have traditionally been used for graphical operations, over time they have
 // been more or more used for general-purpose operations as well. This is called "General-Purpose
 // GPU", or *GPGPU*. This is what this example demonstrates.
-use std::{fs::File, io::Write};
 use byteorder::{LittleEndian, WriteBytesExt};
 use rand::Rng;
-use std::{sync::Arc};
+use std::sync::Arc;
+use std::{fs::File, io::Write};
 use vulkano::{
     buffer::{Buffer, BufferCreateInfo, BufferUsage},
     command_buffer::{
-        allocator::StandardCommandBufferAllocator, pool::CommandPoolResetFlags, AutoCommandBufferBuilder, CommandBufferUsage
+        allocator::StandardCommandBufferAllocator, pool::CommandPoolResetFlags,
+        AutoCommandBufferBuilder, CommandBufferUsage,
     },
     descriptor_set::{
-        allocator::StandardDescriptorSetAllocator, layout::{self}, PersistentDescriptorSet, WriteDescriptorSet
+        allocator::StandardDescriptorSetAllocator,
+        layout::{self},
+        PersistentDescriptorSet, WriteDescriptorSet,
     },
     device::{
-        physical::PhysicalDeviceType, Device, DeviceCreateInfo, DeviceExtensions, QueueCreateInfo,
-        QueueFlags,
+        physical::PhysicalDeviceType, Device, DeviceCreateInfo, DeviceExtensions, Features,
+        QueueCreateInfo, QueueFlags,
     },
     instance::{Instance, InstanceCreateFlags, InstanceCreateInfo},
-    memory::{
-        allocator::{
-            AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator,
-        },
-    },
+    memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator},
     pipeline::{
         compute::ComputePipelineCreateInfo, layout::PipelineDescriptorSetLayoutCreateInfo,
         ComputePipeline, Pipeline, PipelineBindPoint, PipelineLayout,
         PipelineShaderStageCreateInfo,
     },
+    shader::ShaderStages,
     sync::{self, GpuFuture},
     DeviceSize, VulkanLibrary,
 };
@@ -54,7 +54,7 @@ fn main() {
     let instance = Instance::new(
         library,
         InstanceCreateInfo {
-            flags: InstanceCreateFlags::ENUMERATE_PORTABILITY,
+            // flags: InstanceCreateFlags::ENUMERATE_PORTABILITY,
             ..Default::default()
         },
     )
@@ -65,10 +65,18 @@ fn main() {
         khr_storage_buffer_storage_class: true,
         ..DeviceExtensions::empty()
     };
+    let device_features = Features {
+         //subgroup_size_control: true,
+        ..Features::empty()
+    };
+
     let (physical_device, queue_family_index) = instance
         .enumerate_physical_devices()
         .unwrap()
-        .filter(|p| p.supported_extensions().contains(&device_extensions))
+        .filter(|p| {
+            p.supported_extensions().contains(&device_extensions)
+                && p.supported_features().contains(&device_features)
+        })
         .filter_map(|p| {
             // The Vulkan specs guarantee that a compliant implementation must provide at least one
             // queue that supports compute operations.
@@ -102,10 +110,25 @@ fn main() {
                 queue_family_index,
                 ..Default::default()
             }],
+            enabled_features: Features {
+                 subgroup_size_control: true,
+                ..Features::empty()
+            },
             ..Default::default()
         },
     )
     .unwrap();
+
+    if !device
+        .physical_device()
+        .properties()
+        .required_subgroup_size_stages
+        .unwrap_or_default()
+        .intersects(ShaderStages::COMPUTE)
+    {
+        println!("Subgroup size control is not supported for compute shaders");
+        //return;
+    }
 
     // Since we can request multiple queues, the `queues` variable is in fact an iterator. In this
     // example we use only one queue, so we just retrieve the first and only element of the
@@ -130,35 +153,32 @@ fn main() {
     //
     // If you are familiar with graphics pipeline, the principle is the same except that compute
     // pipelines are much simpler to create.
-    let pipeline = {
-        mod cs {
+    
+    mod cs {
 
-            vulkano_shaders::shader! {
-                ty: "compute",
-                path: "shader/radixsort.comp",
-                spirv_version: "1.3",
-            }
+        vulkano_shaders::shader! {
+            ty: "compute",
+            path: "shader/radixsort.comp",
+            spirv_version: "1.3",
         }
-        let cs = cs::load(device.clone())
-            .unwrap()
-            .entry_point("main")
-            .unwrap();
-        let stage = PipelineShaderStageCreateInfo::new(cs);
-        let layout = {
-            let mut layout_create_info = PipelineDescriptorSetLayoutCreateInfo::from_stages([&stage]);
-            layout_create_info.set_layouts[0].bindings.get_mut(&0).unwrap().descriptor_type = layout::DescriptorType::StorageBuffer;
-            layout_create_info.set_layouts[0].bindings.get_mut(&1).unwrap().descriptor_type = layout::DescriptorType::StorageBuffer;
-            layout_create_info.set_layouts[0].bindings.get_mut(&2).unwrap().descriptor_type = layout::DescriptorType::StorageBuffer;
-            layout_create_info.set_layouts[0].bindings.get_mut(&3).unwrap().descriptor_type = layout::DescriptorType::StorageBuffer;
-            layout_create_info.set_layouts[0].bindings.get_mut(&4).unwrap().descriptor_type = layout::DescriptorType::StorageBuffer;
-            
-            PipelineLayout::new(
+    }
+    let cs = cs::load(device.clone())
+        .unwrap()
+        .entry_point("main")
+        .unwrap();
+    let stage = PipelineShaderStageCreateInfo {
+        //required_subgroup_size: Some(32),
+        ..PipelineShaderStageCreateInfo::new(cs)
+    };
+    let pipeline = {
+
+        let layout = PipelineLayout::new(
             device.clone(),
-            layout_create_info
+            PipelineDescriptorSetLayoutCreateInfo::from_stages([&stage])
                 .into_pipeline_layout_create_info(device.clone())
                 .unwrap(),
         )
-        .unwrap()};
+        .unwrap();
         ComputePipeline::new(
             device.clone(),
             None,
@@ -245,10 +265,9 @@ fn main() {
                 | MemoryTypeFilter::HOST_RANDOM_ACCESS,
             ..Default::default()
         },
-        50000*4 as DeviceSize,
+        50000 * 4 as DeviceSize,
     )
     .unwrap();
-
 
     // In order to let the shader access the buffer, we need to build a *descriptor set* that
     // contains the buffer.
@@ -273,8 +292,13 @@ fn main() {
         [],
     )
     .unwrap();
-    
-    command_buffer_allocator.try_reset_pool(queue.queue_family_index(), CommandPoolResetFlags::RELEASE_RESOURCES).unwrap();
+
+    command_buffer_allocator
+        .try_reset_pool(
+            queue.queue_family_index(),
+            CommandPoolResetFlags::RELEASE_RESOURCES,
+        )
+        .unwrap();
     // In order to execute our operation, we have to build a command buffer.
     let mut builder = AutoCommandBufferBuilder::primary(
         &command_buffer_allocator,
@@ -301,7 +325,11 @@ fn main() {
         .unwrap()
         .dispatch([512, 1, 1])
         .unwrap();
-device.enabled_extensions().ext_subgroup_size_control;
+    println!(
+        "enable subgroup size control {}",
+        device.enabled_extensions().ext_subgroup_size_control
+    );
+
     // Finish building the command buffer by calling `build`.
     let command_buffer = builder.build().unwrap();
 
@@ -343,13 +371,11 @@ device.enabled_extensions().ext_subgroup_size_control;
         file.write_u32::<LittleEndian>(*data).unwrap();
     }
     */
-    /* 
+    /*
     for n in 0..2000u32{
         println!("{}", _data_buffer_content[n as usize]);
     }
     */
 
-
     println!("Success");
-    
 }
