@@ -19,7 +19,7 @@ use std::{sync::Arc};
 use vulkano::{
     buffer::{Buffer, BufferCreateInfo, BufferUsage},
     command_buffer::{
-        allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CommandBufferUsage,
+        allocator::StandardCommandBufferAllocator, pool::CommandPoolResetFlags, AutoCommandBufferBuilder, CommandBufferUsage
     },
     descriptor_set::{
         allocator::StandardDescriptorSetAllocator, layout::{self}, PersistentDescriptorSet, WriteDescriptorSet
@@ -150,8 +150,7 @@ fn main() {
             layout_create_info.set_layouts[0].bindings.get_mut(&1).unwrap().descriptor_type = layout::DescriptorType::StorageBuffer;
             layout_create_info.set_layouts[0].bindings.get_mut(&2).unwrap().descriptor_type = layout::DescriptorType::StorageBuffer;
             layout_create_info.set_layouts[0].bindings.get_mut(&3).unwrap().descriptor_type = layout::DescriptorType::StorageBuffer;
-            //layout_create_info.set_layouts[0].bindings.get_mut(&4).unwrap().descriptor_type = layout::DescriptorType::StorageBuffer;
-            //layout_create_info.set_layouts[0].bindings.get_mut(&5).unwrap().descriptor_type = layout::DescriptorType::StorageBuffer;
+            layout_create_info.set_layouts[0].bindings.get_mut(&4).unwrap().descriptor_type = layout::DescriptorType::StorageBuffer;
             
             PipelineLayout::new(
             device.clone(),
@@ -201,7 +200,7 @@ fn main() {
                 | MemoryTypeFilter::HOST_RANDOM_ACCESS,
             ..Default::default()
         },
-        5000 as DeviceSize,
+        50000 as DeviceSize,
     )
     .unwrap();
 
@@ -216,7 +215,7 @@ fn main() {
                 | MemoryTypeFilter::HOST_RANDOM_ACCESS,
             ..Default::default()
         },
-        5000 as DeviceSize,
+        50000 as DeviceSize,
     )
     .unwrap();
 
@@ -246,7 +245,7 @@ fn main() {
                 | MemoryTypeFilter::HOST_RANDOM_ACCESS,
             ..Default::default()
         },
-        5000*4 as DeviceSize,
+        50000*4 as DeviceSize,
     )
     .unwrap();
 
@@ -274,12 +273,13 @@ fn main() {
         [],
     )
     .unwrap();
-
+    
+    command_buffer_allocator.try_reset_pool(queue.queue_family_index(), CommandPoolResetFlags::RELEASE_RESOURCES).unwrap();
     // In order to execute our operation, we have to build a command buffer.
     let mut builder = AutoCommandBufferBuilder::primary(
         &command_buffer_allocator,
         queue.queue_family_index(),
-        CommandBufferUsage::MultipleSubmit,
+        CommandBufferUsage::OneTimeSubmit,
     )
     .unwrap();
     builder
@@ -299,9 +299,9 @@ fn main() {
             set,
         )
         .unwrap()
-        .dispatch([1024, 1, 1])
+        .dispatch([512, 1, 1])
         .unwrap();
-
+device.enabled_extensions().ext_subgroup_size_control;
     // Finish building the command buffer by calling `build`.
     let command_buffer = builder.build().unwrap();
 
@@ -343,9 +343,11 @@ fn main() {
         file.write_u32::<LittleEndian>(*data).unwrap();
     }
     */
+    /* 
     for n in 0..2000u32{
         println!("{}", _data_buffer_content[n as usize]);
     }
+    */
 
 
     println!("Success");
