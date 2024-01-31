@@ -12,6 +12,7 @@
 // While graphics cards have traditionally been used for graphical operations, over time they have
 // been more or more used for general-purpose operations as well. This is called "General-Purpose
 // GPU", or *GPGPU*. This is what this example demonstrates.
+use cgmath::Vector4;
 use byteorder::{LittleEndian, WriteBytesExt};
 use rand::Rng;
 use std::sync::Arc;
@@ -47,7 +48,10 @@ fn main() {
     // initialize the data
     let mut rng = rand::thread_rng();
     let _random_numbers: Vec<u32> = (0..50000).map(|_| rng.gen()).collect();
-    let _input_size = std::mem::size_of::<u32>() * 50000;
+    let input_size = std::mem::size_of::<u32>() * 50000;
+    
+    let pass_hist = vec![0 as u32; 50000*4];
+
 
     // As with other examples, the first step is to create an instance.
     let library = VulkanLibrary::new().unwrap();
@@ -254,7 +258,7 @@ fn main() {
     )
     .unwrap();
 
-    let b_passhist_buffer = Buffer::new_slice::<u32>(
+    let b_passhist_buffer = Buffer::from_iter(
         memory_allocator.clone(),
         BufferCreateInfo {
             usage: BufferUsage::STORAGE_BUFFER,
@@ -265,7 +269,7 @@ fn main() {
                 | MemoryTypeFilter::HOST_RANDOM_ACCESS,
             ..Default::default()
         },
-        50000 * 4 as DeviceSize,
+        pass_hist
     )
     .unwrap();
 
@@ -371,11 +375,11 @@ fn main() {
         file.write_u32::<LittleEndian>(*data).unwrap();
     }
     */
-    /*
-    for n in 0..2000u32{
+    
+    for n in 20000..20300 {
         println!("{}", _data_buffer_content[n as usize]);
     }
-    */
+    
 
     println!("Success");
 }

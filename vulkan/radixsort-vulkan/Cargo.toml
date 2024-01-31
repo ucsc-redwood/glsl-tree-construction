@@ -10,3 +10,4 @@ vulkano = {version = "0.34.1", features=["macros"]}
 vulkano-shaders = "0.34.0"
 rand = "0.8.5"
 byteorder = "1.4"
+cgmath = "0.18.0"
