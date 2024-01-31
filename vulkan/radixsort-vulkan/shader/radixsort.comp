@@ -55,7 +55,7 @@
 
 
 #define LANE gl_LocalInvocationID.x // the idx of thread in the subgroup
-#define SUBGROUP_IDX  gl_SubgroupID // the idx of subgroup the thread belongs to might be wrong
+#define SUBGROUP_IDX  gl_LocalInvocationID.y//gl_SubgroupID // the idx of subgroup the thread belongs to might be wrong
 #define SUBGROUP_THREAD_IDX                                                             \
   (LANE + (SUBGROUP_IDX << LANE_LOG)) // the subgroup relative thread idx
 
@@ -106,7 +106,7 @@ layout(set = 0, binding = 5)  buffer GSubgroupHists {
 */
 
 // define work group size
-layout(local_size_x = 512) in;
+layout(local_size_x = 64, local_size_y = 8) in;
 shared uint g_globalHist[RADIX_BIN][RADIX_PASS];
 shared uint g_localHist[RADIX_BIN];
 shared uint g_subgroupHists[BIN_PART_SIZE];
@@ -190,7 +190,7 @@ void BinningPass(int pass_num)
    // debugPrintfEXT("global invocation id: %u\n sub group id: %u\n sub group invocation id: %u\n workgroup id: %u\n subgroup_threads_idx: %u\n\n",  
     //    gl_GlobalInvocationID.x, gl_SubgroupID, gl_SubgroupInvocationID,  gl_WorkGroupID.x, SUBGROUP_THREAD_IDX);
     //load the global histogram values into shared memory
-    debugPrintfEXT("subgroup idx: %u\n", SUBGROUP_IDX);
+
     if (SUBGROUP_THREAD_IDX < RADIX_BIN){
         g_localHist[SUBGROUP_THREAD_IDX] = b_globalHist[SUBGROUP_THREAD_IDX + RADIX_BIN * pass_num];
         //debugPrintfEXT("g_localHist[%u]: %u\n", SUBGROUP_THREAD_IDX, g_localHist[SUBGROUP_THREAD_IDX]);
@@ -366,15 +366,16 @@ void BinningPass(int pass_num)
                 
                 // get the reduction sum on the predecessors bin in current block
                 uint flagPayload = b_passHist[i * BIN_PARTITIONS + k];
-                
+                if (gl_GlobalInvocationID.x == 0)
+                    debugPrintfEXT("flagPayload: %u\n", flagPayload);
                 // if the reduction sum on the predecessors bin is ready for all threads in current subgroup
                 
                 if (subgroupAll((flagPayload & FLAG_MASK) > FLAG_NOT_READY))
                 {
                     
-                    debugPrintfEXT("flagPayload & FLAG_MASK  > FLAG_NOT_READY: %d\n", (flagPayload & FLAG_MASK) > FLAG_NOT_READY);
-                    break;
-                    /*
+                    //debugPrintfEXT("flagPayload & FLAG_MASK  > FLAG_NOT_READY: %d\n", (flagPayload & FLAG_MASK) > FLAG_NOT_READY);
+                    
+                    
                     // if the predecessors record the global inclusive prefix up to and including current tile
                     if ((flagPayload & FLAG_MASK) == FLAG_INCLUSIVE)
                     {   
@@ -415,7 +416,7 @@ void BinningPass(int pass_num)
                         aggregate += subgroupAdd(flagPayload >> 2);
                         k -= LANE_COUNT;
                     }
-                    */
+                    
                 }
                 
             }
