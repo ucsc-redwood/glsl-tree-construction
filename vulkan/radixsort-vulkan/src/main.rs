@@ -47,11 +47,12 @@ use vulkano::{
 fn main() {
     // initialize the data
     let mut rng = rand::thread_rng();
-    let _random_numbers: Vec<u32> = (0..50000).map(|_| rng.gen()).collect();
-    let input_size = std::mem::size_of::<u32>() * 50000;
+    let random_numbers: Vec<u32> = (0..15360).map(|_| rng.gen()).collect();
+    println!("random numbers: {:?}", random_numbers[0]);
+    let input_size = std::mem::size_of::<u32>() * 15360;
     
-    let pass_hist = vec![0 as u32; 50000*4];
-
+    let mut pass_hist = vec![0 as u32; 15360];
+    let mut b_globalHist = vec![0 as u32; 15360];
 
     // As with other examples, the first step is to create an instance.
     let library = VulkanLibrary::new().unwrap();
@@ -209,7 +210,7 @@ fn main() {
                 | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
             ..Default::default()
         },
-        _random_numbers,
+        random_numbers,
     )
     .unwrap();
 
@@ -224,11 +225,11 @@ fn main() {
                 | MemoryTypeFilter::HOST_RANDOM_ACCESS,
             ..Default::default()
         },
-        50000 as DeviceSize,
+        15360 as DeviceSize,
     )
     .unwrap();
 
-    let b_globalhist_buffer = Buffer::new_slice::<u32>(
+    let b_globalhist_buffer = Buffer::from_iter(
         memory_allocator.clone(),
         BufferCreateInfo {
             usage: BufferUsage::STORAGE_BUFFER,
@@ -239,7 +240,7 @@ fn main() {
                 | MemoryTypeFilter::HOST_RANDOM_ACCESS,
             ..Default::default()
         },
-        50000 as DeviceSize,
+        b_globalHist,
     )
     .unwrap();
 
@@ -375,10 +376,11 @@ fn main() {
         file.write_u32::<LittleEndian>(*data).unwrap();
     }
     */
-    
+    /*
     for n in 20000..20300 {
         println!("{}", _data_buffer_content[n as usize]);
     }
+    */
     
 
     println!("Success");
