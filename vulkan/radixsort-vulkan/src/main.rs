@@ -51,7 +51,7 @@ fn main() {
     println!("random numbers: {:?}", random_numbers[0]);
     let input_size = std::mem::size_of::<u32>() * 15360;
     
-    let mut pass_hist = vec![0 as u32; 15360];
+    let mut pass_hist = vec![0 as u32; 15360*4];
     let mut b_globalHist = vec![0 as u32; 15360];
 
     // As with other examples, the first step is to create an instance.
@@ -376,11 +376,11 @@ fn main() {
         file.write_u32::<LittleEndian>(*data).unwrap();
     }
     */
-    /*
-    for n in 20000..20300 {
+    
+    for n in 10000..10300 {
         println!("{}", _data_buffer_content[n as usize]);
     }
-    */
+    
     
 
     println!("Success");

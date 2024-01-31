@@ -84,7 +84,7 @@ layout(set = 0, binding = 3) coherent buffer BIndex {
 };
 
 layout(set = 0, binding = 4) coherent buffer BPassHist {
-    uint b_passHist[input_size];
+    uvec4 b_passHist[input_size];
 };
 
 
@@ -202,6 +202,7 @@ void BinningPass(int pass_num)
     if (LANE == 0 && SUBGROUP_IDX == 0)
         g_localHist[0] = atomicAdd(b_index[pass_num], 1);
     barrier();
+    //debugPrintfEXT("g_localHist[0]: %u\n", g_localHist[0]);
     // Returns the value of the local histogram at bin 0 for the given lane index within the specified subgroup.
     // it returns the current partitionIndex 
     int partitionIndex = int(subgroupBroadcast(g_localHist[0], 0));
@@ -275,14 +276,14 @@ void BinningPass(int pass_num)
         // partitionIndex == 0 means it is the first partition, so  the value is the inclusive global prefix sum of the digit counts of this and all previous tiles
         if (partitionIndex == 0){
             //debugPrintfEXT("FLAG_INCLUSIVE: %u, g_subgroupHists[%u] before:%b, after: %b, b_passHist[%u][%u]before: %b, afer: %b\n", FLAG_INCLUSIVE, SUBGROUP_THREAD_IDX, g_subgroupHists[SUBGROUP_THREAD_IDX], 2 ^ (g_subgroupHists[SUBGROUP_THREAD_IDX] << 2) , SUBGROUP_THREAD_IDX * BIN_PARTITIONS , pass_num, b_passHist[SUBGROUP_THREAD_IDX * BIN_PARTITIONS], b_passHist[SUBGROUP_THREAD_IDX * BIN_PARTITIONS] +FLAG_INCLUSIVE ^ (g_subgroupHists[SUBGROUP_THREAD_IDX] << 2) );
-            atomicAdd(b_passHist[SUBGROUP_THREAD_IDX * BIN_PARTITIONS], FLAG_INCLUSIVE ^ (g_subgroupHists[SUBGROUP_THREAD_IDX] << 2));
+            atomicAdd(b_passHist[SUBGROUP_THREAD_IDX * BIN_PARTITIONS][pass_num], FLAG_INCLUSIVE ^ (g_subgroupHists[SUBGROUP_THREAD_IDX] << 2));
             //debugPrintfEXT("b_passHist[%u][%u]: %b , larger than 0: %u \n", SUBGROUP_THREAD_IDX * BIN_PARTITIONS, pass_num, b_passHist[SUBGROUP_THREAD_IDX * BIN_PARTITIONS] , b_passHist[SUBGROUP_THREAD_IDX * BIN_PARTITIONS]& FLAG_MASK);
            // debugPrintfEXT("b_passHist[%u][%u]: %b\n", SUBGROUP_THREAD_IDX * BIN_PARTITIONS, pass_num, b_passHist[SUBGROUP_THREAD_IDX * BIN_PARTITIONS]);
         }
         else{
         // otherwsie,  value is the local, per-tile digit count
             //debugPrintfEXT("origin: %u \n", b_passHist[SUBGROUP_THREAD_IDX * BIN_PARTITIONS + partitionIndex]);
-            atomicAdd(b_passHist[SUBGROUP_THREAD_IDX * BIN_PARTITIONS + partitionIndex], FLAG_AGGREGATE ^ (g_subgroupHists[SUBGROUP_THREAD_IDX] << 2));
+            atomicAdd(b_passHist[SUBGROUP_THREAD_IDX * BIN_PARTITIONS + partitionIndex][pass_num], FLAG_AGGREGATE ^ (g_subgroupHists[SUBGROUP_THREAD_IDX] << 2));
             //debugPrintfEXT("b_passHist[%u][%u]: %u, larger than 0: %u \n", SUBGROUP_THREAD_IDX * BIN_PARTITIONS, pass_num, b_passHist[SUBGROUP_THREAD_IDX * BIN_PARTITIONS + partitionIndex], b_passHist[SUBGROUP_THREAD_IDX * BIN_PARTITIONS + partitionIndex]& FLAG_MASK);
         }
 
@@ -361,16 +362,16 @@ void BinningPass(int pass_num)
             // Within the same block, look backward progressively to find the predecessors that record the global inclusive prefix up to and including current tile.
             // todo: delete the lane-count
             
-            for (int k = int(partitionIndex) - int(LANE) - 1; 0 <= k; k -= 1)
+            for (int k = int(int(partitionIndex) - int(LANE) - 1); 0 <= k; k -=1)
             {
                 
+                //debugPrintfEXT("before: %d, after: %d\n", SUBGROUP_THREAD_IDX * BIN_PARTITIONS + partitionIndex, i * BIN_PARTITIONS + k);
                 // get the reduction sum on the predecessors bin in current block
-                uint flagPayload = b_passHist[i * BIN_PARTITIONS + k];
-                if (gl_GlobalInvocationID.x == 0)
-                    debugPrintfEXT("flagPayload: %u\n", flagPayload);
+                uint flagPayload = b_passHist[i * BIN_PARTITIONS + k][pass_num];
                 // if the reduction sum on the predecessors bin is ready for all threads in current subgroup
-                
-                if (subgroupAll((flagPayload & FLAG_MASK) > FLAG_NOT_READY))
+                bool is_ready = (flagPayload & FLAG_MASK) > FLAG_NOT_READY;
+                debugPrintfEXT("flagPayload & FLAG_MASK  > FLAG_NOT_READY: %d\n", (flagPayload & FLAG_MASK) > FLAG_NOT_READY);
+                if (subgroupAll(is_ready))
                 {
                     
                     //debugPrintfEXT("flagPayload & FLAG_MASK  > FLAG_NOT_READY: %d\n", (flagPayload & FLAG_MASK) > FLAG_NOT_READY);
@@ -401,7 +402,7 @@ void BinningPass(int pass_num)
                         if (LANE == 0)
                         {
                             //  then we  add the aggregate sum to the reduction sum of current block and end the lookback for current block
-                            atomicAdd(b_passHist[i * BIN_PARTITIONS + partitionIndex], 1 ^ (aggregate << 2));
+                            atomicAdd(b_passHist[i * BIN_PARTITIONS + partitionIndex][pass_num], 1 ^ (aggregate << 2));
                             // if the subgroup is not the first subgroup, then we add the aggregate sum to the global prefix sum until the previous subgroup
                             g_reductionHist[i] = aggregate + (i != 0 ? g_localHist[i] : 0) - g_reductionHist[i];
                         }
@@ -449,7 +450,7 @@ void BinningPass(int pass_num)
     if (partitionIndex == BIN_PARTITIONS - 1)
     {
         if (SUBGROUP_THREAD_IDX < RADIX_BIN)
-            g_reductionHist[SUBGROUP_THREAD_IDX] = (b_passHist[SUBGROUP_THREAD_IDX * BIN_PARTITIONS + partitionIndex] >> 2) + (SUBGROUP_THREAD_IDX != 0 ? g_localHist[SUBGROUP_THREAD_IDX] : 0);
+            g_reductionHist[SUBGROUP_THREAD_IDX] = (b_passHist[SUBGROUP_THREAD_IDX * BIN_PARTITIONS + partitionIndex][pass_num] >> 2) + (SUBGROUP_THREAD_IDX != 0 ? g_localHist[SUBGROUP_THREAD_IDX] : 0);
         barrier();
         
         partitionIndex++;
@@ -495,7 +496,7 @@ void test(){
         
         //debugPrintfEXT("pass subgroup all\n");
         int k = int(partitionIndex - LANE - 1);
-        atomicAdd(b_passHist[SUBGROUP_THREAD_IDX * BIN_PARTITIONS ], FLAG_INCLUSIVE | (g_subgroupHists[SUBGROUP_THREAD_IDX] << 2));
+        atomicAdd(b_passHist[SUBGROUP_THREAD_IDX * BIN_PARTITIONS ][0], FLAG_INCLUSIVE | (g_subgroupHists[SUBGROUP_THREAD_IDX] << 2));
         //debugPrintfEXT("passHist[%u][%u]: %u, partitionIndex: %u, k: %d\n",0, SUBGROUP_THREAD_IDX * BIN_PARTITIONS , b_passHist[SUBGROUP_THREAD_IDX * BIN_PARTITIONS ], partitionIndex, k );
         //debugPrintfEXT("partitionIndex before: %b, after: %b\n", partitionIndex, 3 ^ (partitionIndex << 2));
     }
@@ -505,9 +506,8 @@ void test(){
 }
 void main(){
     if (gl_GlobalInvocationID.x == 0) {
-        debugPrintfEXT("subgroups %u, subgroup_threads: %u\n", gl_NumSubgroups, gl_SubgroupSize);
-        debugPrintfEXT("b_sort[0]: %u\n", b_sort[0]);
-
+        //debugPrintfEXT("subgroups %u, subgroup_threads: %u\n", gl_NumSubgroups, gl_SubgroupSize);
+       
     }
 
   GlobalHistogram();
@@ -515,16 +515,14 @@ void main(){
   barrier();
   BinningPass(0);
   barrier();
-  test();
   /*
-  barrier();
   BinningPass(1);
   barrier();
   BinningPass(2);
   barrier();
   BinningPass(3);
   barrier();
-  */
+  
   //barrier();
   //test();
   /*
