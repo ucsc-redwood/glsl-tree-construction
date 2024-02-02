@@ -118,7 +118,7 @@ void test_barrier() {
     memoryBarrier();
     barrier();
     
-            if(SUBGROUP_THREAD_IDX * BIN_PARTITIONS + partitionIndex >= 87 && SUBGROUP_THREAD_IDX * BIN_PARTITIONS + partitionIndex <= 99){
+          if(SUBGROUP_THREAD_IDX * BIN_PARTITIONS + partitionIndex >= 87 && SUBGROUP_THREAD_IDX * BIN_PARTITIONS + partitionIndex <= 99){
           debugPrintfEXT("wtf is wrong with test_buffer[%u]: %u\n", SUBGROUP_THREAD_IDX * BIN_PARTITIONS + partitionIndex, test_buffer[SUBGROUP_THREAD_IDX * BIN_PARTITIONS + partitionIndex]);
 
         }
@@ -126,7 +126,7 @@ void test_barrier() {
         for (int i = 0; i < 942; i++){
           uint flagPayload = test_buffer[i];
           if ((flagPayload & FLAG_MASK) <= FLAG_NOT_READY){
-            debugPrintfEXT("wtf is wrong with memory barrier after test_buffer[%u]: %u\n", i, test_buffer[i]);
+           // debugPrintfEXT("wtf is wrong with memory barrier after test_buffer[%u]: %u\n", i, test_buffer[i]);
         }
       }
     }
@@ -154,6 +154,7 @@ void test_barrier() {
 }
 */
 
+
     
 }
 
@@ -174,10 +175,11 @@ void main(){
   groupMemoryBarrier();
   barrier();
   test_barrier();
-
+  /*
   for(int i = 0; i < input_size; i++){
     test_buffer[i] = 2;
   }
+  */
   groupMemoryBarrier();
   barrier();
 }
