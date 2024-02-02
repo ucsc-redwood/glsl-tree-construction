@@ -66,11 +66,11 @@
 #define FLAG_MASK           3       //Mask used to retrieve flag values
 
 
-layout(set = 0, binding = 1) coherent buffer BIndex {
+layout(set = 0, binding = 0) coherent buffer BIndex {
     uint b_index[];
 };
 
-layout(set = 0, binding = 0)  buffer TestBuffer {
+layout(set = 0, binding = 1)  buffer TestBuffer {
     uint test_buffer[input_size];
 };
 
