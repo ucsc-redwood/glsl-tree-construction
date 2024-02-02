@@ -205,7 +205,22 @@ fn main() {
                 | MemoryTypeFilter::HOST_RANDOM_ACCESS,
             ..Default::default()
         },
-        15360*4 as DeviceSize,
+        15360 as DeviceSize,
+    )
+    .unwrap();
+
+    let stat_buffer = Buffer::new_slice::<u32>(
+        memory_allocator.clone(),
+        BufferCreateInfo {
+            usage: BufferUsage::STORAGE_BUFFER,
+            ..Default::default()
+        },
+        AllocationCreateInfo {
+            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                | MemoryTypeFilter::HOST_RANDOM_ACCESS,
+            ..Default::default()
+        },
+        15360 as DeviceSize,
     )
     .unwrap();
 
@@ -225,6 +240,7 @@ fn main() {
         [
             WriteDescriptorSet::buffer(0, b_index_buffer.clone()),
             WriteDescriptorSet::buffer(1, b_passhist_buffer.clone()),
+            WriteDescriptorSet::buffer(2, stat_buffer.clone()),
         ],
         [],
     )
@@ -303,6 +319,7 @@ fn main() {
     // it out. The call to `read()` would return an error if the buffer was still in use by the
     // GPU.
     let _data_buffer_content = b_passhist_buffer.read().unwrap();
+    let stat_content = stat_buffer.read().unwrap();
     /*
     let mut file = match File::create("output.txt") {
         Err(why) => panic!("couldn't create: {}", why),
@@ -315,7 +332,11 @@ fn main() {
     */
     
     for n in 0..15360 {
-        println!("{}", _data_buffer_content[n as usize]);
+        println!("{}: {}", n, _data_buffer_content[n as usize]);
+    }
+    println!("stats:");
+    for n in 0..15360 {
+        println!("{}: {}", n, stat_content[n as usize]);
     }
     
     

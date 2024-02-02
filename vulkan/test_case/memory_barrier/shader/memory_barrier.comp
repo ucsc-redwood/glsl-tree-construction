@@ -14,12 +14,12 @@
 #define RADIX_DIGITS 1 << RADIX_BITS
 #define RADIX_PASS 4//(sizeof(uint) * 8 + RADIX_BITS - 1) / RADIX_BITS
 
-#define LANE_COUNT 64 // number of threads in a subgroup
-#define LANE_MASK 63
-#define LANE_LOG 6
+#define LANE_COUNT 32 // number of threads in a subgroup
+#define LANE_MASK 31
+#define LANE_LOG 5
 
 #define HIST_SUBGROUP                                                           \
-  8 // number of subgroups in a thread block/work group for executing histogram
+  16 // number of subgroups in a thread block/work group for executing histogram
     // kernel
 #define HIST_THREADS                                                           \
   512 // number of threads in a thread block/work group for executing histogram
@@ -45,8 +45,8 @@
 #define BIN_HISTS_SIZE      4096    //The total size of all subgroup histograms in shared memory
 #define BIN_TBLOCKS         512     //The number of threadblocks dispatched in a BinningPass threadblock
 #define BIN_THREADS         512     //The number of threads in a BinningPass threadblock
-#define BIN_SUB_PART_SIZE   960     //The subpartition tile size of a single subgroup in a BinningPass threadblock
-#define BIN_SUBGROUPS       8       //The number of subgroup in a BinningPass threadblock previously 16
+#define BIN_SUB_PART_SIZE   480     //The subpartition tile size of a single subgroup in a BinningPass threadblock
+#define BIN_SUBGROUPS       16       //The number of subgroup in a BinningPass threadblock previously 16
 #define BIN_KEYS_PER_THREAD 15      //The number of keys per thread in BinningPass threadblock previously 15
 
 #define BIN_PARTITIONS     (input_size / BIN_PART_SIZE)             //The number of partition tiles in a BinningPass
@@ -70,12 +70,16 @@ layout(set = 0, binding = 0) coherent buffer BIndex {
     uint b_index[];
 };
 
-layout(set = 0, binding = 1)  buffer TestBuffer {
+layout(set = 0, binding = 1)  coherent buffer TestBuffer {
     uint test_buffer[input_size];
 };
 
+layout(set = 0, binding = 2)  buffer StatBuffer {
+    uint stat_buffer[input_size];
+};
 
-layout(local_size_x = 64, local_size_y = 8) in;
+
+layout(local_size_x = 32, local_size_y = 16) in;
 shared uint g_localHist[RADIX_BIN];
 shared uint g_subgroupHists[BIN_PART_SIZE];
 
@@ -106,32 +110,27 @@ void test_barrier() {
         // partitionIndex == 0 means it is the first partition, so  the value is the inclusive global prefix sum of the digit counts of this and all previous tiles
         if (partitionIndex == 0){
             atomicAdd(test_buffer[SUBGROUP_THREAD_IDX * BIN_PARTITIONS + partitionIndex], FLAG_INCLUSIVE ^ (g_subgroupHists[SUBGROUP_THREAD_IDX] << 2));
+            //atomicAdd(test_buffer[1], FLAG_INCLUSIVE ^ (g_subgroupHists[SUBGROUP_THREAD_IDX] << 2));
         }
         else{
         // otherwsie,  value is the local, per-tile digit count
             atomicAdd(test_buffer[SUBGROUP_THREAD_IDX * BIN_PARTITIONS + partitionIndex], FLAG_AGGREGATE ^ (g_subgroupHists[SUBGROUP_THREAD_IDX] << 2));
+            //atomicAdd(test_buffer[2], FLAG_AGGREGATE ^ (g_subgroupHists[SUBGROUP_THREAD_IDX] << 2));
         }
 
+    }else if (SUBGROUP_THREAD_IDX * BIN_PARTITIONS == 1){
+      atomicAdd(test_buffer[0],1);
     }
-    memoryBarrierBuffer();
-    memoryBarrierShared();
-    memoryBarrier();
+    
+    groupMemoryBarrier();
     barrier();
     
           if(SUBGROUP_THREAD_IDX * BIN_PARTITIONS + partitionIndex >= 87 && SUBGROUP_THREAD_IDX * BIN_PARTITIONS + partitionIndex <= 99){
           debugPrintfEXT("wtf is wrong with test_buffer[%u]: %u\n", SUBGROUP_THREAD_IDX * BIN_PARTITIONS + partitionIndex, test_buffer[SUBGROUP_THREAD_IDX * BIN_PARTITIONS + partitionIndex]);
 
         }
-    if(gl_LocalInvocationID.x == 0 && gl_LocalInvocationID.y == 0){
-        for (int i = 0; i < 942; i++){
-          uint flagPayload = test_buffer[i];
-          if ((flagPayload & FLAG_MASK) <= FLAG_NOT_READY){
-           // debugPrintfEXT("wtf is wrong with memory barrier after test_buffer[%u]: %u\n", i, test_buffer[i]);
-        }
-      }
-    }
   
-  /*
+  
   if (partitionIndex != 0){
   // SUBGROUP_IDX = 0~7
   // RADX_BIN = 256
@@ -147,18 +146,20 @@ void test_barrier() {
           uint flagPayload = test_buffer[i * BIN_PARTITIONS + k];
          if (subgroupAll((flagPayload & FLAG_MASK) > FLAG_NOT_READY)){
             break;
+         }else{
+            atomicAdd(stat_buffer[i * BIN_PARTITIONS + k], 1);
+            break;
          }
       }
     }
   }
 }
-*/
-
-
-    
 }
 
 void initialization(){
+  for(int i = 0; i < input_size; i++){
+    b_index[i] = 0;
+  }
   for( int i = 0; i < RADIX_BIN; i++){
     g_localHist[i] = 0;
   }
@@ -166,7 +167,8 @@ void initialization(){
     g_subgroupHists[i] = 0;
   }
   for(int i = 0; i < input_size; i++){
-    test_buffer[i] = 0;
+    b_alt[i] = 0;
+    b_passHist[i] = 0;
   }
 }
 
