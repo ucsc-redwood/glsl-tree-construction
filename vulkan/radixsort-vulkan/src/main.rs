@@ -48,11 +48,12 @@ fn main() {
     // initialize the data
     let mut rng = rand::thread_rng();
     let random_numbers: Vec<u32> = (0..15360).map(|_| rng.gen()).collect();
-    println!("random numbers: {:?}", random_numbers[0]);
-    let input_size = std::mem::size_of::<u32>() * 15360;
+    for n in 0..15360 {
+        println!("unsorted: {}", random_numbers[n as usize]);
+    }
     
-    let mut pass_hist = vec![0 as u32; 15360*4];
-    let mut b_globalHist = vec![0 as u32; 15360];
+    let  pass_hist = vec![0 as u32; 15360*4];
+    let  b_globalHist = vec![0 as u32; 15360];
 
     // As with other examples, the first step is to create an instance.
     let library = VulkanLibrary::new().unwrap();
@@ -328,7 +329,7 @@ fn main() {
             set,
         )
         .unwrap()
-        .dispatch([512, 1, 1])
+        .dispatch([2, 1, 1])
         .unwrap();
     println!(
         "enable subgroup size control {}",
@@ -377,8 +378,8 @@ fn main() {
     }
     */
     
-    for n in 10000..10300 {
-        println!("{}", _data_buffer_content[n as usize]);
+    for n in 0..15360 {
+        println!("sorted: {}", _data_buffer_content[n as usize]);
     }
     
     
