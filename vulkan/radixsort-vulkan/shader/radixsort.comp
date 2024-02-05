@@ -237,7 +237,12 @@ void BinningPass(int pass_num)
             // if the current lane id is 0, then it is responsible for 1 bits, if it is 1, then it is responsible for 2 bits, and so on
             const uint bits = bitCount(offsets[i] << LANE_MASK - LANE);
             // index = least significant 8 bits of keys[i] + subgroup id * radix bin
-            const int index = int(((keys[i] >> (RADIX_LOG * pass_num)) & RADIX_MASK) + t);
+            const int index = 0;
+            if(pass_num == 3){
+                index = int(key[i] >> 24) + t;
+            }else{
+                index = int(((keys[i] >> (RADIX_LOG * pass_num)) & RADIX_MASK) + t);
+            }
             const uint prev = g_subgroupHists[index];
             //the lowest ranked thread in each active digit
             // population will  add the population’s count to the per-warp counter corresponding to that digit
@@ -298,19 +303,32 @@ void BinningPass(int pass_num)
     if (SUBGROUP_IDX != 0)
     {
         const uint t = SUBGROUP_IDX << RADIX_LOG;
-            
+
+        if (pass_num == 3){
+            for (int i = 0; i < BIN_KEYS_PER_THREAD; ++i)
+            {
+                const uint t2 = (keys[i] >> 24);
+                offsets[i] += g_subgroupHists[t2 + t] + g_reductionHist[t2];
+            }
+        }else{   
         //[unroll]
-        for (int i = 0; i < BIN_KEYS_PER_THREAD; ++i)
-        {
-            const uint t2 = (keys[i] >> (RADIX_LOG * pass_num)) & RADIX_MASK;
-            offsets[i] += g_subgroupHists[t2 + t] + g_reductionHist[t2];
+            for (int i = 0; i < BIN_KEYS_PER_THREAD; ++i)
+            {
+                const uint t2 = (keys[i] >> (RADIX_LOG * pass_num)) & RADIX_MASK;
+                offsets[i] += g_subgroupHists[t2 + t] + g_reductionHist[t2];
+            }
         }
     }
     else
     {
         //[unroll]
+        if (pass_num == 3){
         for (int i = 0; i < BIN_KEYS_PER_THREAD; ++i)
+            offsets[i] += g_reductionHist[keys[i] >> 24];
+        }else{
+            for (int i = 0; i < BIN_KEYS_PER_THREAD; ++i)
             offsets[i] += g_reductionHist[(keys[i] >> (RADIX_LOG * pass_num)) & RADIX_MASK];
+        }
     }
     groupMemoryBarrier();
     barrier();
