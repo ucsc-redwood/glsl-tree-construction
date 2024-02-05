@@ -273,23 +273,23 @@ void BinningPass(int pass_num)
         }
 
     }
-    groupMemoryBarrier();
+    memoryBarrierBuffer();
     barrier(); // a barrier must be placed between here and the lookback to prevent accidentally broadcasting an incorrect aggregate
     
     //exclusive prefix sum across the reductions
     if (SUBGROUP_THREAD_IDX < RADIX_BIN)
         g_reductionHist[(LANE + 1 & LANE_MASK) + (SUBGROUP_IDX << LANE_LOG)] = subgroupExclusiveAdd(g_reductionHist[SUBGROUP_THREAD_IDX]) + g_reductionHist[SUBGROUP_THREAD_IDX];
-    groupMemoryBarrier();
+    memoryBarrierBuffer();
     barrier();
         
     if (LANE < (RADIX_BIN >> LANE_LOG) && SUBGROUP_IDX == 0)
         g_reductionHist[LANE << LANE_LOG] = subgroupExclusiveAdd(g_reductionHist[LANE << LANE_LOG]);
-    groupMemoryBarrier();
+    memoryBarrierBuffer();
     barrier();
 
     if (SUBGROUP_THREAD_IDX < RADIX_BIN && LANE != 0)
         g_reductionHist[SUBGROUP_THREAD_IDX] += subgroupBroadcast(g_reductionHist[SUBGROUP_THREAD_IDX - 1], 1);
-    groupMemoryBarrier();
+    memoryBarrierBuffer();
     barrier();
     //
     //Update offsets
