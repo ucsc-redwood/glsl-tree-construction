@@ -47,7 +47,9 @@ use vulkano::{
 fn main() {
     // initialize the data
     let mut rng = rand::thread_rng();
-    let random_numbers: Vec<u32> = (0..15360).map(|_| rng.gen()).collect();
+    let mut random_numbers: Vec<u32> = (0..15360).collect::<Vec<u32>>();/*map(|_| rng.gen()).collect()*/
+    random_numbers.reverse();
+
     for n in 0..15360 {
         println!("unsorted: {}", random_numbers[n as usize]);
     }
@@ -250,6 +252,7 @@ fn main() {
         BufferCreateInfo {
             usage: BufferUsage::STORAGE_BUFFER,
             ..Default::default()
+            
         },
         AllocationCreateInfo {
             memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
@@ -379,7 +382,7 @@ fn main() {
     */
     
     for n in 0..15360 {
-        println!("sorted: {}", _data_buffer_content[n as usize]);
+        println!("sorted[{}]: {}",n, _data_buffer_content[n as usize]);
     }
     
     
