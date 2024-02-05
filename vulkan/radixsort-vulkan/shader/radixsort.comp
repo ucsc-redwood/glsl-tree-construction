@@ -444,14 +444,15 @@ void BinningPass(int pass_num)
     
 
     if (pass_num == 3){
+        // fuck it is always 0 for g_subgroupHists[i];
         for (uint i = SUBGROUP_THREAD_IDX; i < BIN_PART_SIZE; i += BIN_THREADS)
             b_sort[g_reductionHist[g_subgroupHists[i] >> 24] + i] = g_subgroupHists[i];
     }else{
         for (uint i = SUBGROUP_THREAD_IDX; i < BIN_PART_SIZE; i += BIN_THREADS){
             if (pass_num == 0 || pass_num == 2){
-                b_alt[g_reductionHist[g_subgroupHists[i] >> (RADIX_LOG * pass_num) & RADIX_MASK] + i] = g_subgroupHists[i];
+                b_alt[g_reductionHist[g_subgroupHists[i] >> (RADIX_LOG * pass_num) & RADIX_MASK] + i] = 10;//g_subgroupHists[i];
             }else{
-                b_sort[g_reductionHist[g_subgroupHists[i] >> (RADIX_LOG * pass_num) & RADIX_MASK] + i] = g_subgroupHists[i];
+                b_sort[g_reductionHist[g_subgroupHists[i] >> (RADIX_LOG * pass_num) & RADIX_MASK] + i] = 10;//g_subgroupHists[i];
             }
         }
     }
