@@ -13,12 +13,18 @@
 #define RADIX_MASK 255 // Mask of digit bins
 #define RADIX_PASS 4//(sizeof(uint) * 8 + RADIX_BITS - 1) / RADIX_BITS
 
-#define LANE_COUNT 32 // number of threads in a subgroup
-#define LANE_MASK 31
-#define LANE_LOG 5
+#define LANE_COUNT 64 // number of threads in a subgroup
+#define LANE_MASK 63
+#define LANE_LOG 6
+
+#define LANE gl_LocalInvocationID.x // the idx of thread in the subgroup
+#define SUBGROUP_IDX  gl_LocalInvocationID.y//gl_SubgroupID // the idx of subgroup the thread belongs to might be wrong
+#define SUBGROUP_THREAD_IDX                                                             \
+  (LANE + (SUBGROUP_IDX << LANE_LOG)) // the subgroup relative thread idx
+
 
 #define HIST_SUBGROUP                                                           \
-  16 // number of subgroups in a thread block/work group for executing histogram
+  8 // number of subgroups in a thread block/work group for executing histogram
     // kernel
 #define HIST_THREADS                                                           \
   512 // number of threads in a thread block/work group for executing histogram
@@ -42,19 +48,14 @@
 #define BIN_HISTS_SIZE      4096    //The total size of all subgroup histograms in shared memory
 #define BIN_TBLOCKS         2     //The number of threadblocks dispatched in a BinningPass threadblock
 #define BIN_THREADS         512     //The number of threads in a BinningPass threadblock
-#define BIN_SUB_PART_SIZE   480     //The subpartition tile size of a single subgroup in a BinningPass threadblock
-#define BIN_SUBGROUPS       16       //The number of subgroup in a BinningPass threadblock previously 16
+#define BIN_SUB_PART_SIZE   960     //The subpartition tile size of a single subgroup in a BinningPass threadblock
+#define BIN_SUBGROUPS       8       //The number of subgroup in a BinningPass threadblock previously 16
 #define BIN_KEYS_PER_THREAD 15      //The number of keys per thread in BinningPass threadblock previously 15
 
 #define BIN_PARTITIONS     (input_size / BIN_PART_SIZE)             //The number of partition tiles in a BinningPass
 #define BIN_SUB_PART_START (SUBGROUP_IDX * BIN_SUB_PART_SIZE)     //The starting offset of a subpartition tile
 #define BIN_PART_START     (partitionIndex * BIN_PART_SIZE)     //The starting offset of a partition tile
 
-
-#define LANE gl_LocalInvocationID.x // the idx of thread in the subgroup
-#define SUBGROUP_IDX  gl_LocalInvocationID.y//gl_SubgroupID // the idx of subgroup the thread belongs to might be wrong
-#define SUBGROUP_THREAD_IDX                                                             \
-  (LANE + (SUBGROUP_IDX << LANE_LOG)) // the subgroup relative thread idx
 
 
 #define FLAG_NOT_READY      0       //Flag value inidicating neither inclusive sum, or aggregate sum of a partition tile is ready
@@ -86,8 +87,8 @@ layout(set = 0, binding = 4) coherent buffer BPassHist {
 
 
 // define work group size
-layout(local_size_x = 32, local_size_y = 16) in;
-shared uint g_globalHist[RADIX_BIN][RADIX_PASS];
+layout(local_size_x = 64, local_size_y = 8) in;
+shared uvec4 g_globalHist[RADIX_BIN];
 shared uint g_localHist[RADIX_BIN];
 shared uint g_subgroupHists[BIN_PART_SIZE];
 shared uint g_reductionHist[RADIX_BIN];
@@ -124,17 +125,15 @@ void GlobalHistogram() {
   // prefix sum at warp/subgroup/wave level
   // scan occurence of digits containg digit 1 in the first i+1 bins for each warp/subgroup/wave, and store the result in g_globalHist
   for (uint i = SUBGROUP_IDX << LANE_LOG; i < RADIX_BIN; i += HIST_THREADS) {
-    g_globalHist[((LANE + 1) & LANE_MASK) + i][0] = subgroupExclusiveAdd(g_globalHist[LANE + i][0] +  g_globalHist[LANE + i][0]);
-    g_globalHist[((LANE + 1) & LANE_MASK) + i][1] = subgroupExclusiveAdd(g_globalHist[LANE + i][1] +  g_globalHist[LANE + i][1]);
-    g_globalHist[((LANE + 1) & LANE_MASK) + i][2] = subgroupExclusiveAdd(g_globalHist[LANE + i][2] +  g_globalHist[LANE + i][2]);
-    g_globalHist[((LANE + 1) & LANE_MASK) + i][3] = subgroupExclusiveAdd(g_globalHist[LANE + i][3] +  g_globalHist[LANE + i][3]);
-  //  g_globalHist[((LANE + 1) & LANE_MASK) + i] =
-   //     SubGroupPrefixSum(g_globalHist[LANE + i]) + g_globalHist[LANE + i];
+    g_globalHist[((LANE + 1) & LANE_MASK) + i][0] = subgroupExclusiveAdd(g_globalHist[LANE + i][0]) +  g_globalHist[LANE + i][0];
+    g_globalHist[((LANE + 1) & LANE_MASK) + i][1] = subgroupExclusiveAdd(g_globalHist[LANE + i][1]) +  g_globalHist[LANE + i][1];
+    g_globalHist[((LANE + 1) & LANE_MASK) + i][2] = subgroupExclusiveAdd(g_globalHist[LANE + i][2]) +  g_globalHist[LANE + i][2];
+    g_globalHist[((LANE + 1) & LANE_MASK) + i][3] = subgroupExclusiveAdd(g_globalHist[LANE + i][3]) +  g_globalHist[LANE + i][3];
   }
     groupMemoryBarrier();
     barrier();
 
-  if (LANE < (RADIX_BIN >> LANE_LOG) && SUBGROUP_IDX == 0) {
+  if ((LANE < (RADIX_BIN >> LANE_LOG)) && (SUBGROUP_IDX == 0)) {
     g_globalHist[LANE << LANE_LOG][0] += subgroupExclusiveAdd(g_globalHist[LANE << LANE_LOG][0]);
     g_globalHist[LANE << LANE_LOG][1] += subgroupExclusiveAdd(g_globalHist[LANE << LANE_LOG][1]);
     g_globalHist[LANE << LANE_LOG][2] += subgroupExclusiveAdd(g_globalHist[LANE << LANE_LOG][2]);
@@ -185,7 +184,10 @@ void BinningPass(int pass_num)
     barrier();
     // Returns the value of the local histogram at bin 0 for the given lane index within the specified subgroup.
     // it returns the current partitionIndex 
+    // in our case, paritionIndex is the index of the current partition tile(index of workgroup)
     int partitionIndex = int(subgroupBroadcast(g_localHist[0], 0));
+
+
     for (uint i = SUBGROUP_THREAD_IDX; i < BIN_HISTS_SIZE; i += BIN_THREADS)
         g_subgroupHists[i] = 0;
     groupMemoryBarrier();
@@ -198,11 +200,17 @@ void BinningPass(int pass_num)
     for (uint i = 0, t = LANE + BIN_SUB_PART_START + BIN_PART_START; i < BIN_KEYS_PER_THREAD; ++i, t += LANE_COUNT){
         if (pass_num %2 == 0){
             keys[i] = b_sort[t];
+            if(pass_num != 0){
+                //debugPrintfEXT("b_sort[%u]: %u\n", t, b_sort[t]);
+            }
         }else{
             keys[i] = b_alt[t];
+            if(pass_num != 0){
+                //debugPrintfEXT("b_alt[%u]: %u\n", t, b_alt[t]);
+            }
         }
     }
-    //debugPrintfEXT("binning: b_sort[%u]: %u\n", 0, b_sort[0]);
+
 
     // [ 2, 5, 6 , 1]
     // output= [1, 2, 3, 0]
@@ -225,7 +233,7 @@ void BinningPass(int pass_num)
             for (int k = RADIX_LOG * pass_num; k < RADIX_LOG * (pass_num + 1); ++k)
             {
                 // extracts the k-th bit of the key, t2 is true if the k-th bit of keys[i] is 1, and false otherwise.
-                const bool t2 = (keys[i] >> k & 1) != 0;
+                const bool t2 = (keys[i] >> k & 1u) != 0u;
                 // subgroupActiveBallot counts the number of thread in the subgroup that have the k-th bit of keys[i] set to 1
                 // if t2 is true, then 0 xor subgroupActiveBallot(t2), oherwise 0xFFFFFFFF xor subgroupActiveBallot(t2), we get inverse result for t2 = true and false
                 offsets[i] &= (t2 ? 0 : 0xFFFFFFFF) ^ (subgroupBallot(t2).x);
@@ -234,6 +242,9 @@ void BinningPass(int pass_num)
             // counts the number of bits the current lane is responsible for, i.e. in a subgroup of 32 threads, 
             // if the current lane id is 0, then it is responsible for 1 bits, if it is 1, then it is responsible for 2 bits, and so on
             const uint bits = bitCount(offsets[i] << LANE_MASK - LANE);
+            
+            //if(bits == 2)
+            //debugPrintfEXT("bits: %u\n", bits);
             // index = least significant 8 bits of keys[i] + subgroup id * radix bin
             int index = 0;
             if(pass_num == 3){
@@ -287,7 +298,7 @@ void BinningPass(int pass_num)
     memoryBarrierBuffer();
     barrier();
 
-    if (SUBGROUP_THREAD_IDX < RADIX_BIN && LANE != 0)
+    if ((SUBGROUP_THREAD_IDX < RADIX_BIN) && (LANE != 0))
         g_reductionHist[SUBGROUP_THREAD_IDX] += subgroupBroadcast(g_reductionHist[SUBGROUP_THREAD_IDX - 1], 1);
     memoryBarrierBuffer();
     barrier();
@@ -312,6 +323,7 @@ void BinningPass(int pass_num)
             }
         }
     }
+    
     else
     {
         //[unroll]
@@ -323,25 +335,32 @@ void BinningPass(int pass_num)
             offsets[i] += g_reductionHist[keys[i] >> (RADIX_LOG * pass_num) & RADIX_MASK];
         }
     }
+    
     groupMemoryBarrier();
     barrier();
-        
+
+    /*
+    if (pass_num == 3){
+                debugPrintfEXT("offsets[%u]: %u, offsets[%u]: %u \n", 0, offsets[0], 1, offsets[1]);
+    }
+    */
+    
     //Scatter keys into shared memory
     // now the g_subgroupHists contain the offset of each scattered key in the subgroup
     
     for (int i = 0; i < BIN_KEYS_PER_THREAD; ++i){
         g_subgroupHists[offsets[i]] = keys[i];
-       // debugPrintfEXT("g_subgroupHists[%u]: %u\n", offsets[i], g_subgroupHists[offsets[i]]);
     }
     groupMemoryBarrier();
     barrier();
     /*
-    if( gl_GlobalInvocationID.x == 0){
+    if( pass_num != 0){
         for (int i = 0; i < BIN_KEYS_PER_THREAD; ++i){
             debugPrintfEXT("offsets[%u]: %u \t keys[%u]: %u\n", i, offsets[i], i, keys[i]);
         }
     }
     */
+    
     // The results are correct up to this point
     //Lookback
     // block 31 scan = block 30 scan result + current block prefix sum
@@ -387,6 +406,9 @@ void BinningPass(int pass_num)
                         // if current lane has smallest index in the subgroup, then simply set the value to k as index k indicates that  represent the global inclusive prefix sum
                         if (subgroupElect()){
                             g_subgroupHists[SUBGROUP_IDX] = k;
+                            if(SUBGROUP_IDX == 10 && pass_num == 3){
+                                debugPrintfEXT("g_subgroupHists[%u]: %u, k: %d\n", SUBGROUP_IDX, g_subgroupHists[SUBGROUP_IDX], k);
+                            }
                         }
                         
                             
@@ -428,8 +450,7 @@ void BinningPass(int pass_num)
             
         //place value back
         if (LANE == 0)
-            g_subgroupHists[SUBGROUP_IDX] = t;
-            
+            g_subgroupHists[SUBGROUP_IDX] = t; 
     }
     
     else
@@ -441,8 +462,8 @@ void BinningPass(int pass_num)
     barrier();
     
     //Scatter runs of keys into device memory;
-    
-
+   // if(pass_num == 0)
+   // debugPrintfEXT("g_subgroupHists[10]: %u\n", g_subgroupHists[10]);
     if (pass_num == 3){
         // fuck it is always 0 for g_subgroupHists[i];
         for (uint i = SUBGROUP_THREAD_IDX; i < BIN_PART_SIZE; i += BIN_THREADS)
@@ -450,14 +471,16 @@ void BinningPass(int pass_num)
     }else{
         for (uint i = SUBGROUP_THREAD_IDX; i < BIN_PART_SIZE; i += BIN_THREADS){
             if (pass_num == 0 || pass_num == 2){
-                b_alt[g_reductionHist[g_subgroupHists[i] >> (RADIX_LOG * pass_num) & RADIX_MASK] + i] = 10;//g_subgroupHists[i];
+                b_alt[g_reductionHist[g_subgroupHists[i] >> (RADIX_LOG * pass_num) & RADIX_MASK] + i] = g_subgroupHists[i];
+                if( g_reductionHist[g_subgroupHists[i] >> (RADIX_LOG * pass_num) & RADIX_MASK] + i < 10)
+                debugPrintfEXT("b_alt[%u]: %u\n", g_reductionHist[g_subgroupHists[i] >> (RADIX_LOG * pass_num) & RADIX_MASK] + i, g_subgroupHists[i]);
             }else{
-                b_sort[g_reductionHist[g_subgroupHists[i] >> (RADIX_LOG * pass_num) & RADIX_MASK] + i] = 10;//g_subgroupHists[i];
+                b_sort[g_reductionHist[g_subgroupHists[i] >> (RADIX_LOG * pass_num) & RADIX_MASK] + i] = g_subgroupHists[i];
             }
         }
     }
 
-    /*
+    
     //for input sizes which are not perfect multiples of the partition tile size
     if (partitionIndex == BIN_PARTITIONS - 1)
     {
@@ -507,7 +530,7 @@ void BinningPass(int pass_num)
             }
         }
     }
-    */
+    
     
 }
 
