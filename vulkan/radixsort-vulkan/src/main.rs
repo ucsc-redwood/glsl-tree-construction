@@ -48,13 +48,14 @@ fn main() {
     // initialize the data
     let mut rng = rand::thread_rng();
     let mut random_numbers: Vec<u32> = (0..15360).collect::<Vec<u32>>();/*map(|_| rng.gen()).collect()*/
-    random_numbers.reverse();
+    //random_numbers.reverse();
 
     for n in 0..15360 {
         println!("unsorted: {}", random_numbers[n as usize]);
     }
     
-    let  pass_hist = vec![0 as u32; 15360*4];
+    let  pass_hist = vec![0 as u32; 15360];
+    let sec_pass_hist = vec![0 as u32; 15360];
     let  b_globalHist = vec![0 as u32; 15360];
 
     // As with other examples, the first step is to create an instance.
@@ -170,6 +171,7 @@ fn main() {
             spirv_version: "1.3",
         }
     }
+    
     let cs = cs::load(device.clone())
         .unwrap()
         .entry_point("main")
@@ -278,6 +280,21 @@ fn main() {
     )
     .unwrap();
 
+    let b_second_passhist_buffer = Buffer::from_iter(
+        memory_allocator.clone(),
+        BufferCreateInfo {
+            usage: BufferUsage::STORAGE_BUFFER,
+            ..Default::default()
+        },
+        AllocationCreateInfo {
+            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                | MemoryTypeFilter::HOST_RANDOM_ACCESS,
+            ..Default::default()
+        },
+        sec_pass_hist
+    )
+    .unwrap();
+
     // In order to let the shader access the buffer, we need to build a *descriptor set* that
     // contains the buffer.
     //
@@ -297,6 +314,7 @@ fn main() {
             WriteDescriptorSet::buffer(2, b_globalhist_buffer.clone()),
             WriteDescriptorSet::buffer(3, b_index_buffer.clone()),
             WriteDescriptorSet::buffer(4, b_passhist_buffer.clone()),
+            WriteDescriptorSet::buffer(5, b_second_passhist_buffer.clone()),
         ],
         [],
     )
@@ -370,6 +388,8 @@ fn main() {
     // it out. The call to `read()` would return an error if the buffer was still in use by the
     // GPU.
     let _data_buffer_content = b_sort_buffer.read().unwrap();
+    let b_global_hist  = b_globalhist_buffer.read().unwrap();
+    let b_alt_buffer_content = b_alt_buffer.read().unwrap();
     /*
     let mut file = match File::create("output.txt") {
         Err(why) => panic!("couldn't create: {}", why),
@@ -384,7 +404,13 @@ fn main() {
     for n in 0..15360 {
         println!("sorted[{}]: {}",n, _data_buffer_content[n as usize]);
     }
+    for n in 0..15360 {
+        println!("b_alt[{}]: {}",n, b_alt_buffer_content[n as usize]);
+    }
     
+    for n in 0..15360 {
+        println!("b_globalHist[{}]: {}", n, b_global_hist[n as usize]);
+    }
     
 
     println!("Success");

@@ -1,0 +1,46 @@
+#version 450
+#extension GL_KHR_shader_subgroup_basic: enable
+#extension GL_KHR_shader_subgroup_ballot: enable
+#extension GL_KHR_shader_subgroup_arithmetic: enable
+#extension GL_KHR_shader_subgroup_vote: enable
+#extension GL_EXT_debug_printf : require
+
+uint expand_bit(uint a);
+uint encode(uint i, uint j, uint k);
+
+uint expand_bit(uint a) {
+  uint x = a & 0x000003FF;
+  x = (x | (x << 16)) & 0x030000FF;
+  x = (x | (x << 8)) & 0x0300F00F;
+  x = (x | (x << 4)) & 0x030C30C3;
+  x = (x | (x << 2)) & 0x09249249;
+  return x;
+}
+
+uint encode(uint i, uint j, uint k) {
+  return expand_bit(i) | expand_bit(j) << 1 | expand_bit(k) << 2;
+}
+
+void foo( float4 *in_xyz,
+                  uint *out,
+                  float n,
+                  float min_coord,
+                  float range) {
+  uint kCodeLen = 31;
+
+  uint index = get_global_id(0);
+  if (index >= convert_uint(n)) return;
+
+  float x = in_xyz[index].x;
+  float y = in_xyz[index].y;
+  float z = in_xyz[index].z;
+  uint bit_scale = 0xFFFFFFFFu >> (32 - (kCodeLen / 3));  // 1023
+  float bit_scale_f = convert_float(bit_scale);           // 1023
+
+  uint i = convert_uint(bit_scale_f * ((x - min_coord) / range));
+  uint j = convert_uint(bit_scale_f * ((y - min_coord) / range));
+  uint k = convert_uint(bit_scale_f * ((z - min_coord) / range));
+
+  out[index] = encode(i, j, k);
+  // out[index] = n_uint;
+}
