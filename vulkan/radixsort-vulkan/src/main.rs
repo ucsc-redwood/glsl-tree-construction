@@ -54,9 +54,12 @@ fn main() {
     //random_numbers.reverse();
     init::init_random(&mut random_numbers);
     for n in 0..15360 {
-        println!("unsorted: {:?}", random_numbers[n as usize]);
+        println!("coords: {:?}", random_numbers[n as usize]);
     }
     let morton_keys = morton::compute_morton(random_numbers);
+    for n in 0..15360 {
+        println!("morton_keys[{}]: {:b}", n, morton_keys[n as usize]);
+    }
 
     let pass_hist = vec![0 as u32; 15360 / 7680 * 256 * 4];
     let b_globalHist = vec![0 as u32; 256 * 4];
