@@ -1,0 +1,55 @@
+#version 450
+#extension GL_KHR_shader_subgroup_basic: enable
+#extension GL_KHR_shader_subgroup_ballot: enable
+#extension GL_KHR_shader_subgroup_arithmetic: enable
+#extension GL_KHR_shader_subgroup_vote: enable
+#extension GL_EXT_debug_printf : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int8: enable
+
+struct OctNode{
+    int children[8];
+    vec4 corner;
+    float cell_size;
+    int child_node_mask;
+    int child_leaf_mask;
+};
+
+layout(set = 0, binding = 0) buffer OctreeNodes {
+    OctNode oct_nodes[];
+} ;
+
+layout (set = 0, binding = 1) buffer NodeOffsets {
+    int node_offsets[];
+};
+
+layout(set = 0, binding = 2) buffer RtNodeCounts {
+    int rt_node_counts[];
+};
+
+layout(set = 0, binding = 3) buffer Codes {
+    uint codes[];
+};
+
+layout(set = 0, binding = 4) buffer PrefixN {
+    uint8_t rt_prefixN[];
+};
+
+layout(set = 0, binding = 5) buffer Parents {
+    int rt_parents[];
+};
+
+layout (push_constant) uniform Constants{
+    float min_coord,
+    float range,
+    int n_brt_nodes,
+}
+
+layout(local_size_x = 64, local_size_y = 8) in;
+
+void k_MakeOctNodes(){
+    int root_level = rt_prefixN[0]/3;
+}
+
+void k_LinkLeafNodes(){
+    
+}

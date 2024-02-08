@@ -54,8 +54,7 @@ fn main() {
         println!("unsorted: {}", random_numbers[n as usize]);
     }
     
-    let  pass_hist = vec![0 as u32; 15360];
-    let sec_pass_hist = vec![0 as u32; 15360];
+    let  pass_hist = vec![0 as u32; 15360*4];
     let  b_globalHist = vec![0 as u32; 15360];
 
     // As with other examples, the first step is to create an instance.
@@ -280,21 +279,6 @@ fn main() {
     )
     .unwrap();
 
-    let b_second_passhist_buffer = Buffer::from_iter(
-        memory_allocator.clone(),
-        BufferCreateInfo {
-            usage: BufferUsage::STORAGE_BUFFER,
-            ..Default::default()
-        },
-        AllocationCreateInfo {
-            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
-                | MemoryTypeFilter::HOST_RANDOM_ACCESS,
-            ..Default::default()
-        },
-        sec_pass_hist
-    )
-    .unwrap();
-
     // In order to let the shader access the buffer, we need to build a *descriptor set* that
     // contains the buffer.
     //
@@ -314,7 +298,6 @@ fn main() {
             WriteDescriptorSet::buffer(2, b_globalhist_buffer.clone()),
             WriteDescriptorSet::buffer(3, b_index_buffer.clone()),
             WriteDescriptorSet::buffer(4, b_passhist_buffer.clone()),
-            WriteDescriptorSet::buffer(5, b_second_passhist_buffer.clone()),
         ],
         [],
     )

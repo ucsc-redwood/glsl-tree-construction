@@ -5,42 +5,54 @@
 #extension GL_KHR_shader_subgroup_vote: enable
 #extension GL_EXT_debug_printf : require
 
-uint expand_bit(uint a);
-uint encode(uint i, uint j, uint k);
 
-uint expand_bit(uint a) {
-  uint x = a & 0x000003FF;
-  x = (x | (x << 16)) & 0x030000FF;
-  x = (x | (x << 8)) & 0x0300F00F;
-  x = (x | (x << 4)) & 0x030C30C3;
-  x = (x | (x << 2)) & 0x09249249;
+#define TotalThreadsX gl_NumWorkGroups.x * gl_WorkGroupSize.x
+#define TotalThreadsY gl_NumWorkGroups.y * gl_WorkGroupSize.y
+#define TotalThreadsZ gl_NumWorkGroups.z * gl_WorkGroupSize.z
+#define TotalThreads TotalThreadsX * TotalThreadsY * TotalThreadsZ
+#define ITEM_PER_THREAD input/(TotalThreads)
+
+layout(set = 0, binding = 0) buffer Data{
+  vec4 data[];
+};
+
+layout(set = 0, binding = 1) buffer MortonKeys{
+  uint morton_keys[];
+};
+
+layout (push_constant) uniform Constants {
+  uint n;
+  float min_coord;
+  float range;
+};
+
+layout(local_size_x = 64, local_size_y = 8) in;
+
+void k_ComputeMortonCode(){
+    int startIdx = int(gl_GlobalInvocationID.x) * elements_per_thread + 1;
+    int endIdx = min(startIdx + elements_per_thread, n);
+    for(int i = startIdx; i < endIdx && i < n; i++){
+      morton_keys[i] = sngle_point_to_code_v2(data[i].x, data[i].y, data[i].z, min_coord, range);
+    }
+}
+
+uint sngle_point_to_code_v2(float x, float y, float z){
+  float bit_scale = 1024;
+  x = (x - min_coord) / range;
+  y = (y - min_coord) / range;
+  z = (z - min_coord) / range;
+  return m3D_e_magicbits(x * bit_scale, y * bit_scale, z * bit_scale);
+}
+
+uint m3D_e_magicbits(const float x, const float y, const float z){
+  return morton3D_SplitBy3bits(x) | (morton3D_SplitBy3bits(y) << 1) | (morton3D_SplitBy3bits(z) << 2);
+}
+
+uint morton3D_SplitBy3bits(const float a){
+  uint x = uint(a) & 0x000003ff;
+  x = (x | x << 16) & 0x030000ff;
+  x = (x | x << 8) & 0x0300f00f;
+  x = (x | x << 4) & 0x30c30c3;
+  x = (x | x << 2) & 0x9249249;
   return x;
-}
-
-uint encode(uint i, uint j, uint k) {
-  return expand_bit(i) | expand_bit(j) << 1 | expand_bit(k) << 2;
-}
-
-void foo( float4 *in_xyz,
-                  uint *out,
-                  float n,
-                  float min_coord,
-                  float range) {
-  uint kCodeLen = 31;
-
-  uint index = get_global_id(0);
-  if (index >= convert_uint(n)) return;
-
-  float x = in_xyz[index].x;
-  float y = in_xyz[index].y;
-  float z = in_xyz[index].z;
-  uint bit_scale = 0xFFFFFFFFu >> (32 - (kCodeLen / 3));  // 1023
-  float bit_scale_f = convert_float(bit_scale);           // 1023
-
-  uint i = convert_uint(bit_scale_f * ((x - min_coord) / range));
-  uint j = convert_uint(bit_scale_f * ((y - min_coord) / range));
-  uint k = convert_uint(bit_scale_f * ((z - min_coord) / range));
-
-  out[index] = encode(i, j, k);
-  // out[index] = n_uint;
 }

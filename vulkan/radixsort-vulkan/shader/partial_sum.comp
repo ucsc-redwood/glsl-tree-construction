@@ -1,0 +1,40 @@
+#version 450
+#extension GL_KHR_shader_subgroup_basic: enable
+#extension GL_KHR_shader_subgroup_ballot: enable
+#extension GL_KHR_shader_subgroup_arithmetic: enable
+#extension GL_KHR_shader_subgroup_vote: enable
+#extension GL_EXT_debug_printf : require
+
+layout(set = 0, binding = 0) buffer Data {
+    int data[];
+};
+
+layout(set = 0, binding = 1) buffer dFirst {
+    int d_first[];
+};
+
+layout(push_constant) uniform Constants {
+    int data_size;
+    int first;
+    int last,
+    int d_size;
+
+} 
+
+
+layout(local_size_x = 64, local_size_y = 8) in;
+
+void k_PartialSum(){
+    if (first >= last || first < 0 || last > dataSize) return d_first;
+    int sum = data[first];
+    int count = 0; // To keep track of how many elements have been processed
+
+    d_first[count++] = sum; // Store the first sum and increment count
+    for (int i = first + 1; i < last; ++i) {
+        sum += data[i];
+        if (d_first + count < dSize) { // Check to prevent buffer overflow
+            d_first[count++] = sum;
+        }
+    }
+    return count; // Return the number of elements processed
+}
