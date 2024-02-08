@@ -1,17 +1,3 @@
-// Copyright (c) 2017 The vulkano developers
-// Licensed under the Apache License, Version 2.0
-// <LICENSE-APACHE or
-// https://www.apache.org/licenses/LICENSE-2.0> or the MIT
-// license <LICENSE-MIT or https://opensource.org/licenses/MIT>,
-// at your option. All files in the project carrying such
-// notice may not be copied, modified, or distributed except
-// according to those terms.
-
-// This example demonstrates how to use the compute capabilities of Vulkan.
-//
-// While graphics cards have traditionally been used for graphical operations, over time they have
-// been more or more used for general-purpose operations as well. This is called "General-Purpose
-// GPU", or *GPGPU*. This is what this example demonstrates.
 use byteorder::{LittleEndian, WriteBytesExt};
 use cgmath::Vector4;
 use rand::Rng;
@@ -43,23 +29,23 @@ use vulkano::{
     sync::{self, GpuFuture},
     DeviceSize, VulkanLibrary,
 };
-mod init;
-mod morton;
 
-fn main() {
-    // initialize the data
-    let mut rng = rand::thread_rng();
-    //let mut random_numbers: Vec<u32> = (0..15360).collect::<Vec<u32>>(); /*map(|_| rng.gen()).collect()*/
-    let mut random_numbers: Vec<[f32; 4]> = [[0.0; 4]; 15360].to_vec();
-    //random_numbers.reverse();
-    init::init_random(&mut random_numbers);
-    for n in 0..15360 {
-        println!("unsorted: {:?}", random_numbers[n as usize]);
-    }
-    let morton_keys = morton::compute_morton(random_numbers);
+use crate::morton;
 
-    let pass_hist = vec![0 as u32; 15360 / 7680 * 256 * 4];
-    let b_globalHist = vec![0 as u32; 256 * 4];
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy)]
+struct Constants {
+    n: u32,
+    min_coord: f32,
+    range: f32,
+}
+
+pub fn compute_morton(input: Vec<[f32; 4]>) -> Vec<u32> {
+    let constants_data = Constants {
+        n: 15360,
+        min_coord: 0.0,
+        range: 1024.0,
+    };
 
     // As with other examples, the first step is to create an instance.
     let library = VulkanLibrary::new().unwrap();
@@ -165,17 +151,7 @@ fn main() {
     //
     // If you are familiar with graphics pipeline, the principle is the same except that compute
     // pipelines are much simpler to create.
-
     mod cs {
-
-        vulkano_shaders::shader! {
-            ty: "compute",
-            path: "shader/radixsort.comp",
-            spirv_version: "1.3",
-        }
-    }
-
-    mod compute_morton {
         vulkano_shaders::shader! {
             ty: "compute",
             path: "shader/morton.comp",
@@ -214,7 +190,7 @@ fn main() {
         StandardCommandBufferAllocator::new(device.clone(), Default::default());
 
     // We start by creating the buffer that will store the data.
-    let b_sort_buffer = Buffer::from_iter(
+    let input_buffer = Buffer::from_iter(
         memory_allocator.clone(),
         BufferCreateInfo {
             usage: BufferUsage::STORAGE_BUFFER,
@@ -225,11 +201,11 @@ fn main() {
                 | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
             ..Default::default()
         },
-        morton_keys,
+        input,
     )
     .unwrap();
 
-    let b_alt_buffer = Buffer::new_slice::<u32>(
+    let morton_key_buffer = Buffer::new_slice::<u32>(
         memory_allocator.clone(),
         BufferCreateInfo {
             usage: BufferUsage::STORAGE_BUFFER,
@@ -243,8 +219,8 @@ fn main() {
         15360 as DeviceSize,
     )
     .unwrap();
-
-    let b_globalhist_buffer = Buffer::from_iter(
+    /*
+    let constants_buffer = Buffer::from_data(
         memory_allocator.clone(),
         BufferCreateInfo {
             usage: BufferUsage::STORAGE_BUFFER,
@@ -255,55 +231,9 @@ fn main() {
                 | MemoryTypeFilter::HOST_RANDOM_ACCESS,
             ..Default::default()
         },
-        b_globalHist,
+        constants_data,
     )
-    .unwrap();
-
-    let b_index_buffer = Buffer::new_slice::<u32>(
-        memory_allocator.clone(),
-        BufferCreateInfo {
-            usage: BufferUsage::STORAGE_BUFFER,
-            ..Default::default()
-        },
-        AllocationCreateInfo {
-            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
-                | MemoryTypeFilter::HOST_RANDOM_ACCESS,
-            ..Default::default()
-        },
-        4 as DeviceSize,
-    )
-    .unwrap();
-
-    let b_passhist_buffer = Buffer::from_iter(
-        memory_allocator.clone(),
-        BufferCreateInfo {
-            usage: BufferUsage::STORAGE_BUFFER,
-            ..Default::default()
-        },
-        AllocationCreateInfo {
-            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
-                | MemoryTypeFilter::HOST_RANDOM_ACCESS,
-            ..Default::default()
-        },
-        pass_hist,
-    )
-    .unwrap();
-
-    let out_reduction_buffer = Buffer::new_slice::<u32>(
-        memory_allocator.clone(),
-        BufferCreateInfo {
-            usage: BufferUsage::STORAGE_BUFFER,
-            ..Default::default()
-        },
-        AllocationCreateInfo {
-            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
-                | MemoryTypeFilter::HOST_RANDOM_ACCESS,
-            ..Default::default()
-        },
-        256 as DeviceSize,
-    )
-    .unwrap();
-
+    */
     // In order to let the shader access the buffer, we need to build a *descriptor set* that
     // contains the buffer.
     //
@@ -318,12 +248,8 @@ fn main() {
         &descriptor_set_allocator,
         layout.clone(),
         [
-            WriteDescriptorSet::buffer(0, b_sort_buffer.clone()),
-            WriteDescriptorSet::buffer(1, b_alt_buffer.clone()),
-            WriteDescriptorSet::buffer(2, b_globalhist_buffer.clone()),
-            WriteDescriptorSet::buffer(3, b_index_buffer.clone()),
-            WriteDescriptorSet::buffer(4, b_passhist_buffer.clone()),
-            WriteDescriptorSet::buffer(5, out_reduction_buffer.clone()),
+            WriteDescriptorSet::buffer(0, input_buffer.clone()),
+            WriteDescriptorSet::buffer(1, morton_key_buffer.clone()),
         ],
         [],
     )
@@ -359,7 +285,7 @@ fn main() {
             set,
         )
         .unwrap()
-        .dispatch([2, 1, 1])
+        .dispatch([1, 1, 1])
         .unwrap();
     println!(
         "enable subgroup size control {}",
@@ -392,41 +318,7 @@ fn main() {
     // future, if the Rust language gets linear types vulkano may get modified so that only
     // fence-signalled futures can get destroyed like this.
     future.wait(None).unwrap();
-
-    // Now that the GPU is done, the content of the buffer should have been modified. Let's check
-    // it out. The call to `read()` would return an error if the buffer was still in use by the
-    // GPU.
-    let _data_buffer_content = b_sort_buffer.read().unwrap();
-    let b_global_hist = b_globalhist_buffer.read().unwrap();
-    let b_alt_buffer_content = b_alt_buffer.read().unwrap();
-    let out_reduction_content = out_reduction_buffer.read().unwrap();
-    /*
-    let mut file = match File::create("output.txt") {
-        Err(why) => panic!("couldn't create: {}", why),
-        Ok(file) => file,
-    };
-
-    for data in _data_buffer_content.iter(){
-        file.write_u32::<LittleEndian>(*data).unwrap();
-    }
-    */
-
-    for n in 0..15360 {
-        println!("sorted[{}]: {}", n, _data_buffer_content[n as usize]);
-    }
-    for n in 0..15360 {
-        println!("b_alt[{}]: {}", n, b_alt_buffer_content[n as usize]);
-    }
-
-    for n in 0..1024 {
-        println!("b_globalHist[{}]: {}", n, b_global_hist[n as usize]);
-    }
-    for n in 0..256 {
-        println!(
-            "out_reduction_buffer[{}]: {}",
-            n, out_reduction_content[n as usize]
-        );
-    }
-
-    println!("Success");
+    let morton_keys = morton_key_buffer.read().unwrap();
+    let ret = morton_keys.iter().map(|&x| x).collect::<Vec<u32>>();
+    return ret;
 }

@@ -4,18 +4,19 @@
 #extension GL_KHR_shader_subgroup_arithmetic: enable
 #extension GL_KHR_shader_subgroup_vote: enable
 #extension GL_EXT_debug_printf : enable
-#extension GL_EXT_shader_8bit_storage: enable
+#extension GL_EXT_shader_explicit_arithmetic_types_int8:enable
+
 
 
 #define TotalThreadsX gl_NumWorkGroups.x * gl_WorkGroupSize.x
 #define TotalThreadsY gl_NumWorkGroups.y * gl_WorkGroupSize.y
 #define TotalThreadsZ gl_NumWorkGroups.z * gl_WorkGroupSize.z
 #define TotalThreads TotalThreadsX * TotalThreadsY * TotalThreadsZ
-#define ITEM_PER_THREAD input/(TotalThreads)
+#define ITEM_PER_THREAD input_size/(TotalThreads)
 
 
 layout(set = 0, binding = 0 ) buffer PrefixN{
-    int prefix_n[];
+    uint8_t prefix_n[];
 };
 
 layout(set = 0, binding = 1 ) buffer Parent{
@@ -26,18 +27,18 @@ layout(set = 0, binding = 2 ) buffer EdgeCount{
     int edge_count[];
 };
 
-layout (push_constant) uniform constants{
+layout (set = 0, binding = 3) uniform constants{
     int input_size;
     int n_brt_nodes;
-}
+};
 
 layout(local_size_x = 64, local_size_y = 8) in;
 
 void countEdges(){
-    int startIdx = int(gl_GlobalInvocationID.x) * elements_per_thread + 1;
-    int endIdx = min(startIdx + elements_per_thread, n_brt_nodes);
+    int startIdx = int(gl_GlobalInvocationID.x * ITEM_PER_THREAD + 1);
+    int endIdx = int(min(startIdx + ITEM_PER_THREAD, n_brt_nodes));
 
-    if (int i = startIdx; i < endIdx && i < n_brt_nodes; ++i){
+    if (int i  = startIdx; i < endIdx && i < n_brt_nodes; ++i){
         int my_depth = prefix_n[i]/3;
         int parent_depth = prefix_n[parent[i]]/3;
         edge_count[i] = my_depth - parent_depth;

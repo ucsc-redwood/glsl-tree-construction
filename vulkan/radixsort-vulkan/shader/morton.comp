@@ -1,0 +1,73 @@
+#version 450
+#extension GL_KHR_shader_subgroup_basic: enable
+#extension GL_KHR_shader_subgroup_ballot: enable
+#extension GL_KHR_shader_subgroup_arithmetic: enable
+#extension GL_KHR_shader_subgroup_vote: enable
+#extension GL_EXT_debug_printf : require
+
+
+#define TotalThreadsX gl_NumWorkGroups.x * gl_WorkGroupSize.x
+#define TotalThreadsY gl_NumWorkGroups.y * gl_WorkGroupSize.y
+#define TotalThreadsZ gl_NumWorkGroups.z * gl_WorkGroupSize.z
+#define TotalThreads TotalThreadsX * TotalThreadsY * TotalThreadsZ
+#define ITEM_PER_THREAD 15360/(TotalThreads)
+
+layout(set = 0, binding = 0) buffer Data{
+  float data[][4];
+};
+
+layout(set = 0, binding = 1) buffer MortonKeys{
+  uint morton_keys[];
+};
+/*
+layout (set = 0, binding = 2) uniform Constants {
+  uint n;
+  float min_coord;
+  float range;
+};
+*/
+
+uint n = 15360;
+float min_coord = 0.0;
+float range = 1024.0;
+
+layout(local_size_x = 64, local_size_y = 8) in;
+
+uint morton3D_SplitBy3bits(const float a){
+  uint b = uint(a);
+  uint x = b & 0x000003ff;
+  x = (x | x << 16) & 0x030000ff;
+  x = (x | x << 8) & 0x0300f00f;
+  x = (x | x << 4) & 0x30c30c3;
+  x = (x | x << 2) & 0x9249249;
+  return x;
+}
+
+uint m3D_e_magicbits(const float x, const float y, const float z){
+  return morton3D_SplitBy3bits(x) | (morton3D_SplitBy3bits(y) << 1) | (morton3D_SplitBy3bits(z) << 2);
+}
+
+uint single_point_to_code_v2(float x, float y, float z, const float min_coord, const float range){
+  float bit_scale = 1024.0;
+  x = (x - min_coord) / range;
+  y = (y - min_coord) / range;
+  z = (z - min_coord) / range;
+  return m3D_e_magicbits(x * bit_scale, y * bit_scale, z * bit_scale);
+}
+
+
+
+void k_ComputeMortonCode(){
+    int startIdx = int(gl_GlobalInvocationID.x * ITEM_PER_THREAD + 1);
+    int endIdx = int(min(startIdx + ITEM_PER_THREAD, n));
+    for(int i = startIdx; i < endIdx && i < n; i++){
+      morton_keys[i] = single_point_to_code_v2(data[i][0], data[i][1], data[i][2], min_coord, range);
+    }
+}
+
+
+
+
+void main(){
+  k_ComputeMortonCode();
+}

@@ -22,7 +22,7 @@ layout(push_constant) uniform Constants {
 } 
 
 
-layout(local_size_x = 64, local_size_y = 8) in;
+layout(local_size_x = 1) in;
 
 void k_PartialSum(){
     if (first >= last || first < 0 || last > dataSize) return d_first;
