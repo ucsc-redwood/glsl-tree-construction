@@ -324,20 +324,20 @@ void BinningPass(int pass_num)
     //Update offsets
     if (SUBGROUP_IDX != 0)
     {
-        const uint t = SUBGROUP_IDX << RADIX_LOG;
+        //const uint t = SUBGROUP_IDX << RADIX_LOG;
 
         if (pass_num == 3){
             for (int i = 0; i < BIN_KEYS_PER_THREAD; ++i)
             {
                 const uint t2 = keys[i] >> 24;
-                offsets[i] += g_subgroupHists[t2 + t] + g_reductionHist[t2];
+                offsets[i] += g_subgroupHists[t2 /*+ t*/] + g_reductionHist[t2];
             }
         }else{   
         //[unroll]
             for (int i = 0; i < BIN_KEYS_PER_THREAD; ++i)
             {
                 const uint t2 = keys[i] >> (RADIX_LOG * pass_num) & RADIX_MASK;
-                offsets[i] += g_subgroupHists[t2 + t] + g_reductionHist[t2];
+                offsets[i] += g_subgroupHists[t2 /*+ t*/] + g_reductionHist[t2];
             }
         }
     }
