@@ -16,6 +16,7 @@ use byteorder::{LittleEndian, WriteBytesExt};
 use cgmath::Vector4;
 use rand::Rng;
 use std::sync::Arc;
+use std::vec;
 use std::{fs::File, io::Write};
 use vulkano::{
     buffer::{Buffer, BufferCreateInfo, BufferUsage},
@@ -50,8 +51,131 @@ mod morton;
 mod octree;
 mod partial_sum;
 mod radixsort;
+mod unique;
 
-fn main() {}
+struct RadixTreeData {
+    n_nodes: u32,
+    prefix_n: Vec<u8>,
+    has_leaf_left: Vec<u8>,
+    has_leaf_right: Vec<u8>,
+    left_child: Vec<i32>,
+    parent: Vec<i32>,
+}
+
+const N: u32 = 10000000;
+const MORTON_BIT: u32 = 30;
+
+fn main() {
+    let min: f32 = 0.0;
+    let max: f32 = 1024.0;
+    let range = max - min;
+    let mut u_sort: Vec<u32> = vec![0; N as usize];
+    let mut out_data: Vec<u32> = vec![0; N as usize];
+    let mut u_input: Vec<[f32; 4]> = vec![[0.0; 4]; N as usize];
+    init::init_random(&mut u_input, N, min, range);
+    /* 
+    for n in 0..N {
+        println!("u_input[{}]: {:?}", n, u_input[n as usize]);
+    }
+    */
+    // step 1
+    morton::compute_morton(u_input, &mut u_sort, N, min, range, 256);
+    /* 
+    for n in 0..N {
+        println!("u_sort[{}]: {}", n, u_sort[n as usize]);
+    }
+    */
+    // step 2
+    /* 
+    radixsort::radix_sort(u_sort, N, &mut out_data, 1);
+    */
+     
+    u_sort.sort();
+    out_data = u_sort.clone();
+    /*
+    for n in 0..N {
+        println!("out_data[{}]: {}", n, out_data[n as usize]);
+    }
+    */
+    // step 3
+    let n_unique = unique::unique(&mut out_data, N);
+
+    println!("n_unique: {}", n_unique);
+
+    let mut tree = RadixTreeData {
+        n_nodes: n_unique - 1,
+        prefix_n: vec![0; (n_unique - 1).try_into().unwrap()],
+        has_leaf_left: vec![0; (n_unique - 1).try_into().unwrap()],
+        has_leaf_right: vec![0; (n_unique - 1).try_into().unwrap()],
+        left_child: vec![0; (n_unique - 1).try_into().unwrap()],
+        parent: vec![0; (n_unique - 1).try_into().unwrap()],
+    };
+
+    build_radix_tree::build_radix_tree(
+        tree.n_nodes as i32,
+        &out_data,
+        &mut tree.prefix_n,
+        &mut tree.has_leaf_left,
+        &mut tree.has_leaf_right,
+        &mut tree.left_child,
+        &mut tree.parent,
+        256,
+    );
+
+    let mut u_edge_count = vec![0; tree.n_nodes as usize];
+
+    // step 4
+    edge_count::edge_count(&tree.prefix_n, &tree.parent, &mut u_edge_count, n_unique, 256);
+    /* 
+    for n in 0..n_unique - 1 {
+        println!("u_edge_count[{}]: {}", n, u_edge_count[n as usize]);
+    }
+    */
+    // step 5
+    let mut u_count_prefix_sum: Vec<u32> = vec![0; n_unique as usize];
+    partial_sum::partial_sum(&u_edge_count, 0, n_unique, &mut u_count_prefix_sum);
+    u_count_prefix_sum[0] = 0;
+    /*
+    for n in 0..n_unique - 1 {
+        println!(
+            "u_count_prefix_sum[{}]: {}",
+            n, u_count_prefix_sum[n as usize]
+        );
+    }
+    */
+
+    // step 6
+    let mut u_oct_nodes = vec![octree::OctNode::new(); n_unique as usize];
+
+    let root_level: u32 = (tree.prefix_n[0] / 3).into();
+    let root_prefix: u32 = out_data[0] >> (MORTON_BIT - root_level * 3);
+
+    let mut corner: [f32; 4] = [0.0; 4];
+    morton::morton32_to_xyz(
+        &mut corner,
+        root_prefix << (MORTON_BIT - (3 * root_level)),
+        min,
+        range,
+    );
+    u_oct_nodes[0].set_corner(corner);
+    u_oct_nodes[0].set_cell_size(range);
+
+    octree::build_octree(
+        &mut u_oct_nodes,
+        u_count_prefix_sum,
+        u_edge_count,
+        out_data,
+        tree.prefix_n,
+        tree.parent,
+        min,
+        range,
+        N as i32,
+        tree.has_leaf_left,
+        tree.has_leaf_right,
+        tree.left_child,
+        256,
+    )
+}
 
 fn test_radix_sort() {
     // initialize the data

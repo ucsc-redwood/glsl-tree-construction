@@ -30,18 +30,20 @@ use vulkano::{
     sync::{self, GpuFuture},
     DeviceSize, VulkanLibrary,
 };
+use std::time::{Duration, Instant};
 
 #[derive(BufferContents)]
 #[repr(C)]
 struct Constants {
-    n_brt_nodes: i32,
+    n_brt_nodes: u32,
 }
 
 pub fn edge_count(
     prefix_n: &Vec<u8>,
     parent: &Vec<i32>,
-    u_edge_count: &mut Vec<i32>,
-    n_brt_nodes: i32,
+    u_edge_count: &mut Vec<u32>,
+    n_brt_nodes: u32,
+    group_size: u32,
 ) {
     // As with other examples, the first step is to create an instance.
     let library = VulkanLibrary::new().unwrap();
@@ -60,7 +62,7 @@ pub fn edge_count(
         ..DeviceExtensions::empty()
     };
     let device_features = Features {
-        //subgroup_size_control: true,
+        storage_buffer8_bit_access: true,
         ..Features::empty()
     };
 
@@ -89,12 +91,6 @@ pub fn edge_count(
         })
         .unwrap();
 
-    println!(
-        "Using device: {} (type: {:?})",
-        physical_device.properties().device_name,
-        physical_device.properties().device_type,
-    );
-
     // Now initializing the device.
     let (device, mut queues) = Device::new(
         physical_device,
@@ -105,7 +101,7 @@ pub fn edge_count(
                 ..Default::default()
             }],
             enabled_features: Features {
-                subgroup_size_control: true,
+                storage_buffer8_bit_access: true,
                 ..Features::empty()
             },
             ..Default::default()
@@ -259,12 +255,13 @@ pub fn edge_count(
             set,
         )
         .unwrap()
-        .dispatch([1, 1, 1])
+        .dispatch([group_size, 1, 1])
         .unwrap();
 
     // Finish building the command buffer by calling `build`.
     let command_buffer = builder.build().unwrap();
 
+    let start = Instant::now();
     // Let's execute this command buffer now.
     let future = sync::now(device)
         .then_execute(queue, command_buffer)
@@ -288,7 +285,9 @@ pub fn edge_count(
     // future, if the Rust language gets linear types vulkano may get modified so that only
     // fence-signalled futures can get destroyed like this.
     future.wait(None).unwrap();
-
+    let duration = start.elapsed();
+    println!("Time elapsed in edge_count() is: {:?}", duration);
+    
     let u_edge_count_content = u_edge_count_buffer.read().unwrap();
     for (i, value) in u_edge_count_content.iter().enumerate() {
         u_edge_count[i] = *value;

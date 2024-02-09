@@ -7,7 +7,7 @@ fn generate_random_number(min: f32, range: f32) -> f32 {
     rand_float * range + min // Scale and shift the random number to the desired range
 }
 
-pub fn init_random(u_data: &mut Vec<[f32; 4]>, n: i32, min: f32, range: f32) {
+pub fn init_random(u_data: &mut Vec<[f32; 4]>, n: u32, min: f32, range: f32) {
     // srand(seed);
 
     let mut rng = rand::thread_rng();

@@ -31,6 +31,8 @@ use vulkano::{
     DeviceSize, VulkanLibrary,
 };
 
+use std::time::{Duration, Instant};
+
 #[derive(BufferContents)]
 #[repr(C)]
 struct Constants {
@@ -38,7 +40,7 @@ struct Constants {
     last: u32,
 }
 
-pub fn partial_sum(u_edge_count: Vec<u32>, first: u32, last: u32, d_first: &mut Vec<u32>) {
+pub fn partial_sum(u_edge_count: &Vec<u32>, first: u32, last: u32, d_first: &mut Vec<u32>) {
     // As with other examples, the first step is to create an instance.
     let library = VulkanLibrary::new().unwrap();
     let instance = Instance::new(
@@ -84,12 +86,6 @@ pub fn partial_sum(u_edge_count: Vec<u32>, first: u32, last: u32, d_first: &mut 
             _ => 5,
         })
         .unwrap();
-
-    println!(
-        "Using device: {} (type: {:?})",
-        physical_device.properties().device_name,
-        physical_device.properties().device_type,
-    );
 
     // Now initializing the device.
     let (device, mut queues) = Device::new(
@@ -161,7 +157,7 @@ pub fn partial_sum(u_edge_count: Vec<u32>, first: u32, last: u32, d_first: &mut 
                 | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
             ..Default::default()
         },
-        u_edge_count,
+        u_edge_count.clone(),
     )
     .unwrap();
 
@@ -253,6 +249,7 @@ pub fn partial_sum(u_edge_count: Vec<u32>, first: u32, last: u32, d_first: &mut 
     // Finish building the command buffer by calling `build`.
     let command_buffer = builder.build().unwrap();
 
+    let start = Instant::now();
     // Let's execute this command buffer now.
     let future = sync::now(device)
         .then_execute(queue, command_buffer)
@@ -276,6 +273,8 @@ pub fn partial_sum(u_edge_count: Vec<u32>, first: u32, last: u32, d_first: &mut 
     // future, if the Rust language gets linear types vulkano may get modified so that only
     // fence-signalled futures can get destroyed like this.
     future.wait(None).unwrap();
+    let duration = start.elapsed();
+    println!("Time elapsed in partial_sum is: {:?}", duration);
 
     let u_count_prefix_sum_buffer_content = u_count_prefix_sum_buffer.read().unwrap();
     for (i, val) in u_count_prefix_sum_buffer_content.iter().enumerate() {

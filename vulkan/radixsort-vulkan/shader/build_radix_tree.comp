@@ -7,7 +7,7 @@
 #extension GL_EXT_shader_explicit_arithmetic_types_int8:enable
 
 #define IDX gl_GlobalInvocationID.x
-
+#define STRIDE gl_WorkGroupSize.x * gl_NumWorkGroups.x
 
 layout(set = 0, binding = 0) uniform N{
     int n;
@@ -68,9 +68,8 @@ int log2_ceil_u32(const uint x) {
 }
 
 
-void k_BuildRadixTree(){
-#pragma omp parallel for
-  for (int i = 0; i < n; i++) {
+void k_BuildRadixTree(int i ){
+
     const uint code_i = codes[i];
     // Determine direction of the range (+1 or -1)
     int d;
@@ -143,9 +142,12 @@ void k_BuildRadixTree(){
     if (!has_leaf_right[i]) {
       parent[gamma + 1] = i;
     }
-  }
+
 }
 
 void main(){
-  k_BuildRadixTree();
+  for (int i = int(IDX); i < n; i += int(STRIDE)){
+    k_BuildRadixTree(i);
+  }
+  
 }

@@ -29,6 +29,7 @@ use vulkano::{
     sync::{self, GpuFuture},
     DeviceSize, VulkanLibrary,
 };
+use std::time::{Duration, Instant};
 
 pub fn build_radix_tree(
     n: i32,
@@ -38,6 +39,7 @@ pub fn build_radix_tree(
     has_leaf_right: &mut Vec<u8>,
     left_child: &mut Vec<i32>,
     parent: &mut Vec<i32>,
+    group_size: u32,
 ) {
     // As with other examples, the first step is to create an instance.
     let library = VulkanLibrary::new().unwrap();
@@ -101,7 +103,8 @@ pub fn build_radix_tree(
                 ..Default::default()
             }],
             enabled_features: Features {
-                subgroup_size_control: true,
+                shader_int8: true,
+                storage_buffer8_bit_access: true,
                 ..Features::empty()
             },
             ..Default::default()
@@ -302,12 +305,13 @@ pub fn build_radix_tree(
             set,
         )
         .unwrap()
-        .dispatch([1, 1, 1])
+        .dispatch([group_size, 1, 1])
         .unwrap();
 
     // Finish building the command buffer by calling `build`.
     let command_buffer = builder.build().unwrap();
 
+    let start = Instant::now();
     // Let's execute this command buffer now.
     let future = sync::now(device)
         .then_execute(queue, command_buffer)
@@ -331,7 +335,9 @@ pub fn build_radix_tree(
     // future, if the Rust language gets linear types vulkano may get modified so that only
     // fence-signalled futures can get destroyed like this.
     future.wait(None).unwrap();
-
+    let duration = start.elapsed();
+    println!("Time elapsed in build_radix_tree() is: {:?}", duration);
+    
     let prefix_n_content = prefix_n_buffer.read().unwrap();
     let has_leaf_left_content = has_leaf_left_buffer.read().unwrap();
     let has_leaf_right_content = has_leaf_right_buffer.read().unwrap();

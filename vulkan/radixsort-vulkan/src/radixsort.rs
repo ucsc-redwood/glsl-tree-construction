@@ -30,7 +30,10 @@ use vulkano::{
     DeviceSize, VulkanLibrary,
 };
 
-pub fn partial_sum(in_data: Vec<u32>, n: i32, out_data: &mut Vec<u32>) {
+use std::time::{Duration, Instant};
+
+
+pub fn radix_sort(in_data: Vec<u32>, n: u32, out_data: &mut Vec<u32>, group_size: u32) {
     // As with other examples, the first step is to create an instance.
     let library = VulkanLibrary::new().unwrap();
     let instance = Instance::new(
@@ -77,12 +80,6 @@ pub fn partial_sum(in_data: Vec<u32>, n: i32, out_data: &mut Vec<u32>) {
         })
         .unwrap();
 
-    println!(
-        "Using device: {} (type: {:?})",
-        physical_device.properties().device_name,
-        physical_device.properties().device_type,
-    );
-
     // Now initializing the device.
     let (device, mut queues) = Device::new(
         physical_device,
@@ -101,40 +98,11 @@ pub fn partial_sum(in_data: Vec<u32>, n: i32, out_data: &mut Vec<u32>) {
     )
     .unwrap();
 
-    if !device
-        .physical_device()
-        .properties()
-        .required_subgroup_size_stages
-        .unwrap_or_default()
-        .intersects(ShaderStages::COMPUTE)
-    {
-        println!("Subgroup size control is not supported for compute shaders");
-        //return;
-    }
-
     // Since we can request multiple queues, the `queues` variable is in fact an iterator. In this
     // example we use only one queue, so we just retrieve the first and only element of the
     // iterator and throw it away.
     let queue = queues.next().unwrap();
 
-    // Now let's get to the actual example.
-    //
-    // What we are going to do is very basic: we are going to fill a buffer with 64k integers and
-    // ask the GPU to multiply each of them by 12.
-    //
-    // GPUs are very good at parallel computations (SIMD-like operations), and thus will do this
-    // much more quickly than a CPU would do. While a CPU would typically multiply them one by one
-    // or four by four, a GPU will do it by groups of 32 or 64.
-    //
-    // Note however that in a real-life situation for such a simple operation the cost of accessing
-    // memory usually outweighs the benefits of a faster calculation. Since both the CPU and the
-    // GPU will need to access data, there is no other choice but to transfer the data through the
-    // slow PCI express bus.
-
-    // We need to create the compute pipeline that describes our operation.
-    //
-    // If you are familiar with graphics pipeline, the principle is the same except that compute
-    // pipelines are much simpler to create.
     mod cs {
         vulkano_shaders::shader! {
             ty: "compute",
@@ -270,7 +238,7 @@ pub fn partial_sum(in_data: Vec<u32>, n: i32, out_data: &mut Vec<u32>) {
             set,
         )
         .unwrap()
-        .dispatch([1, 1, 1])
+        .dispatch([group_size, 1, 1])
         .unwrap();
 
     // Finish building the command buffer by calling `build`.

@@ -1,5 +1,4 @@
 use byteorder::{LittleEndian, WriteBytesExt};
-use cgmath::Vector4;
 use rand::Rng;
 use std::sync::Arc;
 use std::{fs::File, io::Write};
@@ -31,14 +30,36 @@ use vulkano::{
     DeviceSize, VulkanLibrary,
 };
 
+use std::time::{Duration, Instant};
+
 #[derive(BufferContents, Clone)]
 #[repr(C)]
-struct OctNode {
+pub struct OctNode {
     children: [i32; 8],
     corner: [f32; 4],
     cell_size: f32,
     child_node_mask: i32,
     child_leaf_mask: i32,
+}
+
+impl OctNode {
+    pub fn new() -> Self {
+        OctNode {
+            children: [0; 8],
+            corner: [0.0; 4],
+            cell_size: 0.0,
+            child_node_mask: 0,
+            child_leaf_mask: 0,
+        }
+    }
+
+    pub fn set_corner(&mut self, corner: [f32; 4]) {
+        self.corner = corner;
+    }
+
+    pub fn set_cell_size(&mut self, cell_size: f32) {
+        self.cell_size = cell_size;
+    }
 }
 
 #[derive(BufferContents)]
@@ -51,8 +72,8 @@ pub struct Constants {
 
 pub fn build_octree(
     oct_nodes: &mut Vec<OctNode>,
-    node_offsets: Vec<i32>,
-    rt_node_counts: Vec<i32>,
+    node_offsets: Vec<u32>,
+    rt_node_counts: Vec<u32>,
     codes: Vec<u32>,
     rt_prefix_n: Vec<u8>,
     rt_parents: Vec<i32>,
@@ -62,6 +83,7 @@ pub fn build_octree(
     rt_has_leaf_left: Vec<u8>,
     rt_has_leaf_right: Vec<u8>,
     rt_left_child: Vec<i32>,
+    group_size: u32,
 ) {
     // As with other examples, the first step is to create an instance.
     let library = VulkanLibrary::new().unwrap();
@@ -109,12 +131,6 @@ pub fn build_octree(
         })
         .unwrap();
 
-    println!(
-        "Using device: {} (type: {:?})",
-        physical_device.properties().device_name,
-        physical_device.properties().device_type,
-    );
-
     // Now initializing the device.
     let (device, mut queues) = Device::new(
         physical_device,
@@ -125,24 +141,13 @@ pub fn build_octree(
                 ..Default::default()
             }],
             enabled_features: Features {
-                subgroup_size_control: true,
+                storage_buffer8_bit_access: true,
                 ..Features::empty()
             },
             ..Default::default()
         },
     )
     .unwrap();
-
-    if !device
-        .physical_device()
-        .properties()
-        .required_subgroup_size_stages
-        .unwrap_or_default()
-        .intersects(ShaderStages::COMPUTE)
-    {
-        println!("Subgroup size control is not supported for compute shaders");
-        //return;
-    }
 
     // Since we can request multiple queues, the `queues` variable is in fact an iterator. In this
     // example we use only one queue, so we just retrieve the first and only element of the
@@ -162,7 +167,6 @@ pub fn build_octree(
         .entry_point("main")
         .unwrap();
     let stage = PipelineShaderStageCreateInfo {
-        //required_subgroup_size: Some(32),
         ..PipelineShaderStageCreateInfo::new(cs)
     };
     let pipeline = {
@@ -352,9 +356,9 @@ pub fn build_octree(
             WriteDescriptorSet::buffer(3, codes_buffer.clone()),
             WriteDescriptorSet::buffer(4, rt_prefix_n_buffer.clone()),
             WriteDescriptorSet::buffer(5, rt_parents_buffer.clone()),
-            WriteDescriptorSet::buffer(6, rt_has_leaf_left_buffer.clone()),
-            WriteDescriptorSet::buffer(7, rt_has_leaf_right_buffer.clone()),
-            WriteDescriptorSet::buffer(8, rt_left_child_buffer.clone()),
+            //WriteDescriptorSet::buffer(6, rt_has_leaf_left_buffer.clone()),
+            //WriteDescriptorSet::buffer(7, rt_has_leaf_right_buffer.clone()),
+            //WriteDescriptorSet::buffer(8, rt_left_child_buffer.clone()),
             WriteDescriptorSet::buffer(9, constant_buffer.clone()),
         ],
         [],
@@ -391,12 +395,13 @@ pub fn build_octree(
             set,
         )
         .unwrap()
-        .dispatch([1, 1, 1])
+        .dispatch([group_size, 1, 1])
         .unwrap();
 
     // Finish building the command buffer by calling `build`.
     let command_buffer = builder.build().unwrap();
 
+    let start = Instant::now();
     // Let's execute this command buffer now.
     let future = sync::now(device)
         .then_execute(queue, command_buffer)
@@ -420,4 +425,6 @@ pub fn build_octree(
     // future, if the Rust language gets linear types vulkano may get modified so that only
     // fence-signalled futures can get destroyed like this.
     future.wait(None).unwrap();
+    let duration = start.elapsed();
+    println!("Time elapsed in build_octree() is: {:?}", duration);
 }

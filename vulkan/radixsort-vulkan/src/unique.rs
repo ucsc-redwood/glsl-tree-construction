@@ -1,4 +1,5 @@
 use byteorder::{LittleEndian, WriteBytesExt};
+use cgmath::num_traits::ToPrimitive;
 use cgmath::Vector4;
 use rand::Rng;
 use std::sync::Arc;
@@ -30,57 +31,10 @@ use vulkano::{
     sync::{self, GpuFuture},
     DeviceSize, VulkanLibrary,
 };
+
 use std::time::{Duration, Instant};
 
-#[derive(BufferContents)]
-#[repr(C)]
-struct Constants {
-    n: u32,
-    min_coord: f32,
-    range: f32,
-}
-
-pub fn morton32_to_xyz(ret: &mut [f32; 4], code: u32, min_coord: f32, range: f32) {
-    let bit_scale: f32 = 1024.0;
-
-    let mut dec_raw_x: [f32; 3] = [0.0; 3];
-    m3_d_d_magicbits(code, &mut dec_raw_x);
-
-    let dec_x = (dec_raw_x[0] / bit_scale) * range + min_coord;
-    let dec_y = (dec_raw_x[1] / bit_scale) * range + min_coord;
-    let dec_z = (dec_raw_x[2] / bit_scale) * range + min_coord;
-
-    // vec4 result = {dec_x, dec_y, dec_z, 1.0f};
-    // glm_vec4_copy(result, *ret);
-    ret[0] = dec_x;
-    ret[1] = dec_y;
-    ret[2] = dec_z;
-    ret[3] = 1.0;
-}
-
-fn morton3_d_get_third_bits(m: u32) -> f32 {
-    let mut x: u32 = m & 0x9249249;
-    x = (x ^ (x >> 2)) & 0x30c30c3;
-    x = (x ^ (x >> 4)) & 0x0300f00f;
-    x = (x ^ (x >> 8)) & 0x30000ff;
-    x = (x ^ (x >> 16)) & 0x000003ff;
-    return x as f32;
-}
-
-fn m3_d_d_magicbits(m: u32, xyz: &mut [f32; 3]) {
-    xyz[0] = morton3_d_get_third_bits(m);
-    xyz[1] = morton3_d_get_third_bits(m >> 1);
-    xyz[2] = morton3_d_get_third_bits(m >> 2);
-}
-
-pub fn compute_morton(
-    input: Vec<[f32; 4]>,
-    morton_keys: &mut Vec<u32>,
-    n: u32,
-    min_coord: f32,
-    range: f32,
-    group_size: u32,
-) {
+pub fn unique(u_sort: &mut Vec<u32>, n: u32) -> u32 {
     // As with other examples, the first step is to create an instance.
     let library = VulkanLibrary::new().unwrap();
     let instance = Instance::new(
@@ -151,44 +105,12 @@ pub fn compute_morton(
     )
     .unwrap();
 
-    if !device
-        .physical_device()
-        .properties()
-        .required_subgroup_size_stages
-        .unwrap_or_default()
-        .intersects(ShaderStages::COMPUTE)
-    {
-        println!("Subgroup size control is not supported for compute shaders");
-        //return;
-    }
-
-    // Since we can request multiple queues, the `queues` variable is in fact an iterator. In this
-    // example we use only one queue, so we just retrieve the first and only element of the
-    // iterator and throw it away.
     let queue = queues.next().unwrap();
 
-    // Now let's get to the actual example.
-    //
-    // What we are going to do is very basic: we are going to fill a buffer with 64k integers and
-    // ask the GPU to multiply each of them by 12.
-    //
-    // GPUs are very good at parallel computations (SIMD-like operations), and thus will do this
-    // much more quickly than a CPU would do. While a CPU would typically multiply them one by one
-    // or four by four, a GPU will do it by groups of 32 or 64.
-    //
-    // Note however that in a real-life situation for such a simple operation the cost of accessing
-    // memory usually outweighs the benefits of a faster calculation. Since both the CPU and the
-    // GPU will need to access data, there is no other choice but to transfer the data through the
-    // slow PCI express bus.
-
-    // We need to create the compute pipeline that describes our operation.
-    //
-    // If you are familiar with graphics pipeline, the principle is the same except that compute
-    // pipelines are much simpler to create.
     mod cs {
         vulkano_shaders::shader! {
             ty: "compute",
-            path: "shader/morton.comp",
+            path: "shader/unique.comp",
             spirv_version: "1.3",
         }
     }
@@ -224,7 +146,7 @@ pub fn compute_morton(
         StandardCommandBufferAllocator::new(device.clone(), Default::default());
 
     // We start by creating the buffer that will store the data.
-    let input_buffer = Buffer::from_iter(
+    let u_sort_buffer = Buffer::from_iter(
         memory_allocator.clone(),
         BufferCreateInfo {
             usage: BufferUsage::STORAGE_BUFFER,
@@ -235,26 +157,11 @@ pub fn compute_morton(
                 | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
             ..Default::default()
         },
-        input,
+        u_sort.clone(),
     )
     .unwrap();
 
-    let morton_key_buffer = Buffer::from_iter(
-        memory_allocator.clone(),
-        BufferCreateInfo {
-            usage: BufferUsage::STORAGE_BUFFER,
-            ..Default::default()
-        },
-        AllocationCreateInfo {
-            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
-                | MemoryTypeFilter::HOST_RANDOM_ACCESS,
-            ..Default::default()
-        },
-        morton_keys.clone(),
-    )
-    .unwrap();
-
-    let constants_buffer = Buffer::from_data(
+    let n_buffer = Buffer::from_data(
         memory_allocator.clone(),
         BufferCreateInfo {
             usage: BufferUsage::UNIFORM_BUFFER,
@@ -265,23 +172,41 @@ pub fn compute_morton(
                 | MemoryTypeFilter::HOST_RANDOM_ACCESS,
             ..Default::default()
         },
-        Constants {
-            n,
-            min_coord,
-            range,
+        n,
+    )
+    .unwrap();
+
+    let n_unique_buffer = Buffer::new_sized::<u32>(
+        memory_allocator.clone(),
+        BufferCreateInfo {
+            usage: BufferUsage::STORAGE_BUFFER,
+            ..Default::default()
+        },
+        AllocationCreateInfo {
+            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                | MemoryTypeFilter::HOST_RANDOM_ACCESS,
+            ..Default::default()
         },
     )
     .unwrap();
 
+    // In order to let the shader access the buffer, we need to build a *descriptor set* that
+    // contains the buffer.
+    //
+    // The resources that we bind to the descriptor set must match the resources expected by the
+    // pipeline which we pass as the first parameter.
+    //
+    // If you want to run the pipeline on multiple different buffers, you need to create multiple
+    // descriptor sets that each contain the buffer you want to run the shader on.
     let layout = pipeline.layout().set_layouts().first().unwrap();
 
     let set = PersistentDescriptorSet::new(
         &descriptor_set_allocator,
         layout.clone(),
         [
-            WriteDescriptorSet::buffer(0, input_buffer.clone()),
-            WriteDescriptorSet::buffer(1, morton_key_buffer.clone()),
-            WriteDescriptorSet::buffer(2, constants_buffer.clone()),
+            WriteDescriptorSet::buffer(0, u_sort_buffer.clone()),
+            WriteDescriptorSet::buffer(1, n_buffer.clone()),
+            WriteDescriptorSet::buffer(2, n_unique_buffer.clone()),
         ],
         [],
     )
@@ -317,9 +242,8 @@ pub fn compute_morton(
             set,
         )
         .unwrap()
-        .dispatch([group_size, 1, 1])
+        .dispatch([1, 1, 1])
         .unwrap();
-
 
     // Finish building the command buffer by calling `build`.
     let command_buffer = builder.build().unwrap();
@@ -349,10 +273,12 @@ pub fn compute_morton(
     // fence-signalled futures can get destroyed like this.
     future.wait(None).unwrap();
     let duration = start.elapsed();
-    println!("Time elapsed in compute_morton() is: {:?}", duration);
+    println!("Time elapsed in unique() is: {:?}", duration); 
 
-    let morton_keys_content = morton_key_buffer.read().unwrap();
-    for (i, key) in morton_keys_content.iter().enumerate() {
-        morton_keys[i] = *key;
+    let u_sort_content = u_sort_buffer.read().unwrap();
+    let n_unique_content = n_unique_buffer.read().unwrap();
+    for (i, val) in u_sort_content.iter().enumerate() {
+        u_sort[i] = *val;
     }
+    return n_unique_content.to_u32().unwrap();
 }

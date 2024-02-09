@@ -6,14 +6,8 @@
 #extension GL_EXT_debug_printf : enable
 #extension GL_EXT_shader_explicit_arithmetic_types_int8:enable
 
-
-
-#define TotalThreadsX gl_NumWorkGroups.x * gl_WorkGroupSize.x
-#define TotalThreadsY gl_NumWorkGroups.y * gl_WorkGroupSize.y
-#define TotalThreadsZ gl_NumWorkGroups.z * gl_WorkGroupSize.z
-#define TotalThreads TotalThreadsX * TotalThreadsY * TotalThreadsZ
-#define ITEM_PER_THREAD n_brt_nodes/(TotalThreads)
-
+#define IDX gl_GlobalInvocationID.x
+#define STRIDE gl_WorkGroupSize.x * gl_NumWorkGroups.x
 
 layout(set = 0, binding = 0 ) buffer PrefixN{
     uint8_t prefix_n[];
@@ -24,20 +18,21 @@ layout(set = 0, binding = 1 ) buffer Parent{
 };
 
 layout(set = 0, binding = 2 ) buffer EdgeCount{
-    int edge_count[];
+    uint edge_count[];
 };
 
 layout (set = 0, binding = 3) uniform constants{
-    int n_brt_nodes;
+    uint n_brt_nodes;
 };
 
 layout(local_size_x = 512) in;
 
 void countEdges(){
-    int startIdx = int(gl_GlobalInvocationID.x * ITEM_PER_THREAD + 1);
+    /*
+    int startIdx = int(gl_GlobalInvocationID.x * ITEM_PER_THREAD);
     int endIdx = int(min(startIdx + ITEM_PER_THREAD, n_brt_nodes));
-
-    for(int i = startIdx; i < endIdx && i < n_brt_nodes; ++i){
+    */
+    for(int i = int(IDX); i < n_brt_nodes; i += int(STRIDE)){
         int my_depth = prefix_n[i]/3;
         int parent_depth = prefix_n[parent[i]]/3;
         edge_count[i] = my_depth - parent_depth;

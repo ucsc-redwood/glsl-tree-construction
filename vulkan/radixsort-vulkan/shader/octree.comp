@@ -8,6 +8,9 @@
 
 #define morton_bits 30
 
+#define IDX gl_GlobalInvocationID.x
+#define STRIDE gl_WorkGroupSize.x * gl_NumWorkGroups.x
+
 struct OctNode{
     int children[8];
     vec4 corner;
@@ -41,11 +44,11 @@ layout(set=0,binding=0)buffer OctreeNodes{
 };
 
 layout(set=0,binding=1)buffer NodeOffsets{
-    int node_offsets[];
+    uint node_offsets[];
 };
 
 layout(set=0,binding=2)buffer RtNodeCounts{
-    int rt_node_counts[];
+    uint rt_node_counts[];
 };
 
 layout(set=0,binding=3)buffer Codes{
@@ -59,17 +62,19 @@ layout(set=0,binding=4)buffer PrefixN{
 layout(set=0,binding=5)buffer Parents{
     int rt_parents[];
 };
+
 layout(set=0,binding=6)buffer RtLeftChild{
     int rt_leftChild[];
 };
 
 layout(set=0,binding=7)buffer RtHasLeafLeft{
-    bool rt_hasLeafLeft[];
+    uint8_t rt_hasLeafLeft[];
 };
 
 layout(set=0,binding=8)buffer RtHasLeafRight{
-    bool rt_hasLeafRight[];
+    uint8_t rt_hasLeafRight[];
 };
+
 
 layout(set=0,binding=9)uniform Constants{
     float min_coord;
@@ -118,13 +123,12 @@ const float range){
     ret[3]=1.f;
 }
 
-void k_MakeOctNodes(){
-    const int i=int(gl_GlobalInvocationID.x);
+void k_MakeOctNodes(int i){
     const int root_level=rt_prefixN[i]/3;
     
     if(i<n_brt_nodes){
-        int oct_idx=node_offsets[i];
-        const int n_new_nodes=rt_node_counts[i];
+        int oct_idx= int(node_offsets[i]);
+        const int n_new_nodes= int(rt_node_counts[i]);
         // for each nodes, make n_new_nodes
         for(int j=0;j<n_new_nodes-1;++j){
             const int level=rt_prefixN[i]/3-j;
@@ -160,7 +164,7 @@ void k_MakeOctNodes(){
                 }
             }
             
-            const int oct_parent=node_offsets[rt_parent];
+            const int oct_parent= int(node_offsets[rt_parent]);
             const int top_level=rt_prefixN[i]/3-n_new_nodes+1;
             const int top_node_prefix=codes[i]>>(morton_bits-(3*top_level));
             
@@ -181,10 +185,10 @@ void k_MakeOctNodes(){
     
 }
 
-void k_LinkLeafNodes(){
-    const int i=int(gl_GlobalInvocationID.x);
+void k_LinkLeafNodes(int i ){
+
     if(i<n_brt_nodes){
-        if(rt_hasLeafLeft[i]){
+        if(rt_hasLeafLeft[i] == 1){
             int leaf_idx=rt_leftChild[i];
             int leaf_level=rt_prefixN[i]/3+1;
             int leaf_prefix=codes[leaf_idx]>>(morton_bits-(3*leaf_level));
@@ -197,10 +201,10 @@ void k_LinkLeafNodes(){
             }
             // the lowest octnode in the string contributed by rt_node will be the
             // lowest index
-            int bottom_oct_idx=node_offsets[rt_node];
+            int bottom_oct_idx= int(node_offsets[rt_node]);
             SetLeaf(oct_nodes[bottom_oct_idx],which_child,leaf_idx);
         }
-        if(rt_hasLeafRight[i]){
+        if(rt_hasLeafRight[i] == 1){
             int leaf_idx=rt_leftChild[i]+1;
             int leaf_level=rt_prefixN[i]/3+1;
             int leaf_prefix=codes[leaf_idx]>>(morton_bits-(3*leaf_level));
@@ -211,13 +215,23 @@ void k_LinkLeafNodes(){
             }
             // the lowest octnode in the string contributed by rt_node will be the
             // lowest index
-            int bottom_oct_idx=node_offsets[rt_node];
+            int bottom_oct_idx= int(node_offsets[rt_node]);
             SetLeaf(oct_nodes[bottom_oct_idx],which_child,leaf_idx);
         }
     }
 }
 
+
 void main(){
-    k_MakeOctNodes();
-    k_LinkLeafNodes();
+    for (int i = int(IDX); i < n_brt_nodes; i += int(STRIDE)) {
+        k_MakeOctNodes(i);
+    }
+    /*
+    groupMemoryBarrier();
+    barrier();
+    
+    for (int i = int(IDX); i < n_brt_nodes; i += int(STRIDE)) {
+        k_LinkLeafNodes(i);
+    }
+    */
 }
