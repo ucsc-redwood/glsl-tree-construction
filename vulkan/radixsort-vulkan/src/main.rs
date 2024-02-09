@@ -49,17 +49,20 @@ mod morton;
 fn main() {
     // initialize the data
     let mut rng = rand::thread_rng();
-    //let mut random_numbers: Vec<u32> = (0..15360).collect::<Vec<u32>>(); /*map(|_| rng.gen()).collect()*/
-    let mut random_numbers: Vec<[f32; 4]> = [[0.0; 4]; 15360].to_vec();
+    let mut random_numbers: Vec<u32> = (0..15360/2).collect::<Vec<u32>>(); /*map(|_| rng.gen()).collect()*/
+    random_numbers.reverse();
+    //let mut random_numbers: Vec<[f32; 4]> = [[0.0; 4]; 15360].to_vec();
     //random_numbers.reverse();
-    init::init_random(&mut random_numbers);
+    //init::init_random(&mut random_numbers);
     for n in 0..15360/2 {
         println!("coords: {:?}", random_numbers[n as usize]);
     }
+    /*
     let morton_keys = morton::compute_morton(random_numbers);
     for n in 0..15360/2 {
         println!("morton_keys[{}]: {}", n, morton_keys[n as usize]);
     }
+    */
 
     let pass_hist = vec![0 as u32; 15360 /2/ 7680 * 256 * 4];
     let b_globalHist = vec![0 as u32; 256 * 4];
@@ -222,7 +225,7 @@ fn main() {
                 | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
             ..Default::default()
         },
-        morton_keys,
+        random_numbers//morton_keys,
     )
     .unwrap();
 

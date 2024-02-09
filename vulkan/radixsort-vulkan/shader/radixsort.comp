@@ -259,14 +259,12 @@ void BinningPass(int pass_num)
             // Number of peers having same digit as key[i]
             const uint bits = uint(bitCount(offsets[i] << LANE_MASK - LANE));
             
-            //if(bits == 2)
-            //debugPrintfEXT("bits: %u\n", bits);
-            // index = least significant 8 bits of keys[i] + subgroup id * radix bin
+
             int index = 0;
             if(pass_num == 3){
-                index = int(keys[i] >> 24 + t);
+                index = int(keys[i] >> 24 /*+ t*/);
             }else{
-                index = int((keys[i] >> (RADIX_LOG * pass_num) & RADIX_MASK) + t);
+                index = int((keys[i] >> (RADIX_LOG * pass_num) & RADIX_MASK) /*+ t*/);
             }
             const uint64_t prev = g_subgroupHists[index];
             
@@ -424,11 +422,7 @@ void BinningPass(int pass_num)
                         // if current lane has smallest index in the subgroup, then simply set the value to k as index k indicates that  represent the global inclusive prefix sum
                         if (subgroupElect()){
                             g_subgroupHists[SUBGROUP_IDX] = k;
-                            /*
-                            if(SUBGROUP_IDX == 10 && pass_num == 3){
-                                debugPrintfEXT("g_subgroupHists[%u]: %u, k: %d\n", SUBGROUP_IDX, g_subgroupHists[SUBGROUP_IDX], k);
-                            }
-                            */
+
                         }
                         
                             
