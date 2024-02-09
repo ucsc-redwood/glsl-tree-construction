@@ -31,7 +31,7 @@ uint n = 15360;
 float min_coord = 0.0;
 float range = 1024.0;
 
-layout(local_size_x = 1) in;
+layout(local_size_x = 64) in;
 
 uint morton3D_SplitBy3bits(const float a){
   uint b = uint(a);

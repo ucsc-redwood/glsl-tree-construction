@@ -53,15 +53,15 @@ fn main() {
     let mut random_numbers: Vec<[f32; 4]> = [[0.0; 4]; 15360].to_vec();
     //random_numbers.reverse();
     init::init_random(&mut random_numbers);
-    for n in 0..15360 {
+    for n in 0..15360/2 {
         println!("coords: {:?}", random_numbers[n as usize]);
     }
     let morton_keys = morton::compute_morton(random_numbers);
-    for n in 0..15360 {
-        println!("morton_keys[{}]: {:b}", n, morton_keys[n as usize]);
+    for n in 0..15360/2 {
+        println!("morton_keys[{}]: {}", n, morton_keys[n as usize]);
     }
 
-    let pass_hist = vec![0 as u32; 15360 / 7680 * 256 * 4];
+    let pass_hist = vec![0 as u32; 15360 /2/ 7680 * 256 * 4];
     let b_globalHist = vec![0 as u32; 256 * 4];
 
     // As with other examples, the first step is to create an instance.
@@ -82,6 +82,7 @@ fn main() {
     };
     let device_features = Features {
         //subgroup_size_control: true,
+        shader_int64 : true,
         ..Features::empty()
     };
 
@@ -126,7 +127,7 @@ fn main() {
                 ..Default::default()
             }],
             enabled_features: Features {
-                subgroup_size_control: true,
+                shader_int64: true,
                 ..Features::empty()
             },
             ..Default::default()
@@ -178,13 +179,6 @@ fn main() {
         }
     }
 
-    mod compute_morton {
-        vulkano_shaders::shader! {
-            ty: "compute",
-            path: "shader/morton.comp",
-            spirv_version: "1.3",
-        }
-    }
 
     let cs = cs::load(device.clone())
         .unwrap()
@@ -243,7 +237,7 @@ fn main() {
                 | MemoryTypeFilter::HOST_RANDOM_ACCESS,
             ..Default::default()
         },
-        15360 as DeviceSize,
+        15360/2 as DeviceSize,
     )
     .unwrap();
 
@@ -362,7 +356,7 @@ fn main() {
             set,
         )
         .unwrap()
-        .dispatch([2, 1, 1])
+        .dispatch([1, 1, 1])
         .unwrap();
     println!(
         "enable subgroup size control {}",
@@ -414,10 +408,10 @@ fn main() {
     }
     */
 
-    for n in 0..15360 {
+    for n in 0..15360/2 {
         println!("sorted[{}]: {}", n, _data_buffer_content[n as usize]);
     }
-    for n in 0..15360 {
+    for n in 0..15360/2 {
         println!("b_alt[{}]: {}", n, b_alt_buffer_content[n as usize]);
     }
 
