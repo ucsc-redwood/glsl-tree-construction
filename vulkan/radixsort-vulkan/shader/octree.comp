@@ -71,13 +71,13 @@ layout(set=0,binding=8)buffer RtHasLeafRight{
     bool rt_hasLeafRight[];
 };
 
-layout(set=0,binding=7)uniform Constants{
+layout(set=0,binding=9)uniform Constants{
     float min_coord;
     float range;
     int n_brt_nodes;
 };
 
-layout(local_size_x=64,local_size_y=8)in;
+layout(local_size_x=512)in;
 
 float morton3D_GetThirdBits(const int m){
     int x=m&0x9249249;
@@ -215,5 +215,9 @@ void k_LinkLeafNodes(){
             SetLeaf(oct_nodes[bottom_oct_idx],which_child,leaf_idx);
         }
     }
-    
+}
+
+void main(){
+    k_MakeOctNodes();
+    k_LinkLeafNodes();
 }

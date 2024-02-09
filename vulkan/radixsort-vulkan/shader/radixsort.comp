@@ -29,8 +29,8 @@
 
 #define LANE gl_LocalInvocationID.x // the idx of thread in the subgroup
 #define SUBGROUP_IDX  gl_LocalInvocationID.y//gl_SubgroupID // the idx of subgroup the thread belongs to might be wrong
-#define SUBGROUP_THREAD_IDX gl_GlobalInvocationID.x                                                       \
-  //(LANE + (SUBGROUP_IDX << LANE_LOG)) // the subgroup relative thread idx
+#define SUBGROUP_THREAD_IDX gl_GlobalInvocationID.x //(LANE + (SUBGROUP_IDX << LANE_LOG)) // the subgroup relative thread idx                                 
+
 
 
 #define HIST_SUBGROUP                                                           \
@@ -516,7 +516,7 @@ void BinningPass(int pass_num)
                 const bool t = (key >> k & 1) != 0;
                 const uvec4 ballot = subgroupBallot(t);
                 uint64_t v = (uint64_t(ballot.x)) ^ (uint64_t(ballot.y) << 32);
-                offset &= (t ? 0 : 0xFFFFFFFF) ^ v;
+                offset &= (t ? 0 : 0xFFFFFFFFFFFFFFFFL) ^ v;
             }
             
             //[unroll]

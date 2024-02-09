@@ -12,7 +12,7 @@
 #define TotalThreadsY gl_NumWorkGroups.y * gl_WorkGroupSize.y
 #define TotalThreadsZ gl_NumWorkGroups.z * gl_WorkGroupSize.z
 #define TotalThreads TotalThreadsX * TotalThreadsY * TotalThreadsZ
-#define ITEM_PER_THREAD input_size/(TotalThreads)
+#define ITEM_PER_THREAD n_brt_nodes/(TotalThreads)
 
 
 layout(set = 0, binding = 0 ) buffer PrefixN{
@@ -28,20 +28,24 @@ layout(set = 0, binding = 2 ) buffer EdgeCount{
 };
 
 layout (set = 0, binding = 3) uniform constants{
-    int input_size;
     int n_brt_nodes;
 };
 
-layout(local_size_x = 64, local_size_y = 8) in;
+layout(local_size_x = 512) in;
 
 void countEdges(){
     int startIdx = int(gl_GlobalInvocationID.x * ITEM_PER_THREAD + 1);
     int endIdx = int(min(startIdx + ITEM_PER_THREAD, n_brt_nodes));
 
-    if (int i  = startIdx; i < endIdx && i < n_brt_nodes; ++i){
+    for(int i = startIdx; i < endIdx && i < n_brt_nodes; ++i){
         int my_depth = prefix_n[i]/3;
         int parent_depth = prefix_n[parent[i]]/3;
         edge_count[i] = my_depth - parent_depth;
 
     }
+}
+
+
+void main(){
+    countEdges();
 }

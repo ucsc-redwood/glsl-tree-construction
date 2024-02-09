@@ -3,6 +3,7 @@ use cgmath::Vector4;
 use rand::Rng;
 use std::sync::Arc;
 use std::{fs::File, io::Write};
+use vulkano::buffer::BufferContents;
 use vulkano::{
     buffer::{Buffer, BufferCreateInfo, BufferUsage},
     command_buffer::{
@@ -30,23 +31,21 @@ use vulkano::{
     DeviceSize, VulkanLibrary,
 };
 
-use crate::morton;
-
+#[derive(BufferContents)]
 #[repr(C)]
-#[derive(Default, Debug, Clone, Copy)]
 struct Constants {
     n: u32,
     min_coord: f32,
     range: f32,
 }
 
-pub fn compute_morton(input: Vec<[f32; 4]>) -> Vec<u32> {
-    let constants_data = Constants {
-        n: 15360,
-        min_coord: 0.0,
-        range: 1024.0,
-    };
-
+pub fn compute_morton(
+    input: Vec<[f32; 4]>,
+    morton_keys: &mut Vec<u32>,
+    n: u32,
+    min_coord: f32,
+    range: f32,
+) -> Vec<u32> {
     // As with other examples, the first step is to create an instance.
     let library = VulkanLibrary::new().unwrap();
     let instance = Instance::new(
@@ -205,7 +204,7 @@ pub fn compute_morton(input: Vec<[f32; 4]>) -> Vec<u32> {
     )
     .unwrap();
 
-    let morton_key_buffer = Buffer::new_slice::<u32>(
+    let morton_key_buffer = Buffer::from_iter(
         memory_allocator.clone(),
         BufferCreateInfo {
             usage: BufferUsage::STORAGE_BUFFER,
@@ -216,14 +215,14 @@ pub fn compute_morton(input: Vec<[f32; 4]>) -> Vec<u32> {
                 | MemoryTypeFilter::HOST_RANDOM_ACCESS,
             ..Default::default()
         },
-        15360 as DeviceSize,
+        morton_keys.clone(),
     )
     .unwrap();
-    /*
+
     let constants_buffer = Buffer::from_data(
         memory_allocator.clone(),
         BufferCreateInfo {
-            usage: BufferUsage::STORAGE_BUFFER,
+            usage: BufferUsage::UNIFORM_BUFFER,
             ..Default::default()
         },
         AllocationCreateInfo {
@@ -231,17 +230,14 @@ pub fn compute_morton(input: Vec<[f32; 4]>) -> Vec<u32> {
                 | MemoryTypeFilter::HOST_RANDOM_ACCESS,
             ..Default::default()
         },
-        constants_data,
+        Constants {
+            n,
+            min_coord,
+            range,
+        },
     )
-    */
-    // In order to let the shader access the buffer, we need to build a *descriptor set* that
-    // contains the buffer.
-    //
-    // The resources that we bind to the descriptor set must match the resources expected by the
-    // pipeline which we pass as the first parameter.
-    //
-    // If you want to run the pipeline on multiple different buffers, you need to create multiple
-    // descriptor sets that each contain the buffer you want to run the shader on.
+    .unwrap();
+
     let layout = pipeline.layout().set_layouts().first().unwrap();
 
     let set = PersistentDescriptorSet::new(
@@ -250,6 +246,7 @@ pub fn compute_morton(input: Vec<[f32; 4]>) -> Vec<u32> {
         [
             WriteDescriptorSet::buffer(0, input_buffer.clone()),
             WriteDescriptorSet::buffer(1, morton_key_buffer.clone()),
+            WriteDescriptorSet::buffer(2, constants_buffer.clone()),
         ],
         [],
     )

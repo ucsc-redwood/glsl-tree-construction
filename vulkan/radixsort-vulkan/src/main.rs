@@ -43,18 +43,25 @@ use vulkano::{
     sync::{self, GpuFuture},
     DeviceSize, VulkanLibrary,
 };
+mod build_radix_tree;
+mod edge_count;
 mod init;
 mod morton;
+mod octree;
+mod partial_sum;
+mod radixsort;
 
-fn main() {
+fn main() {}
+
+fn test_radix_sort() {
     // initialize the data
     let mut rng = rand::thread_rng();
-    let mut random_numbers: Vec<u32> = (0..15360/2).collect::<Vec<u32>>(); /*map(|_| rng.gen()).collect()*/
+    let mut random_numbers: Vec<u32> = (0..15360 / 2).collect::<Vec<u32>>(); /*map(|_| rng.gen()).collect()*/
     random_numbers.reverse();
     //let mut random_numbers: Vec<[f32; 4]> = [[0.0; 4]; 15360].to_vec();
     //random_numbers.reverse();
     //init::init_random(&mut random_numbers);
-    for n in 0..15360/2 {
+    for n in 0..15360 / 2 {
         println!("coords: {:?}", random_numbers[n as usize]);
     }
     /*
@@ -64,7 +71,7 @@ fn main() {
     }
     */
 
-    let pass_hist = vec![0 as u32; 15360 /2/ 7680 * 256 * 4];
+    let pass_hist = vec![0 as u32; 15360 / 2 / 7680 * 256 * 4];
     let b_globalHist = vec![0 as u32; 256 * 4];
 
     // As with other examples, the first step is to create an instance.
@@ -85,7 +92,7 @@ fn main() {
     };
     let device_features = Features {
         //subgroup_size_control: true,
-        shader_int64 : true,
+        shader_int64: true,
         ..Features::empty()
     };
 
@@ -182,7 +189,6 @@ fn main() {
         }
     }
 
-
     let cs = cs::load(device.clone())
         .unwrap()
         .entry_point("main")
@@ -225,7 +231,7 @@ fn main() {
                 | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
             ..Default::default()
         },
-        random_numbers//morton_keys,
+        random_numbers, //morton_keys,
     )
     .unwrap();
 
@@ -240,7 +246,7 @@ fn main() {
                 | MemoryTypeFilter::HOST_RANDOM_ACCESS,
             ..Default::default()
         },
-        15360/2 as DeviceSize,
+        15360 / 2 as DeviceSize,
     )
     .unwrap();
 
@@ -411,10 +417,10 @@ fn main() {
     }
     */
 
-    for n in 0..15360/2 {
+    for n in 0..15360 / 2 {
         println!("sorted[{}]: {}", n, _data_buffer_content[n as usize]);
     }
-    for n in 0..15360/2 {
+    for n in 0..15360 / 2 {
         println!("b_alt[{}]: {}", n, b_alt_buffer_content[n as usize]);
     }
 

@@ -19,19 +19,16 @@ layout(set = 0, binding = 0) buffer Data{
 layout(set = 0, binding = 1) buffer MortonKeys{
   uint morton_keys[];
 };
-/*
+
 layout (set = 0, binding = 2) uniform Constants {
   uint n;
   float min_coord;
   float range;
 };
-*/
 
-uint n = 15360;
-float min_coord = 0.0;
-float range = 1024.0;
 
-layout(local_size_x = 64) in;
+
+layout(local_size_x = 512) in;
 
 uint morton3D_SplitBy3bits(const float a){
   uint b = uint(a);
@@ -60,6 +57,7 @@ uint single_point_to_code_v2(float x, float y, float z, const float min_coord, c
 void k_ComputeMortonCode(){
     int startIdx = int(gl_GlobalInvocationID.x * ITEM_PER_THREAD + 1);
     int endIdx = int(min(startIdx + ITEM_PER_THREAD, n));
+
     for(int i = startIdx; i < endIdx && i < n; i++){
       morton_keys[i] = single_point_to_code_v2(data[i][0], data[i][1], data[i][2], min_coord, range);
     }
