@@ -24,9 +24,9 @@
 #define THIRD_RADIX_START   512     //Offset for retrieving values from global buffer
 #define FOURTH_RADIX_START  768     //Offset for retrieving values from global buffer
 
-#define LANE_COUNT 64 // number of threads in a subgroup
-#define LANE_MASK 63
-#define LANE_LOG 6
+#define LANE_COUNT 32 // number of threads in a subgroup
+#define LANE_MASK 31
+#define LANE_LOG 5
 
 #define LANE gl_LocalInvocationID.x // the idx of thread in the subgroup
 #define SUBGROUP_IDX  gl_LocalInvocationID.y//gl_SubgroupID // the idx of subgroup the thread belongs to might be wrong
@@ -73,7 +73,7 @@ shared uint s_globalHistFourth[RADIX_BIN * 2];
 
 
 uint InclusiveWarpScanCircularShift(uint val){
-    for (uint i = 1; i <= (LANE_COUNT >> 1); i <<= 1){
+    for (uint i = 1; i <= 16; i <<= 1){
         const uint t = subgroupShuffleUp(val, i);
         if (gl_SubgroupInvocationID >= i)
             val += t;
@@ -120,7 +120,7 @@ void k_GlobalHistogram(){
     {
         uint segmentIndex = gl_LocalInvocationID.x / 64 * RADIX_BIN;
 
-        if (gl_WorkGroupID.x < gl_WorkGroupSize.x - 1){
+        if (gl_WorkGroupID.x < gl_NumWorkGroups.x - 1){
             const uint partEnd = (gl_WorkGroupID.x + 1) * G_HIST_VEC_SIZE;
             for (uint i = gl_LocalInvocationID.x + (gl_WorkGroupID.x * G_HIST_VEC_SIZE); i < partEnd; i += gl_WorkGroupSize.x){
                 uvec4 t = uvec4(b_sort[i*4 + 0], b_sort[i*4 + 1], b_sort[i*4 + 2], b_sort[i*4 + 3]);
@@ -148,7 +148,7 @@ void k_GlobalHistogram(){
             }
         }
         
-        if (gl_WorkGroupID.x == gl_WorkGroupSize.x - 1){
+        if (gl_WorkGroupID.x == gl_NumWorkGroups.x - 1){
             for (uint i = gl_LocalInvocationID.x + (gl_WorkGroupID.x * G_HIST_PART_SIZE); i < input_size; i += gl_WorkGroupSize.x){
                 uint t = b_sort[i];
                 atomicAdd(s_globalHistFirst[segmentIndex + ((t) & 0xFF)], 1);
@@ -184,10 +184,10 @@ void k_GlobalHistogram(){
     // gl_LocalInvocationID.x < 4  for warp size 64
     // gl_LocalInvocationID.x < 8  for warp size 32
     if (gl_LocalInvocationID.x < (RADIX_BIN >> LANE_LOG)){
-        s_globalHistFirst[gl_LocalInvocationID.x << LANE_LOG] = ActiveExclusiveWarpScan(s_globalHistFirst[gl_LocalInvocationID.x << LANE_LOG]);
-        s_globalHistSec[gl_LocalInvocationID.x << LANE_LOG] = ActiveExclusiveWarpScan(s_globalHistSec[gl_LocalInvocationID.x << LANE_LOG]);
-        s_globalHistThird[gl_LocalInvocationID.x << LANE_LOG] = ActiveExclusiveWarpScan(s_globalHistThird[gl_LocalInvocationID.x << LANE_LOG]);
-        s_globalHistFourth[gl_LocalInvocationID.x << LANE_LOG] = ActiveExclusiveWarpScan(s_globalHistFourth[gl_LocalInvocationID.x << LANE_LOG]);
+        s_globalHistFirst[gl_LocalInvocationID.x << LANE_LOG] = subgroupExclusiveAdd(s_globalHistFirst[gl_LocalInvocationID.x << LANE_LOG]);//ActiveExclusiveWarpScan(s_globalHistFirst[gl_LocalInvocationID.x << LANE_LOG]);
+        s_globalHistSec[gl_LocalInvocationID.x << LANE_LOG] = subgroupExclusiveAdd(s_globalHistSec[gl_LocalInvocationID.x << LANE_LOG]);//ActiveExclusiveWarpScan(s_globalHistSec[gl_LocalInvocationID.x << LANE_LOG]);
+        s_globalHistThird[gl_LocalInvocationID.x << LANE_LOG] = subgroupExclusiveAdd(s_globalHistThird[gl_LocalInvocationID.x << LANE_LOG]);//ActiveExclusiveWarpScan(s_globalHistThird[gl_LocalInvocationID.x << LANE_LOG]);
+        s_globalHistFourth[gl_LocalInvocationID.x << LANE_LOG] = subgroupExclusiveAdd(s_globalHistFourth[gl_LocalInvocationID.x << LANE_LOG]);//ActiveExclusiveWarpScan(s_globalHistFourth[gl_LocalInvocationID.x << LANE_LOG]);
 
     }
     groupMemoryBarrier();
@@ -195,10 +195,10 @@ void k_GlobalHistogram(){
     
     //Atomically add to device memory
     for (uint i = gl_LocalInvocationID.x; i < RADIX_BIN; i += gl_WorkGroupSize.x){
-        atomicAdd(b_globalHist[i], s_globalHistFirst[i] + (gl_SubgroupInvocationID > 0 ? subgroupShuffle(s_globalHistFirst[i - 1], gl_SubgroupInvocationID - 1) : 0));
-        atomicAdd(b_globalHist[i + RADIX_BIN], s_globalHistSec[i] + (gl_SubgroupInvocationID > 0 ? subgroupShuffle(s_globalHistSec[i - 1], gl_SubgroupInvocationID - 1) : 0));
-        atomicAdd(b_globalHist[i + RADIX_BIN * 2], s_globalHistThird[i] + (gl_SubgroupInvocationID > 0 ? subgroupShuffle(s_globalHistThird[i - 1], gl_SubgroupInvocationID - 1) : 0));
-        atomicAdd(b_globalHist[i + RADIX_BIN * 3], s_globalHistFourth[i] + (gl_SubgroupInvocationID > 0 ? subgroupShuffle(s_globalHistFourth[i - 1], gl_SubgroupInvocationID - 1) : 0));
+        atomicAdd(b_globalHist[i], s_globalHistFirst[i] + (gl_SubgroupInvocationID > 0 ? subgroupBroadcast(s_globalHistFirst[i - 1], 1)/*subgroupShuffle(s_globalHistFirst[i - 1], gl_SubgroupInvocationID - 1)*/ : 0));
+        atomicAdd(b_globalHist[i + RADIX_BIN], s_globalHistSec[i] + (gl_SubgroupInvocationID > 0 ? subgroupBroadcast(s_globalHistSec[i - 1], 1)/*subgroupShuffle(s_globalHistSec[i - 1], gl_SubgroupInvocationID - 1)*/ : 0));
+        atomicAdd(b_globalHist[i + RADIX_BIN * 2], s_globalHistThird[i] + (gl_SubgroupInvocationID > 0 ? subgroupBroadcast(s_globalHistThird[i - 1], 1)/*subgroupShuffle(s_globalHistThird[i - 1], gl_SubgroupInvocationID - 1)*/ : 0));
+        atomicAdd(b_globalHist[i + RADIX_BIN * 3], s_globalHistFourth[i] + (gl_SubgroupInvocationID > 0 ? subgroupBroadcast(s_globalHistFourth[i - 1], 1)/*subgroupShuffle(s_globalHistFourth[i - 1], gl_SubgroupInvocationID - 1)*/ : 0));
     }
     
 }
