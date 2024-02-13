@@ -31,172 +31,14 @@ use vulkano::{
     sync::{self, GpuFuture},
     DeviceSize, VulkanLibrary,
 };
-mod build_radix_tree;
-mod edge_count;
-mod init;
-mod morton;
-mod octree;
-mod partial_sum;
-mod radixsort;
-mod unique;
-mod histogram;
-struct RadixTreeData {
-    n_nodes: u32,
-    prefix_n: Vec<u8>,
-    has_leaf_left: Vec<u8>,
-    has_leaf_right: Vec<u8>,
-    left_child: Vec<i32>,
-    parent: Vec<i32>,
-}
 
-const N: u32 = 10000000;
-const MORTON_BIT: u32 = 30;
+const GLOBAL_HIST_PARTITION_SIZE: u32 = 65536;
+const GLOBAL_HIST_THREADS: u32 = 128;
 
-fn main() {
-    /* 
-    let min: f32 = 0.0;
-    let max: f32 = 1024.0;
-    let range = max - min;
-    let mut u_sort: Vec<u32> = vec![0; N as usize];
-    let mut out_data: Vec<u32> = vec![0; N as usize];
-    let mut u_input: Vec<[f32; 4]> = vec![[0.0; 4]; N as usize];
-    init::init_random(&mut u_input, N, min, range);
-    /* 
-    for n in 0..N {
-        println!("u_input[{}]: {:?}", n, u_input[n as usize]);
-    }
-    */
-    // step 1
-    morton::compute_morton(u_input, &mut u_sort, N, min, range, 256);
-    /* 
-    for n in 0..N {
-        println!("u_sort[{}]: {}", n, u_sort[n as usize]);
-    }
-    */
-    // step 2
-    /* 
-    radixsort::radix_sort(u_sort, N, &mut out_data, 1);
-    */
-     
-    u_sort.sort();
-    out_data = u_sort.clone();
-    /*
-    for n in 0..N {
-        println!("out_data[{}]: {}", n, out_data[n as usize]);
-    }
-    */
-    // step 3
-    let n_unique = unique::unique(&mut out_data, N);
-
-    println!("n_unique: {}", n_unique);
-
-    let mut tree = RadixTreeData {
-        n_nodes: n_unique - 1,
-        prefix_n: vec![0; (n_unique - 1).try_into().unwrap()],
-        has_leaf_left: vec![0; (n_unique - 1).try_into().unwrap()],
-        has_leaf_right: vec![0; (n_unique - 1).try_into().unwrap()],
-        left_child: vec![0; (n_unique - 1).try_into().unwrap()],
-        parent: vec![0; (n_unique - 1).try_into().unwrap()],
-    };
-
-    build_radix_tree::build_radix_tree(
-        tree.n_nodes as i32,
-        &out_data,
-        &mut tree.prefix_n,
-        &mut tree.has_leaf_left,
-        &mut tree.has_leaf_right,
-        &mut tree.left_child,
-        &mut tree.parent,
-        256,
-    );
-
-    let mut u_edge_count = vec![0; tree.n_nodes as usize];
-
-    // step 4
-    edge_count::edge_count(&tree.prefix_n, &tree.parent, &mut u_edge_count, n_unique, 256);
-    /* 
-    for n in 0..n_unique - 1 {
-        println!("u_edge_count[{}]: {}", n, u_edge_count[n as usize]);
-    }
-    */
-    // step 5
-    let mut u_count_prefix_sum: Vec<u32> = vec![0; n_unique as usize];
-    partial_sum::partial_sum(&u_edge_count, 0, n_unique, &mut u_count_prefix_sum);
-    u_count_prefix_sum[0] = 0;
-    /*
-    for n in 0..n_unique - 1 {
-        println!(
-            "u_count_prefix_sum[{}]: {}",
-            n, u_count_prefix_sum[n as usize]
-        );
-    }
-    */
-
-    // step 6
-    let mut u_oct_nodes = vec![octree::OctNode::new(); n_unique as usize];
-
-    let root_level: u32 = (tree.prefix_n[0] / 3).into();
-    let root_prefix: u32 = out_data[0] >> (MORTON_BIT - root_level * 3);
-
-    let mut corner: [f32; 4] = [0.0; 4];
-    morton::morton32_to_xyz(
-        &mut corner,
-        root_prefix << (MORTON_BIT - (3 * root_level)),
-        min,
-        range,
-    );
-    u_oct_nodes[0].set_corner(corner);
-    u_oct_nodes[0].set_cell_size(range);
-
-    octree::build_octree(
-        &mut u_oct_nodes,
-        u_count_prefix_sum,
-        u_edge_count,
-        out_data,
-        tree.prefix_n,
-        tree.parent,
-        min,
-        range,
-        N as i32,
-        tree.has_leaf_left,
-        tree.has_leaf_right,
-        tree.left_child,
-        256,
-    )
-    */
-    test_radix_sort();
-}
-
-
-const PARTITION_SIZE: u32 = 7680;
-const INPUT_SIZE: u32 = 131072;
-const BINNING_THREAD_BLOCKS: u32 = (INPUT_SIZE + PARTITION_SIZE - 1) / PARTITION_SIZE;
-fn test_radix_sort() {
+pub fn histogram(input_size: u32, input_data: &mut Vec<u32>, global_hist: &mut Vec<u32>){
     // initialize the data
-    let mut rng = rand::thread_rng();
-    let mut input_data: Vec<u32> = (0..131072).map(|x| x).collect();//.map(|_| rng.gen()).collect();
-    //random_numbers.reverse();
-    //let mut random_numbers: Vec<[f32; 4]> = [[0.0; 4]; 15360].to_vec();
-    //random_numbers.reverse();
-    //init::init_random(&mut random_numbers);
-    for n in 0..15360 / 2 {
-        println!("coords: {:?}", input_data[n as usize]);
-    }
-    /*
-    let morton_keys = morton::compute_morton(random_numbers);
-    for n in 0..15360/2 {
-        println!("morton_keys[{}]: {}", n, morton_keys[n as usize]);
-    }
-    */
+    let global_hist_thread_blocks: u32 = (input_size + GLOBAL_HIST_PARTITION_SIZE - 1) / GLOBAL_HIST_PARTITION_SIZE;
 
-    let pass_hist = vec![0 as u32; (BINNING_THREAD_BLOCKS*256) as usize];
-    let mut b_globalHist = vec![0 as u32; 256 * 4];
-
-    histogram::histogram(131072, &mut input_data, &mut b_globalHist);
-    for n in 0..1024 {
-        println!("b_globalHist[{}]: {}", n, b_globalHist[n as usize]);
-    }
-    /* 
     // As with other examples, the first step is to create an instance.
     let library = VulkanLibrary::new().unwrap();
     let instance = Instance::new(
@@ -276,7 +118,7 @@ fn test_radix_sort() {
     mod cs {
         vulkano_shaders::shader! {
             ty: "compute",
-            path: "shader/new_radix_sort.comp",
+            path: "shader/histogram.comp",
             spirv_version: "1.3",
         }
     }
@@ -322,22 +164,7 @@ fn test_radix_sort() {
                 | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
             ..Default::default()
         },
-        input_data, //morton_keys,
-    )
-    .unwrap();
-
-    let b_alt_buffer = Buffer::new_slice::<u32>(
-        memory_allocator.clone(),
-        BufferCreateInfo {
-            usage: BufferUsage::STORAGE_BUFFER,
-            ..Default::default()
-        },
-        AllocationCreateInfo {
-            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
-                | MemoryTypeFilter::HOST_RANDOM_ACCESS,
-            ..Default::default()
-        },
-        131072 as DeviceSize,
+        input_data.clone(), //morton_keys,
     )
     .unwrap();
 
@@ -352,63 +179,10 @@ fn test_radix_sort() {
                 | MemoryTypeFilter::HOST_RANDOM_ACCESS,
             ..Default::default()
         },
-        b_globalHist,
+        global_hist.clone(),
     )
     .unwrap();
 
-    let b_index_buffer = Buffer::new_slice::<u32>(
-        memory_allocator.clone(),
-        BufferCreateInfo {
-            usage: BufferUsage::STORAGE_BUFFER,
-            ..Default::default()
-        },
-        AllocationCreateInfo {
-            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
-                | MemoryTypeFilter::HOST_RANDOM_ACCESS,
-            ..Default::default()
-        },
-        4 as DeviceSize,
-    )
-    .unwrap();
-
-    let b_passhist_buffer = Buffer::from_iter(
-        memory_allocator.clone(),
-        BufferCreateInfo {
-            usage: BufferUsage::STORAGE_BUFFER,
-            ..Default::default()
-        },
-        AllocationCreateInfo {
-            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
-                | MemoryTypeFilter::HOST_RANDOM_ACCESS,
-            ..Default::default()
-        },
-        pass_hist,
-    )
-    .unwrap();
-
-    let out_reduction_buffer = Buffer::new_slice::<u32>(
-        memory_allocator.clone(),
-        BufferCreateInfo {
-            usage: BufferUsage::STORAGE_BUFFER,
-            ..Default::default()
-        },
-        AllocationCreateInfo {
-            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
-                | MemoryTypeFilter::HOST_RANDOM_ACCESS,
-            ..Default::default()
-        },
-        256 as DeviceSize,
-    )
-    .unwrap();
-
-    // In order to let the shader access the buffer, we need to build a *descriptor set* that
-    // contains the buffer.
-    //
-    // The resources that we bind to the descriptor set must match the resources expected by the
-    // pipeline which we pass as the first parameter.
-    //
-    // If you want to run the pipeline on multiple different buffers, you need to create multiple
-    // descriptor sets that each contain the buffer you want to run the shader on.
     let layout = pipeline.layout().set_layouts().first().unwrap();
 
     let set = PersistentDescriptorSet::new(
@@ -416,11 +190,7 @@ fn test_radix_sort() {
         layout.clone(),
         [
             WriteDescriptorSet::buffer(0, b_sort_buffer.clone()),
-            WriteDescriptorSet::buffer(1, b_alt_buffer.clone()),
-            WriteDescriptorSet::buffer(2, b_globalhist_buffer.clone()),
-            WriteDescriptorSet::buffer(3, b_index_buffer.clone()),
-            WriteDescriptorSet::buffer(4, b_passhist_buffer.clone()),
-            //WriteDescriptorSet::buffer(5, out_reduction_buffer.clone()),
+            WriteDescriptorSet::buffer(1, b_globalhist_buffer.clone()),
         ],
         [],
     )
@@ -440,13 +210,6 @@ fn test_radix_sort() {
     )
     .unwrap();
     builder
-        // The command buffer only does one thing: execute the compute pipeline. This is called a
-        // *dispatch* operation.
-        //
-        // Note that we clone the pipeline and the set. Since they are both wrapped in an `Arc`,
-        // this only clones the `Arc` and not the whole pipeline or set (which aren't cloneable
-        // anyway). In this example we would avoid cloning them since this is the last time we use
-        // them, but in real code you would probably need to clone them.
         .bind_pipeline_compute(pipeline.clone())
         .unwrap()
         .bind_descriptor_sets(
@@ -456,7 +219,7 @@ fn test_radix_sort() {
             set,
         )
         .unwrap()
-        .dispatch([BINNING_THREAD_BLOCKS, 1, 1])
+        .dispatch([global_hist_thread_blocks, 1, 1])
         .unwrap();
     println!(
         "enable subgroup size control {}",
@@ -495,32 +258,13 @@ fn test_radix_sort() {
     // GPU.
     let _data_buffer_content = b_sort_buffer.read().unwrap();
     let b_global_hist = b_globalhist_buffer.read().unwrap();
-    let b_alt_buffer_content = b_alt_buffer.read().unwrap();
-    let out_reduction_content = out_reduction_buffer.read().unwrap();
-    /*
-    let mut file = match File::create("output.txt") {
-        Err(why) => panic!("couldn't create: {}", why),
-        Ok(file) => file,
-    };
 
-    for data in _data_buffer_content.iter(){
-        file.write_u32::<LittleEndian>(*data).unwrap();
-    }
-    */
-
-    for n in 0..15360 / 2 {
-        println!("sorted[{}]: {}", n, _data_buffer_content[n as usize]);
-    }
-    for n in 0..15360 / 2 {
-        println!("b_alt[{}]: {}", n, b_alt_buffer_content[n as usize]);
+    for (i, val) in b_global_hist.iter().enumerate() {
+        global_hist[i] = *val;
     }
 
-    for n in 0..256 {
-        println!(
-            "out_reduction_buffer[{}]: {}",
-            n, out_reduction_content[n as usize]
-        );
+    for (i, val) in _data_buffer_content.iter().enumerate() {
+        input_data[i] = *val;
     }
-    */
-    println!("Success");
+
 }
