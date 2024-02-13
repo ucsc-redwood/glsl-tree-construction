@@ -601,7 +601,7 @@ fn test_radix_sort() {
     // fence-signalled futures can get destroyed like this.
     future.wait(None).unwrap();
     
-    /* 
+    
     let mut builder_sec = AutoCommandBufferBuilder::primary(
         &command_buffer_allocator,
         queue.queue_family_index(),
@@ -631,6 +631,7 @@ fn test_radix_sort() {
     .unwrap();
     future.wait(None).unwrap();
     
+
     let mut builder_third = AutoCommandBufferBuilder::primary(
         &command_buffer_allocator,
         queue.queue_family_index(),
@@ -688,7 +689,7 @@ fn test_radix_sort() {
     .then_signal_fence_and_flush()
     .unwrap();
     future.wait(None).unwrap();
-    */
+    
     // Now that the GPU is done, the content of the buffer should have been modified. Let's check
     // it out. The call to `read()` would return an error if the buffer was still in use by the
     // GPU.
