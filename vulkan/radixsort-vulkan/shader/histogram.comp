@@ -93,9 +93,9 @@ uint ActiveExclusiveWarpScan(uint val) {
     return (gl_SubgroupInvocationID > 0) ? t : 0;
 }
 
-uint getLaneMaskLt() {
+uint64_t getLaneMaskLt() {
     uint laneId = gl_SubgroupInvocationID;
-    uint mask = 0;
+    uint64_t mask = 0;
 
     // Generate the mask dynamically based on the current laneId
     // For each bit position less than laneId, set the corresponding bit in mask

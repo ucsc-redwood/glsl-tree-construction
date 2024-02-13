@@ -102,7 +102,6 @@ pub fn histogram(input_size: u32, input_data: &mut Vec<u32>, global_hist: &mut V
                 ..Default::default()
             }],
             enabled_features: Features {
-                shader_int64: true,
                 ..Features::empty()
             },
             ..Default::default()
