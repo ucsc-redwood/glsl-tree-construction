@@ -66,6 +66,7 @@ const N: u32 = 10000000;
 const MORTON_BIT: u32 = 30;
 
 fn main() {
+    /* 
     let min: f32 = 0.0;
     let max: f32 = 1024.0;
     let range = max - min;
@@ -175,6 +176,8 @@ fn main() {
         tree.left_child,
         256,
     )
+    */
+    test_radix_sort();
 }
 
 fn test_radix_sort() {
@@ -195,7 +198,7 @@ fn test_radix_sort() {
     }
     */
 
-    let pass_hist = vec![0 as u32; 15360 / 2 / 7680 * 256 * 4];
+    let pass_hist = vec![0 as u32; 1024];
     let b_globalHist = vec![0 as u32; 256 * 4];
 
     // As with other examples, the first step is to create an instance.
@@ -308,7 +311,7 @@ fn test_radix_sort() {
 
         vulkano_shaders::shader! {
             ty: "compute",
-            path: "shader/radixsort.comp",
+            path: "shader/new_radix_sort.comp",
             spirv_version: "1.3",
         }
     }
@@ -453,7 +456,7 @@ fn test_radix_sort() {
             WriteDescriptorSet::buffer(2, b_globalhist_buffer.clone()),
             WriteDescriptorSet::buffer(3, b_index_buffer.clone()),
             WriteDescriptorSet::buffer(4, b_passhist_buffer.clone()),
-            WriteDescriptorSet::buffer(5, out_reduction_buffer.clone()),
+            //WriteDescriptorSet::buffer(5, out_reduction_buffer.clone()),
         ],
         [],
     )
