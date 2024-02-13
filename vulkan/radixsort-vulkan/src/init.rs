@@ -21,3 +21,13 @@ pub fn init_random(u_data: &mut Vec<[f32; 4]>, n: u32, min: f32, range: f32) {
         u_data[i as usize][3] = 1.0;
     }
 }
+
+
+pub fn init_radixsort(u_data: &mut Vec<[f32; 4]>, n: u32) {
+    for i in 0..n {
+        u_data[i as usize][0] = i as f32;
+        u_data[i as usize][1] = i as f32;
+        u_data[i as usize][2] = i as f32;
+        u_data[i as usize][3] = 1.0;
+    }
+}

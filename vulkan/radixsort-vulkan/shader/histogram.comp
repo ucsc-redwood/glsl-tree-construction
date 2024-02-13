@@ -52,12 +52,6 @@
 #define G_HIST_PART_SIZE	65536
 #define G_HIST_VEC_SIZE		16384
 
-#define HIST_PART_END                                                          \
-  (gl_WorkGroupID.x == HIST_TBLOCKS - 1 ? input_size                             \
-                                      : (gl_WorkGroupID.x + 1) * HIST_PART_SIZE)
-
-
-
 layout(set = 0, binding = 0)  buffer BSortBuffer {
     uint b_sort[131072];
 };
@@ -128,7 +122,7 @@ void k_GlobalHistogram(){
 
         if (gl_WorkGroupID.x < gl_WorkGroupSize.x - 1){
             const uint partEnd = (gl_WorkGroupID.x + 1) * G_HIST_VEC_SIZE;
-            for (uint i = gl_LocalInvocationID.x + (gl_WorkGroupID.x * G_HIST_VEC_SIZE); i < partEnd; i += gl_WorkGroupID.x){
+            for (uint i = gl_LocalInvocationID.x + (gl_WorkGroupID.x * G_HIST_VEC_SIZE); i < partEnd; i += gl_WorkGroupSize.x){
                 uvec4 t = uvec4(b_sort[i*4 + 0], b_sort[i*4 + 1], b_sort[i*4 + 2], b_sort[i*4 + 3]);
 
                 atomicAdd(s_globalHistFirst[segmentIndex + ((t.x) & 0xFF)], 1);
@@ -153,9 +147,9 @@ void k_GlobalHistogram(){
 
             }
         }
-
+        
         if (gl_WorkGroupID.x == gl_WorkGroupSize.x - 1){
-            for (uint i = gl_LocalInvocationID.x + (gl_WorkGroupID.x * G_HIST_PART_SIZE); i < input_size; i += gl_WorkGroupID.x){
+            for (uint i = gl_LocalInvocationID.x + (gl_WorkGroupID.x * G_HIST_PART_SIZE); i < input_size; i += gl_WorkGroupSize.x){
                 uint t = b_sort[i];
                 atomicAdd(s_globalHistFirst[segmentIndex + ((t) & 0xFF)], 1);
                 atomicAdd(s_globalHistSec[segmentIndex + ((t >> 8) & 0xFF)], 1);
@@ -163,10 +157,11 @@ void k_GlobalHistogram(){
                 atomicAdd(s_globalHistFourth[segmentIndex + ((t >> 24) & 0xFF)], 1);
             }
         }
+        
     }
     groupMemoryBarrier();
     barrier();
-    /*
+    
     //reduce to the first histogram
     for (uint i = gl_LocalInvocationID.x; i < RADIX_BIN; i += gl_WorkGroupSize.x){
         s_globalHistFirst[i] += s_globalHistFirst[i + RADIX_BIN];
@@ -205,19 +200,10 @@ void k_GlobalHistogram(){
         atomicAdd(b_globalHist[i + RADIX_BIN * 2], s_globalHistThird[i] + (gl_SubgroupInvocationID > 0 ? subgroupShuffle(s_globalHistThird[i - 1], gl_SubgroupInvocationID - 1) : 0));
         atomicAdd(b_globalHist[i + RADIX_BIN * 3], s_globalHistFourth[i] + (gl_SubgroupInvocationID > 0 ? subgroupShuffle(s_globalHistFourth[i - 1], gl_SubgroupInvocationID - 1) : 0));
     }
-    */
+    
 }
 
-void Init(){
-    for (int i = 0; i < 1024; i++){
-        b_globalHist[i] = 0;
-    }
-
-}
 
 void main() {
-    Init();
-    groupMemoryBarrier();
-    barrier();
     k_GlobalHistogram();
 }

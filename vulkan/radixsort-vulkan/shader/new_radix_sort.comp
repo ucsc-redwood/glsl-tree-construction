@@ -17,12 +17,6 @@
 #define RADIX_BITS 8
 #define RADIX_MASK 255 // Mask of digit bins
 #define RADIX_PASS 4//(sizeof(uint) * 8 + RADIX_BITS - 1) / RADIX_BITS
-#define SEC_RADIX           8       //Shift value to retrieve digits from the second place
-#define THIRD_RADIX         16      //Shift value to retrieve digits from the third place
-#define FOURTH_RADIX        24      //Shift value to retrieve digits from the fourth place 
-#define SEC_RADIX_START     256     //Offset for retrieving values from global buffer
-#define THIRD_RADIX_START   512     //Offset for retrieving values from global buffer
-#define FOURTH_RADIX_START  768     //Offset for retrieving values from global buffer
 
 #define LANE_COUNT 64 // number of threads in a subgroup
 #define LANE_MASK 63
@@ -33,13 +27,9 @@
 #define SUBGROUP_THREAD_IDX gl_GlobalInvocationID.x //(LANE + (SUBGROUP_IDX << LANE_LOG)) // the subgroup relative thread idx                                 
 
 
-
-
-
 //For the binning
 #define BIN_PART_SIZE       7680    //The partition tile size of a BinningPass threadblock
 #define BIN_HISTS_SIZE      4096    //The total size of all subgroup histograms in shared memory
-#define BIN_TBLOCKS         2     //The number of threadblocks dispatched in a BinningPass threadblock
 #define BIN_THREADS         512     //The number of threads in a BinningPass threadblock
 #define BIN_SUB_PART_SIZE   960     //The subpartition tile size of a single subgroup in a BinningPass threadblock
 #define BIN_SUBGROUPS       8       //The number of subgroup in a BinningPass threadblock previously 16
@@ -75,9 +65,13 @@ layout(set = 0, binding = 3) coherent buffer BIndex {
 };
 
 layout(set = 0, binding = 4) coherent buffer BPassHist {
-    uvec4 b_passHist[BIN_THREAD_BLOCKS*256];
+    uint b_passHist[BIN_THREAD_BLOCKS*256];
 };
 
+layout(set = 0, binding = 5) buffer Params{
+    uint pass_num;
+    uint radix_shift;
+};
 
 
 layout(local_size_x = 512) in;
@@ -127,7 +121,7 @@ uint getLaneMaskLt() {
 }
 
 
-void k_DigitBinning(uint num, uint radix_shift){
+void k_DigitBinning(){
 
     // clear shared memory
     for(uint i = gl_LocalInvocationID.x; i < BIN_HISTS_SIZE; i += gl_WorkGroupSize.x){
@@ -146,18 +140,20 @@ void k_DigitBinning(uint num, uint radix_shift){
     if (gl_LocalInvocationID.x < RADIX_BIN)
         s_localHistograms[gl_LocalInvocationID.x] = b_globalHist[gl_LocalInvocationID.x + (radix_shift << 5)];
     
-
+    
     // handle size that is not prect multiple of parition size
     if (partitionIndex < gl_NumWorkGroups.x -1){
         // load the keys
         uint keys[BIN_KEYS_PER_THREAD];
         for (uint i = 0, t = gl_SubgroupInvocationID + BIN_SUB_PART_START + BIN_PART_START; i < BIN_KEYS_PER_THREAD; i++, t += LANE_COUNT){
-            keys[i] = num % 2 == 0 ? b_sort[t] : b_alt[t];
+            keys[i] = b_sort[t];
         }
 
         uint _offsets[BIN_KEYS_PER_THREAD];
+        for(uint i = 0; i < BIN_KEYS_PER_THREAD; i++){
+            _offsets[i] = 0;
+        }
         
-
         // warp level mutli-split
         for (uint i = 0; i < BIN_KEYS_PER_THREAD; ++i){
             uint64_t warpFlags = 0xFFFFFFFFFFFFFFFFL;
@@ -177,6 +173,7 @@ void k_DigitBinning(uint num, uint radix_shift){
             if (shuffleIndex != -1)
                 _offsets[i] = subgroupShuffle(prev, shuffleIndex) + bits;
         }
+        
         groupMemoryBarrier();
         barrier();
 
@@ -187,13 +184,11 @@ void k_DigitBinning(uint num, uint radix_shift){
                 reduction += s_subgroupHistograms[i];
                 s_subgroupHistograms[i] = reduction - s_subgroupHistograms[i];
             }
-            uint val = ((partitionIndex != 0) ? FLAG_AGGREGATE : FLAG_INCLUSIVE) | reduction << 2;
-            atomicAdd(b_passHist[gl_LocalInvocationID.x* gl_NumWorkGroups.x + partitionIndex][num], val);
-
+            //uint val = ((partitionIndex > 0) ? FLAG_AGGREGATE : FLAG_INCLUSIVE) | reduction << 2;
+            atomicAdd(b_passHist[gl_LocalInvocationID.x* gl_NumWorkGroups.x + partitionIndex]/*[pass_num]*/,((partitionIndex != 0) ? FLAG_AGGREGATE : FLAG_INCLUSIVE) | (reduction << 2));
             // exclusive prefix sum across reduction
             s_subgroupHistograms[gl_LocalInvocationID.x] = InclusiveWarpScanCircularShift(reduction);
         }
-
         groupMemoryBarrier();
         barrier();
 
@@ -215,20 +210,23 @@ void k_DigitBinning(uint num, uint radix_shift){
         }
 
         // split the warps into single thread cooperative groups and lookback
-
+        
         if (partitionIndex > 0){
             for (uint i = gl_LocalInvocationID.x; i < RADIX_BIN; i += gl_WorkGroupSize.x){
                 uint reduction = 0;
-                for( uint k = partitionIndex; k > 0;){
-                    const uint flagPayload = b_passHist[i * gl_NumWorkGroups.x + k - 1][num];
+                
+                for( int k = int(partitionIndex); k > 0; ){
+
+                    const uint flagPayload = b_passHist[i * gl_NumWorkGroups.x + k - 1];//[pass_num];
+                    
                     if ((flagPayload & FLAG_MASK) == FLAG_INCLUSIVE){
                         reduction += flagPayload >> 2;
-                        atomicAdd(b_passHist[i * gl_NumWorkGroups.x + partitionIndex][num], 1 | (reduction << 2));
+                        atomicAdd(b_passHist[i * gl_NumWorkGroups.x + partitionIndex]/*[pass_num]*/, 1 | (reduction << 2));
                         s_localHistograms[i] += reduction - s_subgroupHistograms[i];
                         break;
                     }
 
-                    if ((flagPayload & FLAG_MASK) == FLAG_AGGREGATE){
+                    else if ((flagPayload & FLAG_MASK) == FLAG_AGGREGATE){
                         reduction += flagPayload >> 2;
                         k--;
                     }
@@ -239,6 +237,12 @@ void k_DigitBinning(uint num, uint radix_shift){
                 s_localHistograms[gl_LocalInvocationID.x] -= s_subgroupHistograms[gl_LocalInvocationID.x];
             }
         }
+        
+        
+        
+        
+        
+        
         groupMemoryBarrier();
         barrier();
 
@@ -251,11 +255,13 @@ void k_DigitBinning(uint num, uint radix_shift){
 
         // scatter keys into device memory
         for (uint i = gl_LocalInvocationID.x; i < BIN_PART_SIZE; i += gl_WorkGroupSize.x){
-            num % 2 == 0? b_alt[s_localHistograms[s_subgroupHistograms[i] >> radix_shift & RADIX_MASK] + i] = s_subgroupHistograms[i] : b_sort[s_localHistograms[s_subgroupHistograms[i] >> radix_shift & RADIX_MASK] + i] = s_subgroupHistograms[i];
+            b_alt[s_localHistograms[s_subgroupHistograms[i] >> radix_shift & RADIX_MASK] + i] = s_subgroupHistograms[i];
         }
+        
     }
+    
 
-
+    
     // process final partition
     if (partitionIndex == gl_NumWorkGroups.x - 1){
         groupMemoryBarrier();
@@ -265,8 +271,10 @@ void k_DigitBinning(uint num, uint radix_shift){
         if (partitionIndex > 0){
             for (uint i = gl_LocalInvocationID.x; i < RADIX_BIN; i += gl_WorkGroupSize.x){
                 uint reduction = 0;
-                for (uint k = partitionIndex; k > 0;){
-                    const uint flagPayload = b_passHist[i * gl_NumWorkGroups.x + k - 1][num];
+                
+                for (int k = int(partitionIndex); k > 0;){
+                    const uint flagPayload = b_passHist[i * gl_NumWorkGroups.x + k - 1];
+
                     if ((flagPayload & FLAG_MASK) == FLAG_INCLUSIVE){
                         reduction += flagPayload >> 2;
                         s_localHistograms[i] += reduction;
@@ -278,11 +286,12 @@ void k_DigitBinning(uint num, uint radix_shift){
                         k--;
                     }
                 }
+                
             }
             groupMemoryBarrier();
             barrier();
         }
-
+        
         const uint partEnd = BIN_PART_START + BIN_PART_SIZE;
         for (uint i = gl_LocalInvocationID.x + BIN_PART_START; i < partEnd; i += gl_WorkGroupSize.x){
             uint key;
@@ -290,7 +299,7 @@ void k_DigitBinning(uint num, uint radix_shift){
             uint64_t warpFlags = 0xFFFFFFFFFFFFFFFFL;
 
             if ( i < input_size)
-                key = num % 2 == 0 ? b_sort[i] : b_alt[i];
+                key = b_sort[i];
             
             for (uint k = radix_shift; k < radix_shift + RADIX_LOG; ++k){
                 const bool t = (key >> k & 1) > 0;
@@ -313,39 +322,21 @@ void k_DigitBinning(uint num, uint radix_shift){
             }
 
             if (i < input_size)
-                num % 2 == 0 ? b_alt[offset] = key : b_sort[offset] = key;
+                b_alt[offset] = key;
         }
+        
     }
+    
+    
 }
 
-void Init(){
-    for (int i = 0; i < BIN_THREAD_BLOCKS; i++){
-        b_passHist[i] = uvec4(0);
-    }
-    for (int i = 0; i < input_size; i++){
-        b_alt[i] = 0;
-    }
-
-    for (int i = 0; i < 4; i++){
-        b_index[i] = 0;
-    }
-}
 
 void main(){
-    Init();
+    k_DigitBinning();
     groupMemoryBarrier();
     barrier();
-    k_DigitBinning(0, 0);
-    groupMemoryBarrier();
-    barrier();
-    k_DigitBinning(1, 8);
-    groupMemoryBarrier();
-    barrier();
-    k_DigitBinning(2, 16);
-    groupMemoryBarrier();
-    barrier();
-    k_DigitBinning(3, 24);
-    groupMemoryBarrier();
-    barrier();
-    
+    if (gl_GlobalInvocationID.x == 0){
+        pass_num += 1;
+        radix_shift += RADIX_LOG;
+    }
 }

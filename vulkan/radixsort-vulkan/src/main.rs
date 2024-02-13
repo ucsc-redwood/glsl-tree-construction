@@ -2,6 +2,8 @@
 use byteorder::{LittleEndian, WriteBytesExt};
 use cgmath::Vector4;
 use rand::Rng;
+use vulkano::buffer::BufferContents;
+use vulkano::descriptor_set::DescriptorSetWithOffsets;
 use std::sync::Arc;
 use std::vec;
 use std::{fs::File, io::Write};
@@ -168,14 +170,21 @@ fn main() {
 }
 
 
+#[derive(BufferContents)]
+#[repr(C)]
+struct Params{
+    pass_num: u32,
+    radix_shift: u32,
+}
 const PARTITION_SIZE: u32 = 7680;
 const INPUT_SIZE: u32 = 131072;
 const BINNING_THREAD_BLOCKS: u32 = (INPUT_SIZE + PARTITION_SIZE - 1) / PARTITION_SIZE;
 fn test_radix_sort() {
     // initialize the data
+    println!("binning_thread_blocks: {}", BINNING_THREAD_BLOCKS);
     let mut rng = rand::thread_rng();
     let mut input_data: Vec<u32> = (0..131072).map(|x| x).collect();//.map(|_| rng.gen()).collect();
-    //random_numbers.reverse();
+
     //let mut random_numbers: Vec<[f32; 4]> = [[0.0; 4]; 15360].to_vec();
     //random_numbers.reverse();
     //init::init_random(&mut random_numbers);
@@ -189,14 +198,24 @@ fn test_radix_sort() {
     }
     */
 
-    let pass_hist = vec![0 as u32; (BINNING_THREAD_BLOCKS*256) as usize];
+    let pass_hist_first = vec![0 as u32; (BINNING_THREAD_BLOCKS*256) as usize];
+    let pass_hist_second = vec![0 as u32; (BINNING_THREAD_BLOCKS*256) as usize];
+    let pass_hist_third = vec![0 as u32; (BINNING_THREAD_BLOCKS*256) as usize];
+    let pass_hist_fourth = vec![0 as u32; (BINNING_THREAD_BLOCKS*256) as usize];
+
     let mut b_globalHist = vec![0 as u32; 256 * 4];
+    let mut b_alt = vec![0 as u32; 131072];
+    let mut b_index = vec![0 as u32; 4];
+    let mut param = Params{
+        pass_num: 0,
+        radix_shift: 0,
+    };
 
     histogram::histogram(131072, &mut input_data, &mut b_globalHist);
     for n in 0..1024 {
         println!("b_globalHist[{}]: {}", n, b_globalHist[n as usize]);
     }
-    /* 
+    
     // As with other examples, the first step is to create an instance.
     let library = VulkanLibrary::new().unwrap();
     let instance = Instance::new(
@@ -281,6 +300,8 @@ fn test_radix_sort() {
         }
     }
 
+
+
     let cs = cs::load(device.clone())
         .unwrap()
         .entry_point("main")
@@ -326,7 +347,7 @@ fn test_radix_sort() {
     )
     .unwrap();
 
-    let b_alt_buffer = Buffer::new_slice::<u32>(
+    let b_alt_buffer = Buffer::from_iter(
         memory_allocator.clone(),
         BufferCreateInfo {
             usage: BufferUsage::STORAGE_BUFFER,
@@ -337,7 +358,7 @@ fn test_radix_sort() {
                 | MemoryTypeFilter::HOST_RANDOM_ACCESS,
             ..Default::default()
         },
-        131072 as DeviceSize,
+        b_alt,
     )
     .unwrap();
 
@@ -356,7 +377,7 @@ fn test_radix_sort() {
     )
     .unwrap();
 
-    let b_index_buffer = Buffer::new_slice::<u32>(
+    let b_index_buffer = Buffer::from_iter(
         memory_allocator.clone(),
         BufferCreateInfo {
             usage: BufferUsage::STORAGE_BUFFER,
@@ -367,11 +388,11 @@ fn test_radix_sort() {
                 | MemoryTypeFilter::HOST_RANDOM_ACCESS,
             ..Default::default()
         },
-        4 as DeviceSize,
+        b_index,
     )
     .unwrap();
 
-    let b_passhist_buffer = Buffer::from_iter(
+    let b_passhist_first_buffer = Buffer::from_iter(
         memory_allocator.clone(),
         BufferCreateInfo {
             usage: BufferUsage::STORAGE_BUFFER,
@@ -382,11 +403,11 @@ fn test_radix_sort() {
                 | MemoryTypeFilter::HOST_RANDOM_ACCESS,
             ..Default::default()
         },
-        pass_hist,
+        pass_hist_first,
     )
     .unwrap();
 
-    let out_reduction_buffer = Buffer::new_slice::<u32>(
+    let b_passhist_second_buffer = Buffer::from_iter(
         memory_allocator.clone(),
         BufferCreateInfo {
             usage: BufferUsage::STORAGE_BUFFER,
@@ -397,7 +418,52 @@ fn test_radix_sort() {
                 | MemoryTypeFilter::HOST_RANDOM_ACCESS,
             ..Default::default()
         },
-        256 as DeviceSize,
+        pass_hist_second,
+    )
+    .unwrap();
+
+    let b_passhist_third_buffer = Buffer::from_iter(
+        memory_allocator.clone(),
+        BufferCreateInfo {
+            usage: BufferUsage::STORAGE_BUFFER,
+            ..Default::default()
+        },
+        AllocationCreateInfo {
+            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                | MemoryTypeFilter::HOST_RANDOM_ACCESS,
+            ..Default::default()
+        },
+        pass_hist_third,
+    )
+    .unwrap();
+
+    let b_passhist_fourth_buffer = Buffer::from_iter(
+        memory_allocator.clone(),
+        BufferCreateInfo {
+            usage: BufferUsage::STORAGE_BUFFER,
+            ..Default::default()
+        },
+        AllocationCreateInfo {
+            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                | MemoryTypeFilter::HOST_RANDOM_ACCESS,
+            ..Default::default()
+        },
+        pass_hist_fourth,
+    )
+    .unwrap();
+
+    let pass_num_buffer = Buffer::from_data(
+        memory_allocator.clone(),
+        BufferCreateInfo {
+            usage: BufferUsage::STORAGE_BUFFER,
+            ..Default::default()
+        },
+        AllocationCreateInfo {
+            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                | MemoryTypeFilter::HOST_RANDOM_ACCESS,
+            ..Default::default()
+        },
+        param,
     )
     .unwrap();
 
@@ -411,7 +477,7 @@ fn test_radix_sort() {
     // descriptor sets that each contain the buffer you want to run the shader on.
     let layout = pipeline.layout().set_layouts().first().unwrap();
 
-    let set = PersistentDescriptorSet::new(
+    let first_binning_set = PersistentDescriptorSet::new(
         &descriptor_set_allocator,
         layout.clone(),
         [
@@ -419,12 +485,58 @@ fn test_radix_sort() {
             WriteDescriptorSet::buffer(1, b_alt_buffer.clone()),
             WriteDescriptorSet::buffer(2, b_globalhist_buffer.clone()),
             WriteDescriptorSet::buffer(3, b_index_buffer.clone()),
-            WriteDescriptorSet::buffer(4, b_passhist_buffer.clone()),
-            //WriteDescriptorSet::buffer(5, out_reduction_buffer.clone()),
+            WriteDescriptorSet::buffer(4, b_passhist_first_buffer.clone()),
+            WriteDescriptorSet::buffer(5, pass_num_buffer.clone()),
         ],
         [],
     )
     .unwrap();
+
+    let second_binning_set = PersistentDescriptorSet::new(
+        &descriptor_set_allocator,
+        layout.clone(),
+        [
+            WriteDescriptorSet::buffer(0, b_alt_buffer.clone()),
+            WriteDescriptorSet::buffer(1, b_sort_buffer.clone()),
+            WriteDescriptorSet::buffer(2, b_globalhist_buffer.clone()),
+            WriteDescriptorSet::buffer(3, b_index_buffer.clone()),
+            WriteDescriptorSet::buffer(4, b_passhist_second_buffer.clone()),
+            WriteDescriptorSet::buffer(5, pass_num_buffer.clone()),
+        ],
+        [],
+    )
+    .unwrap();
+
+    let third_binning_set = PersistentDescriptorSet::new(
+        &descriptor_set_allocator,
+        layout.clone(),
+        [
+            WriteDescriptorSet::buffer(0, b_sort_buffer.clone()),
+            WriteDescriptorSet::buffer(1, b_alt_buffer.clone()),
+            WriteDescriptorSet::buffer(2, b_globalhist_buffer.clone()),
+            WriteDescriptorSet::buffer(3, b_index_buffer.clone()),
+            WriteDescriptorSet::buffer(4, b_passhist_third_buffer.clone()),
+            WriteDescriptorSet::buffer(5, pass_num_buffer.clone()),
+        ],
+        [],
+    )
+    .unwrap();
+
+    let fourth_binning_set = PersistentDescriptorSet::new(
+        &descriptor_set_allocator,
+        layout.clone(),
+        [
+            WriteDescriptorSet::buffer(0, b_alt_buffer.clone()),
+            WriteDescriptorSet::buffer(1, b_sort_buffer.clone()),
+            WriteDescriptorSet::buffer(2, b_globalhist_buffer.clone()),
+            WriteDescriptorSet::buffer(3, b_index_buffer.clone()),
+            WriteDescriptorSet::buffer(4, b_passhist_fourth_buffer.clone()),
+            WriteDescriptorSet::buffer(5, pass_num_buffer.clone()),
+        ],
+        [],
+    )
+    .unwrap();
+
 
     command_buffer_allocator
         .try_reset_pool(
@@ -439,6 +551,7 @@ fn test_radix_sort() {
         CommandBufferUsage::OneTimeSubmit,
     )
     .unwrap();
+
     builder
         // The command buffer only does one thing: execute the compute pipeline. This is called a
         // *dispatch* operation.
@@ -453,22 +566,19 @@ fn test_radix_sort() {
             PipelineBindPoint::Compute,
             pipeline.layout().clone(),
             0,
-            set,
+            first_binning_set,
         )
         .unwrap()
         .dispatch([BINNING_THREAD_BLOCKS, 1, 1])
         .unwrap();
-    println!(
-        "enable subgroup size control {}",
-        device.enabled_extensions().ext_subgroup_size_control
-    );
+
 
     // Finish building the command buffer by calling `build`.
     let command_buffer = builder.build().unwrap();
 
     // Let's execute this command buffer now.
-    let future = sync::now(device)
-        .then_execute(queue, command_buffer)
+    let future = sync::now(device.clone())
+        .then_execute(queue.clone(), command_buffer.clone())
         .unwrap()
         // This line instructs the GPU to signal a *fence* once the command buffer has finished
         // execution. A fence is a Vulkan object that allows the CPU to know when the GPU has
@@ -476,6 +586,7 @@ fn test_radix_sort() {
         // the CPU until the GPU has reached that point in the execution.
         .then_signal_fence_and_flush()
         .unwrap();
+
 
     // Blocks execution until the GPU has finished the operation. This method only exists on the
     // future that corresponds to a signalled fence. In other words, this method wouldn't be
@@ -489,14 +600,103 @@ fn test_radix_sort() {
     // future, if the Rust language gets linear types vulkano may get modified so that only
     // fence-signalled futures can get destroyed like this.
     future.wait(None).unwrap();
+    
+    /* 
+    let mut builder_sec = AutoCommandBufferBuilder::primary(
+        &command_buffer_allocator,
+        queue.queue_family_index(),
+        CommandBufferUsage::OneTimeSubmit,
+    )
+    .unwrap();
 
+    builder_sec
+        .bind_pipeline_compute(pipeline.clone())
+        .unwrap()
+        .bind_descriptor_sets(
+            PipelineBindPoint::Compute,
+            pipeline.layout().clone(),
+            0,
+            second_binning_set,
+        )
+        .unwrap()
+        .dispatch([BINNING_THREAD_BLOCKS, 1, 1])
+        .unwrap();
+
+    let command_buffer_sec = builder_sec.build().unwrap(); 
+    
+    let future = sync::now(device.clone())
+    .then_execute(queue.clone(), command_buffer_sec.clone())
+    .unwrap()
+    .then_signal_fence_and_flush()
+    .unwrap();
+    future.wait(None).unwrap();
+    
+    let mut builder_third = AutoCommandBufferBuilder::primary(
+        &command_buffer_allocator,
+        queue.queue_family_index(),
+        CommandBufferUsage::OneTimeSubmit,
+    )
+    .unwrap();
+
+    builder_third
+        .bind_pipeline_compute(pipeline.clone())
+        .unwrap()
+        .bind_descriptor_sets(
+            PipelineBindPoint::Compute,
+            pipeline.layout().clone(),
+            0,
+            third_binning_set,
+        )
+        .unwrap()
+        .dispatch([BINNING_THREAD_BLOCKS, 1, 1])
+        .unwrap();
+
+    let command_buffer_third = builder_third.build().unwrap(); 
+    
+    let future = sync::now(device.clone())
+    .then_execute(queue.clone(), command_buffer_third.clone())
+    .unwrap()
+    .then_signal_fence_and_flush()
+    .unwrap();
+    future.wait(None).unwrap();
+    
+    let mut builder_fourth = AutoCommandBufferBuilder::primary(
+        &command_buffer_allocator,
+        queue.queue_family_index(),
+        CommandBufferUsage::OneTimeSubmit,
+    )
+    .unwrap();
+
+    builder_fourth
+        .bind_pipeline_compute(pipeline.clone())
+        .unwrap()
+        .bind_descriptor_sets(
+            PipelineBindPoint::Compute,
+            pipeline.layout().clone(),
+            0,
+            fourth_binning_set,
+        )
+        .unwrap()
+        .dispatch([BINNING_THREAD_BLOCKS, 1, 1])
+        .unwrap();
+
+    let command_buffer_fourth = builder_fourth.build().unwrap();
+
+    let future = sync::now(device.clone())
+    .then_execute(queue.clone(), command_buffer_fourth.clone())
+    .unwrap()
+    .then_signal_fence_and_flush()
+    .unwrap();
+    future.wait(None).unwrap();
+    */
     // Now that the GPU is done, the content of the buffer should have been modified. Let's check
     // it out. The call to `read()` would return an error if the buffer was still in use by the
     // GPU.
     let _data_buffer_content = b_sort_buffer.read().unwrap();
     let b_global_hist = b_globalhist_buffer.read().unwrap();
     let b_alt_buffer_content = b_alt_buffer.read().unwrap();
-    let out_reduction_content = out_reduction_buffer.read().unwrap();
+    let b_pass_hist = b_passhist_first_buffer.read().unwrap();
+    let pass_num_content = pass_num_buffer.read().unwrap();
     /*
     let mut file = match File::create("output.txt") {
         Err(why) => panic!("couldn't create: {}", why),
@@ -515,12 +715,23 @@ fn test_radix_sort() {
         println!("b_alt[{}]: {}", n, b_alt_buffer_content[n as usize]);
     }
 
-    for n in 0..256 {
+    for n in 0..1024 {
         println!(
-            "out_reduction_buffer[{}]: {}",
-            n, out_reduction_content[n as usize]
+            "b_global_hist[{}]: {}",
+            n, b_global_hist[n as usize]
         );
     }
-    */
+    for n in 0..BINNING_THREAD_BLOCKS*256 {
+        println!(
+            "b_pass_hist[{}]: {}",
+            n, b_pass_hist[n as usize]
+        );
+    }
+
+    println!(
+        "pass_num: {}, radix_shift: {}",
+        pass_num_content.pass_num, pass_num_content.radix_shift
+    );
+    
     println!("Success");
 }

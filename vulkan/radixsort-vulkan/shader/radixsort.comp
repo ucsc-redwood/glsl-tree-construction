@@ -591,41 +591,12 @@ void main(){
         debugPrintfEXT("subgroups %u, subgroup_threads: %u\n", gl_NumSubgroups, gl_SubgroupSize);
 
     }
-  initialization();
-  groupMemoryBarrier();
-  barrier();
-  GlobalHistogram();
-  groupMemoryBarrier();
-  barrier();
   
   BinningPass(0);
   groupMemoryBarrier();
   barrier();
-  
-  BinningPass(1);
-  groupMemoryBarrier();
-  barrier();
+
   
   finalize();
-  /*
-  groupMemoryBarrier();
-  barrier();
-    
-  BinningPass(2);
-  groupMemoryBarrier();
-  barrier();
-  BinningPass(3);
-  groupMemoryBarrier();
-  barrier();
-*/
-  //barrier();
-  //test();
-  /*
-  barrier();
-  BinningPass(1);
-  barrier();
-  BinningPass(2);
-  barrier();
-  BinningPass(3);
-    */
+ 
 }
