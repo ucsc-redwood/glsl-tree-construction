@@ -220,10 +220,7 @@ pub fn histogram(input_size: u32, input_data: &mut Vec<u32>, global_hist: &mut V
         .unwrap()
         .dispatch([global_hist_thread_blocks, 1, 1])
         .unwrap();
-    println!(
-        "enable subgroup size control {}",
-        device.enabled_extensions().ext_subgroup_size_control
-    );
+
 
     // Finish building the command buffer by calling `build`.
     let command_buffer = builder.build().unwrap();

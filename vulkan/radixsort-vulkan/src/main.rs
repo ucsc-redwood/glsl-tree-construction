@@ -177,14 +177,14 @@ struct Params{
     radix_shift: u32,
 }
 const PARTITION_SIZE: u32 = 7680;
-const INPUT_SIZE: u32 = 131072;
+const INPUT_SIZE: u32 = 65536;
 const BINNING_THREAD_BLOCKS: u32 = (INPUT_SIZE + PARTITION_SIZE - 1) / PARTITION_SIZE;
 fn test_radix_sort() {
     // initialize the data
     println!("binning_thread_blocks: {}", BINNING_THREAD_BLOCKS);
     let mut rng = rand::thread_rng();
-    let mut input_data: Vec<u32> = (0..131072).map(|x| x).collect();//.map(|_| rng.gen()).collect();
-
+    let mut input_data: Vec<u32> = (1..=INPUT_SIZE).map(|x| x).collect();//.map(|_| rng.gen()).collect();
+    input_data.reverse();
     //let mut random_numbers: Vec<[f32; 4]> = [[0.0; 4]; 15360].to_vec();
     //random_numbers.reverse();
     //init::init_random(&mut random_numbers);
@@ -204,14 +204,14 @@ fn test_radix_sort() {
     let pass_hist_fourth = vec![0 as u32; (BINNING_THREAD_BLOCKS*256) as usize];
 
     let mut b_globalHist = vec![0 as u32; 256 * 4];
-    let mut b_alt = vec![0 as u32; 131072];
+    let mut b_alt = vec![0 as u32; INPUT_SIZE as usize];
     let mut b_index = vec![0 as u32; 4];
     let mut param = Params{
         pass_num: 0,
         radix_shift: 0,
     };
 
-    histogram::histogram(131072, &mut input_data, &mut b_globalHist);
+    histogram::histogram(INPUT_SIZE, &mut input_data, &mut b_globalHist);
     for n in 0..1024 {
         println!("b_globalHist[{}]: {}", n, b_globalHist[n as usize]);
     }
@@ -544,7 +544,7 @@ fn test_radix_sort() {
             CommandPoolResetFlags::RELEASE_RESOURCES,
         )
         .unwrap();
-    /*
+    
     // In order to execute our operation, we have to build a command buffer.
     let mut builder = AutoCommandBufferBuilder::primary(
         &command_buffer_allocator,
@@ -632,7 +632,7 @@ fn test_radix_sort() {
     .unwrap();
     future.wait(None).unwrap();
     
-
+    
     let mut builder_third = AutoCommandBufferBuilder::primary(
         &command_buffer_allocator,
         queue.queue_family_index(),
@@ -661,6 +661,7 @@ fn test_radix_sort() {
     .then_signal_fence_and_flush()
     .unwrap();
     future.wait(None).unwrap();
+    
     
     let mut builder_fourth = AutoCommandBufferBuilder::primary(
         &command_buffer_allocator,
@@ -709,6 +710,7 @@ fn test_radix_sort() {
         file.write_u32::<LittleEndian>(*data).unwrap();
     }
     */
+    
 
     for n in 0..15360 / 2 {
         println!("sorted[{}]: {}", n, _data_buffer_content[n as usize]);
@@ -734,7 +736,7 @@ fn test_radix_sort() {
         "pass_num: {}, radix_shift: {}",
         pass_num_content.pass_num, pass_num_content.radix_shift
     );
-    */
+    
     
     println!("Success");
 }

@@ -7,7 +7,7 @@
 #extension GL_KHR_shader_subgroup_shuffle : enable
 #extension GL_EXT_debug_printf : require
 
-#define input_size 131072
+#define input_size 65536
 
 #define RADIX_BIN 256
 #define RADIX_LOG 8
@@ -20,7 +20,7 @@
 #define LANE_LOG 5
 
 #define LANE gl_LocalInvocationID.x // the idx of thread in the subgroup
-#define SUBGROUP_IDX  gl_LocalInvocationID.y//gl_SubgroupID // the idx of subgroup the thread belongs to might be wrong
+#define SUBGROUP_IDX  gl_SubgroupID // the idx of subgroup the thread belongs to might be wrong
 #define SUBGROUP_THREAD_IDX gl_GlobalInvocationID.x //(LANE + (SUBGROUP_IDX << LANE_LOG)) // the subgroup relative thread idx                                 
 
 
@@ -84,7 +84,7 @@ shared uint s_localHistograms[RADIX_BIN];
 
 
 uint InclusiveWarpScanCircularShift(uint val){
-    for (uint i = 1; i <= (LANE_COUNT >> 1); i <<= 1){
+    for (uint i = 1; i <= 16; i <<= 1){
         const uint t = subgroupShuffleUp(val, i);
         if (gl_SubgroupInvocationID >= i)
             val += t;
@@ -151,17 +151,17 @@ void k_DigitBinning(){
         for (uint i = 0; i < BIN_KEYS_PER_THREAD; ++i){
             uint warpFlags = 0xFFFFFFFF;
             for (int k = 0; k < RADIX_LOG; ++k){
-                const bool t2 = ((keys[i] >> k) + radix_shift & 1) > 0;
+                const bool t2 = (((keys[i] >> k) + radix_shift) & 1) > 0;
                 warpFlags &= (t2 ? 0 : 0xFFFFFFFF) ^ subgroupBallot(t2).x;
             }
 
             // Number of peers having same digit as key[i]
             // maybe it is wrong?
-            const uint bits = bitCount(warpFlags & getLaneMaskLt());
+            const uint bits = subgroupBallotExclusiveBitCount(uvec4(warpFlags,0,0,0));//bitCount(warpFlags & getLaneMaskLt());
 
             uint prev;
             if (bits == 0)
-                prev = atomicAdd(s_subgroupHistograms[(SUBGROUP_IDX << RADIX_LOG) + (keys[i] >> radix_shift & RADIX_MASK)], bitCount(warpFlags));
+                prev = atomicAdd(s_subgroupHistograms[(gl_SubgroupID.x << RADIX_LOG) + (keys[i] >> radix_shift & RADIX_MASK)], bitCount(warpFlags));
             int shuffleIndex = int(findLSB(warpFlags));
             _offsets[i] = subgroupShuffle(prev, shuffleIndex) + bits;
         }
@@ -185,7 +185,7 @@ void k_DigitBinning(){
         barrier();
 
         if (gl_LocalInvocationID.x < (RADIX_BIN >> LANE_LOG))
-            s_subgroupHistograms[gl_LocalInvocationID.x << LANE_LOG] = ActiveExclusiveWarpScan(s_subgroupHistograms[gl_LocalInvocationID.x << LANE_LOG]);
+            s_subgroupHistograms[gl_LocalInvocationID.x << LANE_LOG] = subgroupExclusiveAdd(s_subgroupHistograms[gl_LocalInvocationID.x << LANE_LOG]);//ActiveExclusiveWarpScan(s_subgroupHistograms[gl_LocalInvocationID.x << LANE_LOG]);
         groupMemoryBarrier();
         barrier();
 
@@ -198,7 +198,7 @@ void k_DigitBinning(){
         if (gl_SubgroupID > 0){
             for (uint i = 0; i < BIN_KEYS_PER_THREAD; ++i){
                 const uint t2 = keys[i] >> radix_shift & RADIX_MASK;
-                _offsets[i] += s_subgroupHistograms[(SUBGROUP_IDX << RADIX_LOG) + t2] + s_subgroupHistograms[t2]; 
+                _offsets[i] += s_subgroupHistograms[(gl_SubgroupID << RADIX_LOG) + t2] + s_subgroupHistograms[t2]; 
             }
         }else{
             for (uint i = 0; i < BIN_KEYS_PER_THREAD; ++i)  {
@@ -294,7 +294,7 @@ void k_DigitBinning(){
                 warpFlags &= (t ? 0 : 0xFFFFFFFF) ^ subgroupBallot(t).x;
             }
 
-            const uint bits = uint(bitCount(warpFlags & getLaneMaskLt()));
+            const uint bits = subgroupBallotExclusiveBitCount(uvec4(warpFlags,0,0,0));//uint(bitCount(warpFlags & getLaneMaskLt()));
 
             for (uint k = 0; k < BIN_SUBGROUPS; ++k){
                 uint prev;

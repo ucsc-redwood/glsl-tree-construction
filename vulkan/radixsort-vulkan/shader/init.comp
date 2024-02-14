@@ -6,7 +6,7 @@
 #extension GL_EXT_debug_printf : require
 
 
-#define input_size 131072
+#define input_size 65536
 
 #define RADIX_BIN 256
 #define RADIX_LOG 8
