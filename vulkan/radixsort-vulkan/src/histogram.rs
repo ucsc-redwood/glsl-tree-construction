@@ -35,9 +35,12 @@ use vulkano::{
 const GLOBAL_HIST_PARTITION_SIZE: u32 = 65536;
 const GLOBAL_HIST_THREADS: u32 = 128;
 
-pub fn histogram(input_size: u32, input_data: &mut Vec<u32>, global_hist: &mut Vec<u32>){
+pub fn histogram(input_size: u32, input_data: & Vec<u32>, global_hist: &mut Vec<u32>){
     // initialize the data
     let global_hist_thread_blocks: u32 = (input_size + GLOBAL_HIST_PARTITION_SIZE - 1) / GLOBAL_HIST_PARTITION_SIZE;
+
+    let s_global_hist_first: Vec<u32> = vec![0; 512 as usize];
+
     println!("global_hist_thread_blocks: {}", global_hist_thread_blocks);
     // As with other examples, the first step is to create an instance.
     let library = VulkanLibrary::new().unwrap();
@@ -182,6 +185,22 @@ pub fn histogram(input_size: u32, input_data: &mut Vec<u32>, global_hist: &mut V
     )
     .unwrap();
 
+    let s_global_hist_buffer = Buffer::from_iter(
+        memory_allocator.clone(),
+        BufferCreateInfo {
+            usage: BufferUsage::STORAGE_BUFFER,
+            ..Default::default()
+        },
+        AllocationCreateInfo {
+            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                | MemoryTypeFilter::HOST_RANDOM_ACCESS,
+            ..Default::default()
+        },
+        s_global_hist_first,
+    )
+    .unwrap();
+
+
     let layout = pipeline.layout().set_layouts().first().unwrap();
 
     let set = PersistentDescriptorSet::new(
@@ -190,6 +209,7 @@ pub fn histogram(input_size: u32, input_data: &mut Vec<u32>, global_hist: &mut V
         [
             WriteDescriptorSet::buffer(0, b_sort_buffer.clone()),
             WriteDescriptorSet::buffer(1, b_globalhist_buffer.clone()),
+            WriteDescriptorSet::buffer(2, s_global_hist_buffer.clone()),
         ],
         [],
     )
@@ -205,7 +225,7 @@ pub fn histogram(input_size: u32, input_data: &mut Vec<u32>, global_hist: &mut V
     let mut builder = AutoCommandBufferBuilder::primary(
         &command_buffer_allocator,
         queue.queue_family_index(),
-        CommandBufferUsage::MultipleSubmit,
+        CommandBufferUsage::OneTimeSubmit,
     )
     .unwrap();
     builder
@@ -226,8 +246,8 @@ pub fn histogram(input_size: u32, input_data: &mut Vec<u32>, global_hist: &mut V
     let command_buffer = builder.build().unwrap();
 
     // Let's execute this command buffer now.
-    let future = sync::now(device.clone())
-        .then_execute(queue.clone(), command_buffer.clone())
+    let future = sync::now(device)
+        .then_execute(queue, command_buffer)
         .unwrap()
         // This line instructs the GPU to signal a *fence* once the command buffer has finished
         // execution. A fence is a Vulkan object that allows the CPU to know when the GPU has
@@ -249,28 +269,21 @@ pub fn histogram(input_size: u32, input_data: &mut Vec<u32>, global_hist: &mut V
     // fence-signalled futures can get destroyed like this.
     future.wait(None).unwrap();
 
-    let future = sync::now(device.clone())
-    .then_execute(queue.clone(), command_buffer.clone())
-    .unwrap()
-    .then_signal_fence_and_flush()
-    .unwrap();
-
-
-    future.wait(None).unwrap();
-
 
     // Now that the GPU is done, the content of the buffer should have been modified. Let's check
     // it out. The call to `read()` would return an error if the buffer was still in use by the
     // GPU.
-    let _data_buffer_content = b_sort_buffer.read().unwrap();
     let b_global_hist = b_globalhist_buffer.read().unwrap();
-
+    let s_global_hist_first = s_global_hist_buffer.read().unwrap();
     for (i, val) in b_global_hist.iter().enumerate() {
         global_hist[i] = *val;
     }
 
-    for (i, val) in _data_buffer_content.iter().enumerate() {
-        input_data[i] = *val;
+    for n in 0..1024{
+        println!("after: b_global_hist[{}]: {}", n, global_hist[n as usize]);
+    }
+    for (i, val) in s_global_hist_first.iter().enumerate(){
+        println!("s_global_hist_first[{}]: {}", i, s_global_hist_first[i]);
     }
 
 }

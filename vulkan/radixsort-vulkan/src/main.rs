@@ -3,7 +3,7 @@ use byteorder::{LittleEndian, WriteBytesExt};
 use cgmath::Vector4;
 use rand::Rng;
 use vulkano::buffer::BufferContents;
-use vulkano::descriptor_set::DescriptorSetWithOffsets;
+use vulkano::descriptor_set::{CopyDescriptorSet, DescriptorSetWithOffsets};
 use std::sync::Arc;
 use std::vec;
 use std::{fs::File, io::Write};
@@ -176,6 +176,7 @@ struct Params{
     pass_num: u32,
     radix_shift: u32,
 }
+
 const PARTITION_SIZE: u32 = 7680;
 const INPUT_SIZE: u32 = 65536;
 const BINNING_THREAD_BLOCKS: u32 = (INPUT_SIZE + PARTITION_SIZE - 1) / PARTITION_SIZE;
@@ -206,15 +207,7 @@ fn test_radix_sort() {
     let mut b_globalHist = vec![0 as u32; 256 * 4];
     let mut b_alt = vec![0 as u32; INPUT_SIZE as usize];
     let mut b_index = vec![0 as u32; 4];
-    let mut param = Params{
-        pass_num: 0,
-        radix_shift: 0,
-    };
-
-    histogram::histogram(INPUT_SIZE, &mut input_data, &mut b_globalHist);
-    for n in 0..1024 {
-        println!("b_globalHist[{}]: {}", n, b_globalHist[n as usize]);
-    }
+    histogram::histogram(INPUT_SIZE, &input_data, &mut b_globalHist);
     
     // As with other examples, the first step is to create an instance.
     let library = VulkanLibrary::new().unwrap();
@@ -463,10 +456,67 @@ fn test_radix_sort() {
                 | MemoryTypeFilter::HOST_RANDOM_ACCESS,
             ..Default::default()
         },
-        param,
+        Params{
+            pass_num: 0,
+            radix_shift: 0,
+        },
     )
     .unwrap();
 
+    let pass_num_sec_buffer = Buffer::from_data(
+        memory_allocator.clone(),
+        BufferCreateInfo {
+            usage: BufferUsage::STORAGE_BUFFER,
+            ..Default::default()
+        },
+        AllocationCreateInfo {
+            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                | MemoryTypeFilter::HOST_RANDOM_ACCESS,
+            ..Default::default()
+        },
+        Params{
+            pass_num: 1,
+            radix_shift: 8,
+        },
+    )
+    .unwrap();
+
+    let pass_num_third_buffer = Buffer::from_data(
+        memory_allocator.clone(),
+        BufferCreateInfo {
+            usage: BufferUsage::STORAGE_BUFFER,
+            ..Default::default()
+        },
+        AllocationCreateInfo {
+            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                | MemoryTypeFilter::HOST_RANDOM_ACCESS,
+            ..Default::default()
+        },
+        Params{
+            pass_num: 2,
+            radix_shift: 16,
+        },
+    )
+    .unwrap();
+
+
+    let pass_num_fourth_buffer = Buffer::from_data(
+        memory_allocator.clone(),
+        BufferCreateInfo {
+            usage: BufferUsage::STORAGE_BUFFER,
+            ..Default::default()
+        },
+        AllocationCreateInfo {
+            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                | MemoryTypeFilter::HOST_RANDOM_ACCESS,
+            ..Default::default()
+        },
+        Params{
+            pass_num: 3,
+            radix_shift: 24,
+        },
+    )
+    .unwrap();
     // In order to let the shader access the buffer, we need to build a *descriptor set* that
     // contains the buffer.
     //
@@ -476,7 +526,7 @@ fn test_radix_sort() {
     // If you want to run the pipeline on multiple different buffers, you need to create multiple
     // descriptor sets that each contain the buffer you want to run the shader on.
     let layout = pipeline.layout().set_layouts().first().unwrap();
-
+    
     let first_binning_set = PersistentDescriptorSet::new(
         &descriptor_set_allocator,
         layout.clone(),
@@ -501,7 +551,7 @@ fn test_radix_sort() {
             WriteDescriptorSet::buffer(2, b_globalhist_buffer.clone()),
             WriteDescriptorSet::buffer(3, b_index_buffer.clone()),
             WriteDescriptorSet::buffer(4, b_passhist_second_buffer.clone()),
-            WriteDescriptorSet::buffer(5, pass_num_buffer.clone()),
+            WriteDescriptorSet::buffer(5, pass_num_sec_buffer.clone()),
         ],
         [],
     )
@@ -516,7 +566,7 @@ fn test_radix_sort() {
             WriteDescriptorSet::buffer(2, b_globalhist_buffer.clone()),
             WriteDescriptorSet::buffer(3, b_index_buffer.clone()),
             WriteDescriptorSet::buffer(4, b_passhist_third_buffer.clone()),
-            WriteDescriptorSet::buffer(5, pass_num_buffer.clone()),
+            WriteDescriptorSet::buffer(5, pass_num_third_buffer.clone()),
         ],
         [],
     )
@@ -531,7 +581,7 @@ fn test_radix_sort() {
             WriteDescriptorSet::buffer(2, b_globalhist_buffer.clone()),
             WriteDescriptorSet::buffer(3, b_index_buffer.clone()),
             WriteDescriptorSet::buffer(4, b_passhist_fourth_buffer.clone()),
-            WriteDescriptorSet::buffer(5, pass_num_buffer.clone()),
+            WriteDescriptorSet::buffer(5, pass_num_fourth_buffer.clone()),
         ],
         [],
     )
@@ -601,6 +651,7 @@ fn test_radix_sort() {
     // future, if the Rust language gets linear types vulkano may get modified so that only
     // fence-signalled futures can get destroyed like this.
     future.wait(None).unwrap();
+
     
     
     let mut builder_sec = AutoCommandBufferBuilder::primary(
@@ -632,7 +683,7 @@ fn test_radix_sort() {
     .unwrap();
     future.wait(None).unwrap();
     
-    
+    /*
     let mut builder_third = AutoCommandBufferBuilder::primary(
         &command_buffer_allocator,
         queue.queue_family_index(),
@@ -691,14 +742,15 @@ fn test_radix_sort() {
     .then_signal_fence_and_flush()
     .unwrap();
     future.wait(None).unwrap();
-    
+    */
     // Now that the GPU is done, the content of the buffer should have been modified. Let's check
     // it out. The call to `read()` would return an error if the buffer was still in use by the
     // GPU.
+    
     let _data_buffer_content = b_sort_buffer.read().unwrap();
     let b_global_hist = b_globalhist_buffer.read().unwrap();
     let b_alt_buffer_content = b_alt_buffer.read().unwrap();
-    let b_pass_hist = b_passhist_first_buffer.read().unwrap();
+    let b_pass_hist = b_passhist_second_buffer.read().unwrap();
     let pass_num_content = pass_num_buffer.read().unwrap();
     /*
     let mut file = match File::create("output.txt") {
@@ -710,6 +762,7 @@ fn test_radix_sort() {
         file.write_u32::<LittleEndian>(*data).unwrap();
     }
     */
+   
     
 
     for n in 0..15360 / 2 {
@@ -731,7 +784,6 @@ fn test_radix_sort() {
             n, b_pass_hist[n as usize]
         );
     }
-
     println!(
         "pass_num: {}, radix_shift: {}",
         pass_num_content.pass_num, pass_num_content.radix_shift

@@ -71,12 +71,8 @@ layout(set = 0, binding = 5) buffer Params{
 };
 
 
-layout(local_size_x = 512) in;
 
-shared uint s_globalHistFirst[RADIX_BIN * 2];
-shared uint s_globalHistSec[RADIX_BIN * 2];
-shared uint s_globalHistThird[RADIX_BIN * 2];
-shared uint s_globalHistFourth[RADIX_BIN * 2];
+layout(local_size_x = 512) in;
 
 shared uint s_subgroupHistograms[BIN_PART_SIZE];
 shared uint s_localHistograms[RADIX_BIN];
@@ -320,10 +316,4 @@ void k_DigitBinning(){
 
 void main(){
     k_DigitBinning();
-    groupMemoryBarrier();
-    barrier();
-    if (gl_GlobalInvocationID.x == 0){
-        pass_num += 1;
-        radix_shift += RADIX_LOG;
-    }
 }
