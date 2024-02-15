@@ -147,7 +147,7 @@ void k_DigitBinning(){
         for (uint i = 0; i < BIN_KEYS_PER_THREAD; ++i){
             uint warpFlags = 0xFFFFFFFF;
             for (int k = 0; k < RADIX_LOG; ++k){
-                const bool t2 = (((keys[i] >> k) + radix_shift) & 1) > 0;
+                const bool t2 = (keys[i] >> k + radix_shift & 1) > 0;
                 warpFlags &= (t2 ? 0 : 0xFFFFFFFF) ^ subgroupBallot(t2).x;
             }
 
@@ -157,7 +157,7 @@ void k_DigitBinning(){
 
             uint prev;
             if (bits == 0)
-                prev = atomicAdd(s_subgroupHistograms[(gl_SubgroupID.x << RADIX_LOG) + (keys[i] >> radix_shift & RADIX_MASK)], bitCount(warpFlags));
+                prev = atomicAdd(s_subgroupHistograms[(gl_SubgroupID.x << RADIX_LOG) + ((keys[i] >> radix_shift) & RADIX_MASK)], bitCount(warpFlags));
             int shuffleIndex = int(findLSB(warpFlags));
             _offsets[i] = subgroupShuffle(prev, shuffleIndex) + bits;
         }

@@ -683,7 +683,7 @@ fn test_radix_sort() {
     .unwrap();
     future.wait(None).unwrap();
     
-    /*
+    
     let mut builder_third = AutoCommandBufferBuilder::primary(
         &command_buffer_allocator,
         queue.queue_family_index(),
@@ -742,7 +742,7 @@ fn test_radix_sort() {
     .then_signal_fence_and_flush()
     .unwrap();
     future.wait(None).unwrap();
-    */
+    
     // Now that the GPU is done, the content of the buffer should have been modified. Let's check
     // it out. The call to `read()` would return an error if the buffer was still in use by the
     // GPU.
@@ -751,7 +751,7 @@ fn test_radix_sort() {
     let b_global_hist = b_globalhist_buffer.read().unwrap();
     let b_alt_buffer_content = b_alt_buffer.read().unwrap();
     let b_pass_hist = b_passhist_second_buffer.read().unwrap();
-    let pass_num_content = pass_num_buffer.read().unwrap();
+    let pass_num_content = pass_num_sec_buffer.read().unwrap();
     /*
     let mut file = match File::create("output.txt") {
         Err(why) => panic!("couldn't create: {}", why),
