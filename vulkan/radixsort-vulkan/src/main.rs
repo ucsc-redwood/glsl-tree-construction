@@ -33,6 +33,8 @@ use vulkano::{
     sync::{self, GpuFuture},
     DeviceSize, VulkanLibrary,
 };
+use std::time::Instant;
+
 mod build_radix_tree;
 mod edge_count;
 mod init;
@@ -178,7 +180,7 @@ struct Params{
 }
 
 const PARTITION_SIZE: u32 = 7680;
-const INPUT_SIZE: u32 = 65536;
+const INPUT_SIZE: u32 = 10000000;
 const BINNING_THREAD_BLOCKS: u32 = (INPUT_SIZE + PARTITION_SIZE - 1) / PARTITION_SIZE;
 fn test_radix_sort() {
     // initialize the data
@@ -198,7 +200,6 @@ fn test_radix_sort() {
         println!("morton_keys[{}]: {}", n, morton_keys[n as usize]);
     }
     */
-
     let pass_hist_first = vec![0 as u32; (BINNING_THREAD_BLOCKS*256) as usize];
     let pass_hist_second = vec![0 as u32; (BINNING_THREAD_BLOCKS*256) as usize];
     let pass_hist_third = vec![0 as u32; (BINNING_THREAD_BLOCKS*256) as usize];
@@ -207,8 +208,9 @@ fn test_radix_sort() {
     let mut b_globalHist = vec![0 as u32; 256 * 4];
     let mut b_alt = vec![0 as u32; INPUT_SIZE as usize];
     let mut b_index = vec![0 as u32; 4];
-    histogram::histogram(INPUT_SIZE, &input_data, &mut b_globalHist);
     
+    histogram::histogram(INPUT_SIZE, &input_data, &mut b_globalHist);
+
     // As with other examples, the first step is to create an instance.
     let library = VulkanLibrary::new().unwrap();
     let instance = Instance::new(
@@ -595,6 +597,8 @@ fn test_radix_sort() {
         )
         .unwrap();
     
+
+    let start = Instant::now();
     // In order to execute our operation, we have to build a command buffer.
     let mut builder = AutoCommandBufferBuilder::primary(
         &command_buffer_allocator,
@@ -742,7 +746,8 @@ fn test_radix_sort() {
     .then_signal_fence_and_flush()
     .unwrap();
     future.wait(None).unwrap();
-    
+    let duration = start.elapsed();
+    println!("Time taken: {:?}", duration);
     // Now that the GPU is done, the content of the buffer should have been modified. Let's check
     // it out. The call to `read()` would return an error if the buffer was still in use by the
     // GPU.
@@ -764,7 +769,7 @@ fn test_radix_sort() {
     */
    
     
-
+    /* 
     for n in 0..15360 / 2 {
         println!("sorted[{}]: {}", n, _data_buffer_content[n as usize]);
     }
@@ -788,6 +793,7 @@ fn test_radix_sort() {
         "pass_num: {}, radix_shift: {}",
         pass_num_content.pass_num, pass_num_content.radix_shift
     );
+    */
     
     
     println!("Success");

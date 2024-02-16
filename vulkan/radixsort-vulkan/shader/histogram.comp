@@ -7,7 +7,7 @@
 #extension GL_KHR_shader_subgroup_shuffle : enable
 #extension GL_EXT_debug_printf : require
 
-#define input_size 65536
+#define input_size 10000000
 
 #define RADIX_BIN 256
 #define RADIX_LOG 8
@@ -54,15 +54,12 @@ layout(set = 0, binding = 1)  buffer BGlobalHist {
     uint b_globalHist[1024];
 };
 
-layout(set = 0, binding = 2) buffer SGlobalHsitFirst{
-    uint s_globalHistFirst[RADIX_BIN*2];
-};
 
 
 
 layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
 
-//shared uint s_globalHistFirst[RADIX_BIN * 2];
+shared uint s_globalHistFirst[RADIX_BIN * 2];
 shared uint s_globalHistSec[RADIX_BIN * 2];
 shared uint s_globalHistThird[RADIX_BIN * 2];
 shared uint s_globalHistFourth[RADIX_BIN * 2];
@@ -120,7 +117,7 @@ void k_GlobalHistogram(){
         if (gl_WorkGroupID.x < gl_NumWorkGroups.x - 1){
             const uint partEnd = (gl_WorkGroupID.x + 1) * G_HIST_VEC_SIZE;
             for (uint i = gl_LocalInvocationID.x + (gl_WorkGroupID.x * G_HIST_VEC_SIZE); i < partEnd; i += gl_WorkGroupSize.x){
-                uvec4 t = uvec4(b_sort[i], b_sort[i*4 + 1], b_sort[i*4 + 2], b_sort[i*4 + 3]);
+                uvec4 t = uvec4(b_sort[i*4], b_sort[i*4 + 1], b_sort[i*4 + 2], b_sort[i*4 + 3]);
 
                 atomicAdd(s_globalHistFirst[segmentIndex + ((t.x) & 0xFF)], 1);
                 atomicAdd(s_globalHistSec[segmentIndex + ((t.x >> 8) & 0xFF)], 1);
@@ -155,6 +152,7 @@ void k_GlobalHistogram(){
             }
         }
     }
+
     groupMemoryBarrier();
     barrier();
     

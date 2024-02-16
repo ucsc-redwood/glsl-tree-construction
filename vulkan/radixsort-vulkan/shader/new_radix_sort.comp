@@ -7,7 +7,7 @@
 #extension GL_KHR_shader_subgroup_shuffle : enable
 #extension GL_EXT_debug_printf : require
 
-#define input_size 65536
+#define input_size 10000000
 
 #define RADIX_BIN 256
 #define RADIX_LOG 8

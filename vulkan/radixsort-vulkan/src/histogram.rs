@@ -185,21 +185,6 @@ pub fn histogram(input_size: u32, input_data: & Vec<u32>, global_hist: &mut Vec<
     )
     .unwrap();
 
-    let s_global_hist_buffer = Buffer::from_iter(
-        memory_allocator.clone(),
-        BufferCreateInfo {
-            usage: BufferUsage::STORAGE_BUFFER,
-            ..Default::default()
-        },
-        AllocationCreateInfo {
-            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
-                | MemoryTypeFilter::HOST_RANDOM_ACCESS,
-            ..Default::default()
-        },
-        s_global_hist_first,
-    )
-    .unwrap();
-
 
     let layout = pipeline.layout().set_layouts().first().unwrap();
 
@@ -209,7 +194,6 @@ pub fn histogram(input_size: u32, input_data: & Vec<u32>, global_hist: &mut Vec<
         [
             WriteDescriptorSet::buffer(0, b_sort_buffer.clone()),
             WriteDescriptorSet::buffer(1, b_globalhist_buffer.clone()),
-            WriteDescriptorSet::buffer(2, s_global_hist_buffer.clone()),
         ],
         [],
     )
@@ -274,7 +258,6 @@ pub fn histogram(input_size: u32, input_data: & Vec<u32>, global_hist: &mut Vec<
     // it out. The call to `read()` would return an error if the buffer was still in use by the
     // GPU.
     let b_global_hist = b_globalhist_buffer.read().unwrap();
-    let s_global_hist_first = s_global_hist_buffer.read().unwrap();
     for (i, val) in b_global_hist.iter().enumerate() {
         global_hist[i] = *val;
     }
@@ -282,8 +265,6 @@ pub fn histogram(input_size: u32, input_data: & Vec<u32>, global_hist: &mut Vec<
     for n in 0..1024{
         println!("after: b_global_hist[{}]: {}", n, global_hist[n as usize]);
     }
-    for (i, val) in s_global_hist_first.iter().enumerate(){
-        println!("s_global_hist_first[{}]: {}", i, s_global_hist_first[i]);
-    }
+
 
 }
