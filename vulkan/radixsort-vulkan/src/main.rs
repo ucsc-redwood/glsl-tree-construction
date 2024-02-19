@@ -180,14 +180,14 @@ struct Params{
 }
 
 const PARTITION_SIZE: u32 = 7680;
-const INPUT_SIZE: u32 = 10000000;
+const INPUT_SIZE: u32 = 131072;
 const BINNING_THREAD_BLOCKS: u32 = (INPUT_SIZE + PARTITION_SIZE - 1) / PARTITION_SIZE;
 fn test_radix_sort() {
     // initialize the data
     println!("binning_thread_blocks: {}", BINNING_THREAD_BLOCKS);
     let mut rng = rand::thread_rng();
     let mut input_data: Vec<u32> = (1..=INPUT_SIZE).map(|x| x).collect();//.map(|_| rng.gen()).collect();
-    input_data.reverse();
+    //input_data.reverse();
     //let mut random_numbers: Vec<[f32; 4]> = [[0.0; 4]; 15360].to_vec();
     //random_numbers.reverse();
     //init::init_random(&mut random_numbers);
@@ -753,7 +753,6 @@ fn test_radix_sort() {
     // GPU.
     
     let _data_buffer_content = b_sort_buffer.read().unwrap();
-    let b_global_hist = b_globalhist_buffer.read().unwrap();
     let b_alt_buffer_content = b_alt_buffer.read().unwrap();
     let b_pass_hist = b_passhist_second_buffer.read().unwrap();
     let pass_num_content = pass_num_sec_buffer.read().unwrap();
@@ -769,19 +768,12 @@ fn test_radix_sort() {
     */
    
     
-    /* 
+    
     for n in 0..15360 / 2 {
         println!("sorted[{}]: {}", n, _data_buffer_content[n as usize]);
     }
     for n in 0..15360 / 2 {
         println!("b_alt[{}]: {}", n, b_alt_buffer_content[n as usize]);
-    }
-
-    for n in 0..1024 {
-        println!(
-            "b_global_hist[{}]: {}",
-            n, b_global_hist[n as usize]
-        );
     }
     for n in 0..BINNING_THREAD_BLOCKS*256 {
         println!(
@@ -789,11 +781,6 @@ fn test_radix_sort() {
             n, b_pass_hist[n as usize]
         );
     }
-    println!(
-        "pass_num: {}, radix_shift: {}",
-        pass_num_content.pass_num, pass_num_content.radix_shift
-    );
-    */
     
     
     println!("Success");
