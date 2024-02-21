@@ -60,17 +60,6 @@ uint InclusiveWarpScanCircularShift(uint val){
 }
 
 
-uint ActiveExclusiveWarpScan(uint val) {
-    uint result = 0;
-    for (uint i = 1; i <= 16; i <<= 1){
-        uint t = subgroupShuffleUp(val, i);
-        if (gl_SubgroupInvocationID >= i)
-            val += t;
-    }
-    const uint t = subgroupShuffleUp(val, 1);
-    return (gl_SubgroupInvocationID > 0) ? t : 0;
-}
-
 
 void k_GlobalHistogram(){
     for (uint i = gl_LocalInvocationID.x; i < RADIX_BIN * 2; i += gl_WorkGroupSize.x){
