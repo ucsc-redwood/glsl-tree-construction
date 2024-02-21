@@ -290,7 +290,7 @@ void k_DigitBinning(){
                 warpFlags &= (t ? 0 : 0xFFFFFFFF) ^ subgroupBallot(t).x;
             }
 
-            const uint bits = subgroupBallotExclusiveBitCount(uvec4(warpFlags,0,0,0));//uint(bitCount(warpFlags & getLaneMaskLt()));
+            const uint bits = subgroupBallotExclusiveBitCount(uvec4(warpFlags,0,0,0));
 
             for (uint k = 0; k < BIN_SUBGROUPS; ++k){
                 uint prev;

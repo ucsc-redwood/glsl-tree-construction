@@ -8706,7 +8706,7 @@ after: b_global_hist[1021]: 131072
 after: b_global_hist[1022]: 131072
 after: b_global_hist[1023]: 131072
 Using device: NVIDIA Tegra Orin (nvgpu) (type: IntegratedGpu)
-Time taken: 4.619266ms
+Time taken: 7.215495ms
 sorted[0]: 1
 sorted[1]: 2
 sorted[2]: 3

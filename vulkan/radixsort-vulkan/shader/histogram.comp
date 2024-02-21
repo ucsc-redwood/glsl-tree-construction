@@ -148,10 +148,10 @@ void k_GlobalHistogram(){
 
     
     if (gl_SubgroupInvocationID < (RADIX_BIN >> LANE_LOG)){
-        s_globalHistFirst[gl_SubgroupInvocationID.x << LANE_LOG] = ActiveExclusiveWarpScan(s_globalHistFirst[gl_SubgroupInvocationID.x << LANE_LOG]);//subgroupExclusiveAdd(s_globalHistFirst[gl_SubgroupInvocationID.x << LANE_LOG]);
-        s_globalHistSec[gl_SubgroupInvocationID.x << LANE_LOG] = ActiveExclusiveWarpScan(s_globalHistSec[gl_SubgroupInvocationID.x << LANE_LOG]);//subgroupExclusiveAdd(s_globalHistSec[gl_SubgroupInvocationID.x << LANE_LOG]);
-        s_globalHistThird[gl_SubgroupInvocationID.x << LANE_LOG] = ActiveExclusiveWarpScan(s_globalHistThird[gl_SubgroupInvocationID.x << LANE_LOG]);//subgroupExclusiveAdd(s_globalHistThird[gl_SubgroupInvocationID.x << LANE_LOG]);
-        s_globalHistFourth[gl_SubgroupInvocationID.x << LANE_LOG] = ActiveExclusiveWarpScan(s_globalHistFourth[gl_SubgroupInvocationID.x << LANE_LOG]);//subgroupExclusiveAdd(s_globalHistFourth[gl_SubgroupInvocationID.x << LANE_LOG]);
+        s_globalHistFirst[gl_SubgroupInvocationID.x << LANE_LOG] = subgroupExclusiveAdd(s_globalHistFirst[gl_SubgroupInvocationID.x << LANE_LOG]);
+        s_globalHistSec[gl_SubgroupInvocationID.x << LANE_LOG] = subgroupExclusiveAdd(s_globalHistSec[gl_SubgroupInvocationID.x << LANE_LOG]);
+        s_globalHistThird[gl_SubgroupInvocationID.x << LANE_LOG] = subgroupExclusiveAdd(s_globalHistThird[gl_SubgroupInvocationID.x << LANE_LOG]);
+        s_globalHistFourth[gl_SubgroupInvocationID.x << LANE_LOG] = subgroupExclusiveAdd(s_globalHistFourth[gl_SubgroupInvocationID.x << LANE_LOG]);
     }
     groupMemoryBarrier();
     barrier();
