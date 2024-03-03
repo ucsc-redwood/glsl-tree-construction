@@ -1,0 +1,80 @@
+#version 450
+#extension GL_KHR_shader_subgroup_basic: enable
+#extension GL_KHR_shader_subgroup_ballot: enable
+#extension GL_KHR_shader_subgroup_arithmetic: enable
+#extension GL_KHR_shader_subgroup_vote: enable
+#extension GL_EXT_debug_printf : require
+
+
+#define input_size 65536
+
+#define RADIX_BIN 256
+#define RADIX_LOG 8
+#define RADIX_BITS 8
+#define RADIX_MASK 255 // Mask of digit bins
+#define RADIX_PASS 4//(sizeof(uint) * 8 + RADIX_BITS - 1) / RADIX_BITS
+
+#define LANE_COUNT 64 // number of threads in a subgroup
+#define LANE_MASK 63
+#define LANE_LOG 6
+
+#define LANE gl_LocalInvocationID.x // the idx of thread in the subgroup
+#define SUBGROUP_IDX  gl_LocalInvocationID.y//gl_SubgroupID // the idx of subgroup the thread belongs to might be wrong
+#define SUBGROUP_THREAD_IDX gl_GlobalInvocationID.x //(LANE + (SUBGROUP_IDX << LANE_LOG)) // the subgroup relative thread idx                                 
+
+
+//For the binning
+#define BIN_PART_SIZE       7680    //The partition tile size of a BinningPass threadblock
+#define BIN_HISTS_SIZE      4096    //The total size of all subgroup histograms in shared memory
+#define BIN_THREADS         512     //The number of threads in a BinningPass threadblock
+#define BIN_SUB_PART_SIZE   960     //The subpartition tile size of a single subgroup in a BinningPass threadblock
+#define BIN_SUBGROUPS       8       //The number of subgroup in a BinningPass threadblock previously 16
+#define BIN_KEYS_PER_THREAD 15      //The number of keys per thread in BinningPass threadblock previously 15
+
+#define BIN_PARTITIONS     (input_size / BIN_PART_SIZE)             //The number of partition tiles in a BinningPass
+#define BIN_SUB_PART_START (SUBGROUP_IDX * BIN_SUB_PART_SIZE)     //The starting offset of a subpartition tile
+#define BIN_PART_START     (partitionIndex * BIN_PART_SIZE)     //The starting offset of a partition tile
+#define BIN_THREAD_BLOCKS  (input_size + BIN_PART_SIZE - 1) / BIN_PART_SIZE
+
+
+
+layout(set = 0, binding = 0)  buffer BSortBuffer {
+    uint b_sort[input_size];
+};
+
+layout(set = 0, binding = 1)  buffer BAltBuffer {
+    uint b_alt[input_size];
+};
+
+layout(set = 0, binding = 2)  buffer BGlobalHist {
+    uint b_globalHist[1024];
+};
+
+layout(set = 0, binding = 3) coherent buffer BIndex {
+    uint b_index[4];
+};
+
+layout(set = 0, binding = 4) coherent buffer BPassHist {
+    uvec4 b_passHist[BIN_THREAD_BLOCKS*256];
+};
+
+layout(local_size_x = 512) in;
+
+void Init(){
+    for (int i = 0; i < BIN_THREAD_BLOCKS*256; i++){
+        b_passHist[i] = uvec4(0, 0, 0, 0);
+    }
+    for (int i = 0; i < input_size; i++){
+        b_alt[i] = 0;
+    }
+
+    for (int i = 0; i < 4; i++){
+        b_index[i] = 0;
+    }
+}
+
+void main(){
+    Init();
+}
+
+
