@@ -4,5 +4,12 @@
 
 int main(){
     auto app = RadixSort();
-    app.create_instance();
+    auto result = app.create_instance();
+    printf("Create instance result: %d\n", result);
+    app.create_device();
+    app.create_compute_queue();
+    app.build_compute_pipeline();
+    app.build_command_pool();
+    app.create_storage_buffer();
+    app.create_command_buffer();
 }

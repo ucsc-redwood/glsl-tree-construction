@@ -3,7 +3,6 @@
 #extension GL_KHR_shader_subgroup_ballot: enable
 #extension GL_KHR_shader_subgroup_arithmetic: enable
 #extension GL_KHR_shader_subgroup_vote: enable
-#extension GL_EXT_debug_printf : require
 
 
 layout(set = 0, binding = 0) buffer Keys
@@ -24,13 +23,13 @@ layout(local_size_x = 256) in;
 
 
 void findDups(){
-    uint num_tiles = ceil(float(n) / float(gl_WorkGroupSize.x));
+    uint num_tiles = uint(ceil(float(n) / float(gl_WorkGroupSize.x)));
         for (uint tile_idx = gl_WorkGroupID.x; tile_idx < num_tiles; tile_idx += gl_NumWorkGroups.x){
-        int idx = tile_idx * gl_NumWorkGroups.x  + gl_localInvocationID.x;
+        uint idx = tile_idx * gl_NumWorkGroups.x  + gl_LocalInvocationID.x;
 
-        if (idx > 0 && idx < N){
+        if (idx > 0 && idx < n){
         // code only contributse to all nodes if different than its left neighbor
-            contributes[idx] = (keys[idx] != keys[idx-1]);
+            contributes[idx] = uint(keys[idx] != keys[idx-1]);
         }
 
         if (idx == 0){

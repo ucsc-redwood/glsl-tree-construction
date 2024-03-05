@@ -16,25 +16,23 @@ class Application{
 	VkCommandBuffer commandBuffer;
 	VkFence fence;
 	VkDescriptorPool descriptorPool;
-	VkDescriptorSetLayout descriptorSetLayout;
-	VkDescriptorSet descriptorSet;
 	VkPipelineLayout pipelineLayout;
 	VkPipeline pipeline;
 	VkShaderModule shaderModule;
 
 	Application() = default;
-	virtual ~Application();
+	virtual ~Application() {};
 
-	virtual void create_device();
+	virtual void create_device() = 0;
 
-	virtual VkResult create_instance();
-	virtual void create_compute_queue();
+	virtual VkResult create_instance() = 0;
+	virtual void create_compute_queue() = 0;
 
-	virtual void build_command_pool();
-	virtual void create_command_buffer();
-	virtual void create_storage_buffer();
-	virtual void build_compute_pipeline();
-
+	virtual void build_command_pool() = 0;
+	virtual void create_command_buffer() = 0;
+	virtual void create_storage_buffer() = 0;
+	virtual void build_compute_pipeline() = 0;
+	/*
 	virtual const std::unordered_map<const char *, bool> get_instance_extensions();
 
 	virtual const std::unordered_map<const char *, bool> get_device_extensions();
@@ -46,6 +44,7 @@ class Application{
 	virtual void set_api_version(uint32_t requested_api_version);
 
 	virtual void request_gpu_features(VULKAN_HPP_NAMESPACE::PhysicalDevice &gpu);
+	*/
 	VkResult createBuffer(VkBufferUsageFlags usageFlags, VkMemoryPropertyFlags memoryPropertyFlags, VkBuffer *buffer, VkDeviceMemory *memory, VkDeviceSize size, void *data = nullptr);
 	protected:
 		std::unordered_map<const char *, bool> device_extensions;

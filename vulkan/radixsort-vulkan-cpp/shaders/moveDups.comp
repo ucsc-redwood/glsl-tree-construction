@@ -3,7 +3,6 @@
 #extension GL_KHR_shader_subgroup_ballot: enable
 #extension GL_KHR_shader_subgroup_arithmetic: enable
 #extension GL_KHR_shader_subgroup_vote: enable
-#extension GL_EXT_debug_printf : require
 
 
 
@@ -16,22 +15,22 @@ layout(set = 0, binding = 1) buffer OutKeys{
     uint out_keys[];
 };
 
-layout(set = 0, binding = 2) uniform OutIdx{
+layout(set = 0, binding = 2) buffer OutIdx{
     uint out_idx[];
 };
 
 layout(set = 0, binding = 3) uniform N{
     uint n;
-} 
+};
 
 layout(local_size_x = 256) in;
 
 
 
 void moveDups(){
-    uint num_tiles = ceil(float(n) / float(gl_WorkGroupSize.x));
+    uint num_tiles = uint(ceil(float(n) / float(gl_WorkGroupSize.x)));
     for (uint tile_idx = gl_WorkGroupID.x; tile_idx < num_tiles; tile_idx += gl_NumWorkGroups.x){
-        int idx = tile_idx * gl_WorkGroupSize.x + gl_LocalInvocationID.x;
+        uint idx = tile_idx * gl_WorkGroupSize.x + gl_LocalInvocationID.x;
         if (idx < n){
             out_keys[out_idx[idx]] = in_keys[idx];
         }
