@@ -17,6 +17,18 @@ class RadixSort : public Application{
 
     private:
     std::string name = "radix_sort";
+	struct{
+		b_sort_buffer VkBuffer;
+		g_histogram_buffer VkBuffer;
+		b_alt_buffer VkBuffer;
+		b_index_buffer VkBuffer;
+		b_pass_first_histogram_buffer VkBuffer;
+		b_pass_second_histogram_buffer VkBuffer;
+		b_pass_third_histogram_buffer VkBuffer;
+		b_pass_fourth_histogram_buffer VkBuffer;
+		pass_num_buffer VkBuffer;
+
+	} radix_sort_buffer;
 };
 
 
@@ -356,7 +368,9 @@ void RadixSort::create_storage_buffer(){
 				bufferSize);
 
 			// Copy to staging buffer
-			VkCommandBufferAllocateInfo cmdBufAllocateInfo = vks::initializers::commandBufferAllocateInfo(commandPool, VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1);
+			VkCommandBufferAllocateInfo cmdBufAllocateInfo {};
+			
+			= vks::initializers::commandBufferAllocateInfo(commandPool, VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1);
 			VkCommandBuffer copyCmd;
 			vkAllocateCommandBuffers(device, &cmdBufAllocateInfo, &copyCmd);
 			VkCommandBufferBeginInfo cmdBufInfo = vks::initializers::commandBufferBeginInfo();
