@@ -1,6 +1,7 @@
 #pragma once
 #include "application.hpp"
 #include "core/VulkanTools.h"
+#include "vma_usage.hpp"
 #include <iostream>
 
 #define BUFFER_ELEMENTS 131072
@@ -13,10 +14,19 @@ class RadixSort : public Application{
 	void         create_device() override;
 	void         create_compute_queue() override;
 	void         build_command_pool() override;
-	void 		 create_command_buffer(const VkDescriptorSet *descriptor_set, uint32_t logical_block) override;
+	void 		 create_command_buffer(const VkDescriptorSet *descriptor_sets, uint32_t logical_block) override;
 	void  		 create_storage_buffer(const VkDeviceSize bufferSize, void* data, VkBuffer* device_buffer, VkDeviceMemory* device_memory, VkBuffer* host_buffer, VkDeviceMemory* host_memory) override;
-	void 		 build_compute_pipeline() override;
-    void         execute();
+	void 	     create_descriptor_pool(std::vector<VkDescriptorPoolSize> poolSizes, uint32_t maxSets);
+	VkDescriptorSetLayoutBinding 		 build_layout_binding(VkDescriptorType type, VkShaderStageFlags stageFlags, uint32_t binding, uint32_t descriptorCount);
+	void 		 create_descriptor_set_layout(std::vector<VkDescriptorSetLayoutBinding> descriptor_set_layout_bindings, VkDescriptorSetLayoutCreateInfo *pCreateInfo, VkDescriptorSetLayout *pSetLayout);
+	void 		 create_pipeline_layout(uint32_t setLayoutCount,const VkDescriptorSetLayout *pSetLayouts);
+	void 		 allocate_descriptor_sets(uint32_t descriptorSetCount, VkDescriptorSetLayout *descriptorSetLayouts, VkDescriptorSet *descriptorSets);
+	void 		 allocate_command_buffer(uint32_t commandBufferCount);
+	VkWriteDescriptorSet create_descriptor_write(VkDescriptorSet *dstSet, uint32_t dstBinding, uint32_t dstArrayElement, VkDescriptorType descriptorType, uint32_t descriptorCount, VkDescriptorBufferInfo *pBufferInfo);
+	VkPipelineShaderStageCreateInfo 		 load_shader(const std::string shader_name);
+	void 		 create_pipeline(VkPipelineShaderStageCreateInfo *shaderStage);
+	void 		 create_fence();
+    std::vector<uint32_t>         execute();
 	void 		 cleanup();
 	void run();
 
@@ -206,20 +216,121 @@ void RadixSort::build_command_pool() {
 }
 
 
-void RadixSort::build_compute_pipeline(){
+
+VkDescriptorSetLayoutBinding RadixSort::build_layout_binding(VkDescriptorType type, VkShaderStageFlags stageFlags, uint32_t binding, uint32_t descriptorCount){
+	VkDescriptorSetLayoutBinding layoutBinding{};
+	layoutBinding.descriptorType = type;
+	layoutBinding.stageFlags = stageFlags;
+	layoutBinding.binding = binding;
+	layoutBinding.descriptorCount = descriptorCount;
+	return layoutBinding;
+
+}
+
+void RadixSort::create_descriptor_set_layout(std::vector<VkDescriptorSetLayoutBinding> descriptor_set_layout_bindings, VkDescriptorSetLayoutCreateInfo *pCreateInfo, VkDescriptorSetLayout *pSetLayout){
+	VkDescriptorSetLayoutCreateInfo descriptorLayout{};
+	descriptorLayout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	descriptorLayout.pBindings = descriptor_set_layout_bindings.data();
+	descriptorLayout.bindingCount = static_cast<uint32_t>(descriptor_set_layout_bindings.size());
+	*pCreateInfo = descriptorLayout;
+	vkCreateDescriptorSetLayout(device, pCreateInfo, nullptr, pSetLayout);
+}
+
+void RadixSort::create_pipeline_layout(uint32_t setLayoutCount,const VkDescriptorSetLayout *pSetLayouts){
+	VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo {};
+	pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	pipelineLayoutCreateInfo.setLayoutCount = setLayoutCount;
+	pipelineLayoutCreateInfo.pSetLayouts = pSetLayouts;
+
+	vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &pipelineLayout);
+
+}
+
+
+void RadixSort::allocate_command_buffer(uint32_t commandBufferCount){
+		VkCommandBufferAllocateInfo cmdBufAllocateInfo {};
+		cmdBufAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+		cmdBufAllocateInfo.commandPool = commandPool;
+		cmdBufAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+		cmdBufAllocateInfo.commandBufferCount = commandBufferCount;
+		vkAllocateCommandBuffers(device, &cmdBufAllocateInfo, &commandBuffer);
+}
+
+void RadixSort::allocate_descriptor_sets(uint32_t descriptorSetCount, VkDescriptorSetLayout *descriptorSetLayouts, VkDescriptorSet *descriptorSets){
+			VkDescriptorSetAllocateInfo allocInfo {};
+			allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+			allocInfo.descriptorPool = descriptorPool;
+			allocInfo.pSetLayouts = descriptorSetLayouts;
+			allocInfo.descriptorSetCount = descriptorSetCount;
+			vkAllocateDescriptorSets(device, &allocInfo, descriptorSets);
+}
+
+
+VkWriteDescriptorSet RadixSort::create_descriptor_write(VkDescriptorSet *dstSet, uint32_t dstBinding, uint32_t dstArrayElement, VkDescriptorType descriptorType, uint32_t descriptorCount, VkDescriptorBufferInfo *pBufferInfo){
+	VkWriteDescriptorSet descriptorWrite;
+	descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	descriptorWrite.dstSet = *dstSet;
+	descriptorWrite.dstBinding = dstBinding;
+	descriptorWrite.dstArrayElement = dstArrayElement;
+	descriptorWrite.descriptorType = descriptorType;
+	descriptorWrite.descriptorCount = descriptorCount;
+	descriptorWrite.pBufferInfo = pBufferInfo;
+
+	return descriptorWrite;
+}
+
+VkPipelineShaderStageCreateInfo RadixSort::load_shader(const std::string shader_name){
+	const std::string shadersPath = "/home/zheyuan/vulkan-tree-construction/vulkan/radixsort-vulkan-cpp/shaders/compiled_shaders/";
+
+	VkPipelineShaderStageCreateInfo shaderStage = {};
+	shaderStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	shaderStage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+
+    shaderStage.module = tools::loadShader((shadersPath + shader_name).c_str(), device);
+	shaderStage.pName = "main";
+	//shaderStage.pSpecializationInfo = &specializationInfo;
+	shaderModule = shaderStage.module;
+
+	return shaderStage;
+
+}
+
+
+void RadixSort::create_pipeline(VkPipelineShaderStageCreateInfo *shaderStage){
+	VkPipelineCacheCreateInfo pipelineCacheCreateInfo = {};
+	pipelineCacheCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+	vkCreatePipelineCache(device, &pipelineCacheCreateInfo, nullptr, &pipelineCache);
+	printf("create pipeline\n");
+	// Create pipeline
+	VkComputePipelineCreateInfo computePipelineCreateInfo {};
+	computePipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+	computePipelineCreateInfo.layout = pipelineLayout;
+	computePipelineCreateInfo.flags = 0;
+
+	computePipelineCreateInfo.stage = *shaderStage;
+	vkCreateComputePipelines(device, pipelineCache, 1, &computePipelineCreateInfo, nullptr, &pipeline);
+
+}
+
+void RadixSort::create_descriptor_pool(std::vector<VkDescriptorPoolSize> poolSizes, uint32_t maxSets){
+			// todo: parameterize the number of descriptor sets
 			printf("build_compute_pipeline\n");
+			/*
 			std::vector<VkDescriptorPoolSize> poolSizes = {
-				VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 6},
+				VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 9},
 			};
+			*/
 
 			VkDescriptorPoolCreateInfo descriptorPoolInfo{};
 			descriptorPoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 			descriptorPoolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
 			descriptorPoolInfo.pPoolSizes = poolSizes.data();
-			descriptorPoolInfo.maxSets = 1;
+			descriptorPoolInfo.maxSets = maxSets;
 			vkCreateDescriptorPool(device, &descriptorPoolInfo, nullptr, &descriptorPool);
-			printf("create bindings\n");
+
 			// create binidngs
+
+			/*
 			VkDescriptorSetLayoutBinding b_sort_layoutBinding{};
 			b_sort_layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 			b_sort_layoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
@@ -230,13 +341,13 @@ void RadixSort::build_compute_pipeline(){
 			VkDescriptorSetLayoutBinding b_alt_layoutBinding{};
 			b_alt_layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 			b_alt_layoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-			b_alt_layoutBinding.binding = 1;
+			b_alt_layoutBinding.binding = 2;
 			b_alt_layoutBinding.descriptorCount = 1;
 
 			VkDescriptorSetLayoutBinding b_global_hist_layoutBinding{};
 			b_global_hist_layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 			b_global_hist_layoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-			b_global_hist_layoutBinding.binding = 2;
+			b_global_hist_layoutBinding.binding = 1;
 			b_global_hist_layoutBinding.descriptorCount = 1;
 
 			VkDescriptorSetLayoutBinding b_index_layoutBinding{};
@@ -256,8 +367,8 @@ void RadixSort::build_compute_pipeline(){
 			param_layoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 			param_layoutBinding.binding = 5;
 			param_layoutBinding.descriptorCount = 2;
-
-
+			*/
+			/*
 			std::vector<VkDescriptorSetLayoutBinding> histogram_set_layout_bindings = {
 				b_sort_layoutBinding, b_global_hist_layoutBinding
 			};
@@ -281,26 +392,29 @@ void RadixSort::build_compute_pipeline(){
 			binning_descriptorLayout.bindingCount = static_cast<uint32_t>(binning_set_layout_bindings.size());
 			descriptorLayout[1] = binning_descriptorLayout;
 			vkCreateDescriptorSetLayout(device, &descriptorLayout[1], nullptr, &descriptorSetLayouts[1]);
-
-			
+			*/
+			/*
 			printf("create pipeline layout\n");
 			// create a pipeline layout with two set layouts
 			VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo {};
 			pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 			pipelineLayoutCreateInfo.setLayoutCount = 2;
-			pipelineLayoutCreateInfo.pSetLayouts = descriptorSetLayouts;
+			pipelineLayoutCreateInfo.pSetLayouts = pSetLayouts;	
 
 			vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &pipelineLayout);
-
+			*/
+			/*
 			printf("allocate descriptor sets\n");
 			// allocate descriptor sets for histogram and binning
 			VkDescriptorSetAllocateInfo allocInfo {};
 			allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 			allocInfo.descriptorPool = descriptorPool;
 			allocInfo.pSetLayouts = descriptorSetLayouts;
+			// todo: parameterize the number of descriptor sets
 			allocInfo.descriptorSetCount = 2;
 			vkAllocateDescriptorSets(device, &allocInfo, descriptorSets);
-	
+			*/
+			/*
 			printf("update b sort descriptor sets\n");
 
 			std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
@@ -315,7 +429,7 @@ void RadixSort::build_compute_pipeline(){
 			descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 			descriptorWrites[0].descriptorCount = 1;
 			descriptorWrites[0].pBufferInfo = &b_sort_bufferDescriptor;
-
+			
 			descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 			descriptorWrites[1].dstSet = descriptorSets[0];
 			descriptorWrites[1].dstBinding = 1;
@@ -323,12 +437,12 @@ void RadixSort::build_compute_pipeline(){
 			descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 			descriptorWrites[1].descriptorCount = 1;
 			descriptorWrites[1].pBufferInfo = &g_histogram_bufferDescriptor;
-
+			
 
 			vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, NULL);
 
 
-
+			printf("create pipeline cache\n");
 			VkPipelineCacheCreateInfo pipelineCacheCreateInfo = {};
 			pipelineCacheCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
 			vkCreatePipelineCache(device, &pipelineCacheCreateInfo, nullptr, &pipelineCache);
@@ -355,6 +469,7 @@ void RadixSort::build_compute_pipeline(){
 			specializationInfo.dataSize = sizeof(SpecializationData);
 			specializationInfo.pData = &specializationData;
 			*/
+			/*
 			const std::string shadersPath = "/home/zheyuan/vulkan-tree-construction/vulkan/radixsort-vulkan-cpp/shaders/compiled_shaders/";
 
 			VkPipelineShaderStageCreateInfo shaderStage = {};
@@ -369,7 +484,9 @@ void RadixSort::build_compute_pipeline(){
 			assert(shaderStage.module != VK_NULL_HANDLE);
 			computePipelineCreateInfo.stage = shaderStage;
 			vkCreateComputePipelines(device, pipelineCache, 1, &computePipelineCreateInfo, nullptr, &pipeline);
-
+			*/
+			
+			/*
 			printf("create command buffer\n");
 			// Create a command buffer for compute operations
 			VkCommandBufferAllocateInfo cmdBufAllocateInfo {};
@@ -384,12 +501,14 @@ void RadixSort::build_compute_pipeline(){
 			fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 			fenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 			vkCreateFence(device, &fenceCreateInfo, nullptr, &fence);
+			*/
 }
+
 
 void RadixSort::create_storage_buffer(const VkDeviceSize bufferSize, void* data, VkBuffer* device_buffer, VkDeviceMemory* device_memory, VkBuffer* host_buffer, VkDeviceMemory* host_memory){
 		printf("create_storage_buffer\n");
 		// Copy input data to VRAM using a staging buffer
-		{
+	
 			createBuffer(
 				VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
@@ -422,6 +541,7 @@ void RadixSort::create_storage_buffer(const VkDeviceSize bufferSize, void* data,
 			cmdBufAllocateInfo.commandPool = commandPool;
 			cmdBufAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 			cmdBufAllocateInfo.commandBufferCount = 1;
+
 			VkCommandBuffer copyCmd;
 			vkAllocateCommandBuffers(device, &cmdBufAllocateInfo, &copyCmd);
 			VkCommandBufferBeginInfo cmdBufInfo {};
@@ -449,13 +569,13 @@ void RadixSort::create_storage_buffer(const VkDeviceSize bufferSize, void* data,
 
 			vkDestroyFence(device, fence, nullptr);
 			vkFreeCommandBuffers(device, commandPool, 1, &copyCmd);
-		}
+	
 
 }
 
 
 
-void RadixSort::create_command_buffer(const VkDescriptorSet *descriptor_set, uint32_t logical_block){
+void RadixSort::create_command_buffer(const VkDescriptorSet *descriptor_sets, uint32_t logical_block){
 			printf("create_command_buffer\n");
 			VkCommandBufferBeginInfo cmdBufInfo {};
 			cmdBufInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -502,7 +622,7 @@ void RadixSort::create_command_buffer(const VkDescriptorSet *descriptor_set, uin
 
 
 			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
-			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 2, descriptor_set, 0, 0);
+			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 2, descriptor_sets, 0, 0);
 
 			vkCmdDispatch(commandBuffer, logical_block, 1, 1);
 
@@ -543,15 +663,16 @@ void RadixSort::create_command_buffer(const VkDescriptorSet *descriptor_set, uin
 		
 			// todo: change the hardcode
 			// Read back to host visible buffer
-			const VkDeviceSize bufferSize = BUFFER_ELEMENTS * sizeof(uint32_t);
+			
+			const VkDeviceSize bufferSize = 1024 * sizeof(uint32_t);
 			VkBufferCopy copyRegion = {};
 			copyRegion.size = bufferSize;
-			vkCmdCopyBuffer(commandBuffer, radix_sort_buffer.b_sort_buffer, temp_buffer.b_sort_buffer, 1, &copyRegion);
+			vkCmdCopyBuffer(commandBuffer, radix_sort_buffer.g_histogram_buffer, temp_buffer.g_histogram_buffer, 1, &copyRegion);
 
 			// Barrier to ensure that buffer copy is finished before host reading from it
 			bufferBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 			bufferBarrier.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
-			bufferBarrier.buffer = temp_buffer.b_sort_buffer;
+			bufferBarrier.buffer = temp_buffer.g_histogram_buffer;
 			bufferBarrier.size = VK_WHOLE_SIZE;
 			bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 			bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -568,7 +689,15 @@ void RadixSort::create_command_buffer(const VkDescriptorSet *descriptor_set, uin
 			vkEndCommandBuffer(commandBuffer);
 }
 
-void RadixSort::execute(){
+void RadixSort::create_fence(){
+	VkFenceCreateInfo fenceCreateInfo {};
+	fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+	fenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+	vkCreateFence(device, &fenceCreateInfo, nullptr, &fence);
+}
+
+std::vector<uint32_t> RadixSort::execute(){
+			// todo: change the harded coded for map
 			printf("execute\n");
 			std::vector<uint32_t> computeOutput(BUFFER_ELEMENTS);
 			vkResetFences(device, 1, &fence);
@@ -583,10 +712,10 @@ void RadixSort::execute(){
 
 			// Make device writes visible to the host
 			void *mapped;
-			vkMapMemory(device, temp_memory.b_sort_memory, 0, VK_WHOLE_SIZE, 0, &mapped);
+			vkMapMemory(device, temp_memory.g_histogram_memory, 0, VK_WHOLE_SIZE, 0, &mapped);
 			VkMappedMemoryRange mappedRange{};
 			mappedRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-			mappedRange.memory = temp_memory.b_sort_memory;
+			mappedRange.memory = temp_memory.g_histogram_memory;
 			mappedRange.offset = 0;
 			mappedRange.size = VK_WHOLE_SIZE;
 			vkInvalidateMappedMemoryRanges(device, 1, &mappedRange);
@@ -594,33 +723,33 @@ void RadixSort::execute(){
 			// Copy to output
 			const VkDeviceSize bufferSize = BUFFER_ELEMENTS * sizeof(uint32_t);
 			memcpy(computeOutput.data(), mapped, bufferSize);
-			vkUnmapMemory(device, temp_memory.b_sort_memory);
+			vkUnmapMemory(device, temp_memory.g_histogram_memory);
+
+			return computeOutput;
 }
 
 void RadixSort::cleanup(){
-		
 		vkDestroyBuffer(device, radix_sort_buffer.b_sort_buffer, nullptr);
 		vkFreeMemory(device, radix_sort_memory.b_sort_memory, nullptr);
-		vkDestroyBuffer(device, temp_buffer.b_sort_buffer, nullptr);
-		vkFreeMemory(device, temp_memory.b_sort_memory, nullptr);
 		vkDestroyBuffer(device, radix_sort_buffer.g_histogram_buffer, nullptr);
 		vkFreeMemory(device, radix_sort_memory.g_histogram_memory, nullptr);
+		vkDestroyBuffer(device, temp_buffer.b_sort_buffer, nullptr);
+		vkFreeMemory(device, temp_memory.b_sort_memory, nullptr);
 		vkDestroyBuffer(device, temp_buffer.g_histogram_buffer, nullptr);
 		vkFreeMemory(device, temp_memory.g_histogram_memory, nullptr);
-		vkDestroyBuffer(device, radix_sort_buffer.b_alt_buffer, nullptr);
-		vkFreeMemory(device, radix_sort_memory.b_alt_memory, nullptr);
-		vkDestroyBuffer(device, radix_sort_buffer.b_index_buffer, nullptr);
-		vkFreeMemory(device, radix_sort_memory.b_index_memory, nullptr);
-		vkDestroyBuffer(device, radix_sort_buffer.b_pass_first_histogram_buffer, nullptr);
-		vkFreeMemory(device, radix_sort_memory.b_pass_first_histogram_memory, nullptr);
-		vkDestroyBuffer(device, radix_sort_buffer.b_pass_second_histogram_buffer, nullptr);
-		vkFreeMemory(device, radix_sort_memory.b_pass_second_histogram_memory, nullptr);
-		vkDestroyBuffer(device, radix_sort_buffer.b_pass_third_histogram_buffer, nullptr);
-		vkFreeMemory(device, radix_sort_memory.b_pass_third_histogram_memory, nullptr);
-		vkDestroyBuffer(device, radix_sort_buffer.b_pass_fourth_histogram_buffer, nullptr);
-		vkFreeMemory(device, radix_sort_memory.b_pass_fourth_histogram_memory, nullptr);
-		vkDestroyBuffer(device, radix_sort_buffer.pass_num_buffer, nullptr);
-		vkFreeMemory(device, radix_sort_memory.pass_num_memory, nullptr);
+
+		vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+		vkDestroyDescriptorSetLayout(device, descriptorSetLayouts[0], nullptr);
+		vkDestroyDescriptorSetLayout(device, descriptorSetLayouts[1], nullptr);
+		vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+		vkDestroyPipeline(device, pipeline, nullptr);
+		vkDestroyPipelineCache(device, pipelineCache, nullptr);
+		vkDestroyFence(device, fence, nullptr);
+		vkDestroyCommandPool(device, commandPool, nullptr);
+		vkDestroyShaderModule(device, shaderModule, nullptr);
+		vkDestroyDevice(device, nullptr);
+		vkDestroyInstance(instance, nullptr);
+		
 }
 
 void RadixSort::run(){
@@ -637,10 +766,66 @@ void RadixSort::run(){
 	create_device();
 	create_compute_queue();
 	build_command_pool();
+
 	create_storage_buffer(bufferSize, computeInput.data(), &radix_sort_buffer.b_sort_buffer, &radix_sort_memory.b_sort_memory, &temp_buffer.b_sort_buffer, &temp_memory.b_sort_memory);
-	create_storage_buffer(bufferSize, g_histogram.data(), &radix_sort_buffer.g_histogram_buffer, &radix_sort_memory.g_histogram_memory, &temp_buffer.g_histogram_buffer, &temp_memory.g_histogram_memory);
-	build_compute_pipeline();
-	create_command_buffer(descriptorSets, 4);
-	execute();
+	create_storage_buffer(1024*sizeof(uint32_t), g_histogram.data(), &radix_sort_buffer.g_histogram_buffer, &radix_sort_memory.g_histogram_memory, &temp_buffer.g_histogram_buffer, &temp_memory.g_histogram_memory);
+	
+	// create descriptor pool
+	std::vector<VkDescriptorPoolSize> poolSizes = {
+		VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 9},
+		};
+
+	create_descriptor_pool(poolSizes, 2);
+
+	// create layout binding
+	VkDescriptorSetLayoutBinding b_sort_layoutBinding = build_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 0, 1);
+	VkDescriptorSetLayoutBinding b_alt_layoutBinding = build_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 2, 1);
+	VkDescriptorSetLayoutBinding b_global_hist_layoutBinding = build_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 1, 1);
+	VkDescriptorSetLayoutBinding b_index_layoutBinding = build_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 3, 1);
+	VkDescriptorSetLayoutBinding b_pass_hist_layoutBinding = build_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 4, 1);
+	VkDescriptorSetLayoutBinding param_layoutBinding = build_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 5, 2);
+	std::vector<VkDescriptorSetLayoutBinding> histogram_set_layout_bindings = {
+		b_sort_layoutBinding, b_global_hist_layoutBinding
+	};
+	std::vector<VkDescriptorSetLayoutBinding> binning_set_layout_bindings = {
+		b_sort_layoutBinding, b_alt_layoutBinding, b_global_hist_layoutBinding, b_index_layoutBinding, b_pass_hist_layoutBinding, param_layoutBinding
+	};
+
+	// create descriptor set layout
+	create_descriptor_set_layout(histogram_set_layout_bindings, &descriptorLayout[0], &descriptorSetLayouts[0]);
+	create_descriptor_set_layout(binning_set_layout_bindings, &descriptorLayout[1], &descriptorSetLayouts[1]);
+
+	// create pipeline_layout and attach descriptor set layout to pipeline layout
+	create_pipeline_layout(2, descriptorSetLayouts);
+	
+	// allocate descriptor sets
+	allocate_descriptor_sets(2, descriptorSetLayouts, descriptorSets);
+
+	// update descriptor sets, first we need to create write descriptor, then specify the destination set, binding number, descriptor type, and number of descriptors(buffers) to bind
+	VkDescriptorBufferInfo b_sort_bufferDescriptor = { radix_sort_buffer.b_sort_buffer, 0, VK_WHOLE_SIZE };
+	create_descriptor_write(&descriptorSets[0], 0, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &b_sort_bufferDescriptor);
+	VkDescriptorBufferInfo g_histogram_bufferDescriptor = { radix_sort_buffer.g_histogram_buffer, 0, VK_WHOLE_SIZE };
+	create_descriptor_write(&descriptorSets[0], 1, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &g_histogram_bufferDescriptor);
+	
+	// load shader program 
+	VkPipelineShaderStageCreateInfo shaderStage = load_shader("histogram.spv");
+	create_pipeline(&shaderStage);
+
+	// allocate the command buffer, specify the number of commands within a command buffer.
+	allocate_command_buffer(1);
+	
+	// create command buffer, which involves binding the pipeline and descriptor sets,
+	//specify the descriptor sets it would be using, and the number of logical blocks.
+	create_command_buffer(descriptorSets, 2);
+
+	// create fence
+	create_fence();
+
+	// submit the command buffer, fence and flush
+	auto output = execute();
+
+	for(int i = 0; i < 1024; ++i){
+		std::cout << output[i] << std::endl;
+	}
 }
 

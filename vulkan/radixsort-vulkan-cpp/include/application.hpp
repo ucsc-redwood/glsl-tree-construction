@@ -31,7 +31,6 @@ class Application{
 	virtual void build_command_pool() = 0;
 	virtual void create_command_buffer( const VkDescriptorSet *descriptor_set, uint32_t logical_block) = 0;
 	virtual void create_storage_buffer(const VkDeviceSize bufferSize, void* data, VkBuffer* device_buffer, VkDeviceMemory* device_memory, VkBuffer* host_buffer, VkDeviceMemory* host_memory) = 0;
-	virtual void build_compute_pipeline() = 0;
 	/*
 	virtual const std::unordered_map<const char *, bool> get_instance_extensions();
 
@@ -52,7 +51,7 @@ class Application{
 		std::vector<std::string> supportedInstanceExtensions;
 		std::vector<const char*> enabledDeviceExtensions;
 		std::vector<const char*> enabledInstanceExtensions;
-		uint32_t api_version = VK_API_VERSION_1_0;
+		uint32_t api_version = VK_API_VERSION_1_2;
 		bool high_priority_graphics_queue{false};
 };
 

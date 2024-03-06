@@ -1,9 +1,4 @@
 {
-    depfiles_gcc = "main.o: src/main.cpp include/vma_usage.hpp include/radixsort.hpp  include/application.hpp include/core/VulkanTools.h\
-",
-    files = {
-        "src/main.cpp"
-    },
     values = {
         "/usr/bin/gcc",
         {
@@ -21,5 +16,10 @@
             "-isystem",
             "/home/zheyuan/.xmake/packages/c/cli11/v2.3.2/dbc871d99f0940df8b0bd25e622e015e/include"
         }
-    }
+    },
+    files = {
+        "src/main.cpp"
+    },
+    depfiles_gcc = "main.o: src/main.cpp include/vma_usage.hpp include/radixsort.hpp  include/application.hpp include/core/VulkanTools.h include/vma_usage.hpp\
+"
 }

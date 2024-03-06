@@ -44,27 +44,27 @@
 
 
 
-layout(set = 0, binding = 0)  buffer BSortBuffer {
+layout(set = 1, binding = 0)  buffer BSortBuffer {
     uint b_sort[input_size];
 };
 
-layout(set = 0, binding = 1)  buffer BAltBuffer {
+layout(set = 1, binding = 2)  buffer BAltBuffer {
     uint b_alt[input_size];
 };
 
-layout(set = 0, binding = 2)  buffer BGlobalHist {
+layout(set = 1, binding = 1)  buffer BGlobalHist {
     uint b_globalHist[1024];
 };
 
-layout(set = 0, binding = 3) coherent buffer BIndex {
+layout(set = 1, binding = 3) coherent buffer BIndex {
     uint b_index[4];
 };
 
-layout(set = 0, binding = 4) coherent buffer BPassHist {
+layout(set = 1, binding = 4) coherent buffer BPassHist {
     uint b_passHist[BIN_THREAD_BLOCKS*256];
 };
 
-layout(set = 0, binding = 5) buffer Params{
+layout(set = 1, binding = 5) buffer Params{
     uint pass_num;
     uint radix_shift;
 };
