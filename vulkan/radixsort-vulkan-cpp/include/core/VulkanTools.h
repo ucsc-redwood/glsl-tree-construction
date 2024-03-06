@@ -105,6 +105,7 @@ for (const char* layerName : validationLayers) {
     bool layerFound = false;
 
     for (const auto& layerProperties : availableLayers) {
+		printf("Layer: %s\n", layerProperties.layerName);
         if (strcmp(layerName, layerProperties.layerName) == 0) {
             layerFound = true;
             break;

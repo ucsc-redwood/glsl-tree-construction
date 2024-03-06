@@ -1,52 +1,42 @@
 {
-    ["tool_platform_linux_arm64-v8a_cc"] = {
-        toolname = "gcc",
-        program = "/usr/bin/gcc",
-        toolchain_info = {
-            cachekey = "gcc_arch_arm64-v8a_plat_linux",
-            name = "gcc",
-            arch = "arm64-v8a",
-            plat = "linux"
-        }
-    },
-    ["tool_platform_linux_arm64-v8a_ld"] = {
-        toolname = "gxx",
+    ["tool_target_app_linux_arm64-v8a_ld"] = {
         program = "/usr/bin/g++",
+        toolname = "gxx",
         toolchain_info = {
-            cachekey = "gcc_arch_arm64-v8a_plat_linux",
             name = "gcc",
+            plat = "linux",
             arch = "arm64-v8a",
-            plat = "linux"
-        }
-    },
-    ["tool_platform_linux_arm64-v8a_cxx"] = {
-        toolname = "gcc",
-        program = "/usr/bin/gcc",
-        toolchain_info = {
-            cachekey = "gcc_arch_arm64-v8a_plat_linux",
-            name = "gcc",
-            arch = "arm64-v8a",
-            plat = "linux"
+            cachekey = "gcc_arch_arm64-v8a_plat_linux"
         }
     },
     ["tool_target_app_linux_arm64-v8a_cxx"] = {
-        toolname = "gcc",
         program = "/usr/bin/gcc",
+        toolname = "gcc",
         toolchain_info = {
-            cachekey = "gcc_arch_arm64-v8a_plat_linux",
             name = "gcc",
+            plat = "linux",
             arch = "arm64-v8a",
-            plat = "linux"
+            cachekey = "gcc_arch_arm64-v8a_plat_linux"
         }
     },
-    ["tool_target_app_linux_arm64-v8a_ld"] = {
-        toolname = "gxx",
+    ["tool_platform_linux_arm64-v8a_ld"] = {
         program = "/usr/bin/g++",
+        toolname = "gxx",
         toolchain_info = {
-            cachekey = "gcc_arch_arm64-v8a_plat_linux",
             name = "gcc",
+            plat = "linux",
             arch = "arm64-v8a",
-            plat = "linux"
+            cachekey = "gcc_arch_arm64-v8a_plat_linux"
+        }
+    },
+    ["tool_platform_linux_arm64-v8a_cc"] = {
+        program = "/usr/bin/gcc",
+        toolname = "gcc",
+        toolchain_info = {
+            name = "gcc",
+            plat = "linux",
+            arch = "arm64-v8a",
+            cachekey = "gcc_arch_arm64-v8a_plat_linux"
         }
     }
 }

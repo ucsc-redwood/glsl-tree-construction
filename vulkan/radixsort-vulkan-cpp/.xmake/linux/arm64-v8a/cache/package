@@ -1,63 +1,8 @@
 {
-    ["vulkan-memory-allocator"] = {
-        __enabled = true,
-        version = "v3.0.1",
-        __requirestr = "vulkan-memory-allocator",
-        sysincludedirs = "/home/zheyuan/.xmake/packages/v/vulkan-memory-allocator/v3.0.1/f7da89be499947a189b29a8c3550dab4/include",
-        linkdirs = { },
-        envs = {
-            PATH = {
-                "/home/zheyuan/.xmake/packages/c/cmake/3.28.1/bbcbb83a4f444ac9ad5a8435d61f389d/bin"
-            },
-            LD_LIBRARY_PATH = {
-                "/home/zheyuan/.xmake/packages/v/vulkan-memory-allocator/v3.0.1/f7da89be499947a189b29a8c3550dab4/lib",
-                "/home/zheyuan/.xmake/packages/c/cmake/3.28.1/bbcbb83a4f444ac9ad5a8435d61f389d/lib",
-                "/home/zheyuan/.xmake/packages/v/vulkan-headers/1.3.275+0/74929154c24f4d7eb83abeeb1f7c6bdd/lib"
-            }
-        },
-        license = "MIT",
-        installdir = "/home/zheyuan/.xmake/packages/v/vulkan-memory-allocator/v3.0.1/f7da89be499947a189b29a8c3550dab4",
-        links = "vulkan"
-    },
-    cli11 = {
-        __enabled = true,
-        version = "v2.3.2",
-        license = "BSD",
-        __requirestr = "cli11",
-        sysincludedirs = "/home/zheyuan/.xmake/packages/c/cli11/v2.3.2/dbc871d99f0940df8b0bd25e622e015e/include",
-        installdir = "/home/zheyuan/.xmake/packages/c/cli11/v2.3.2/dbc871d99f0940df8b0bd25e622e015e",
-        envs = {
-            LD_LIBRARY_PATH = {
-                "/home/zheyuan/.xmake/packages/c/cli11/v2.3.2/dbc871d99f0940df8b0bd25e622e015e/lib"
-            }
-        }
-    },
-    glm = {
-        __requirestr = "glm",
-        __enabled = true,
-        version = "0.9.9.6",
-        envs = {
-            LD_LIBRARY_PATH = {
-                "/home/zheyuan/.xmake/packages/g/glm/1.0.1/952bbd746cb64b819988ce7cb91f5af2/lib"
-            }
-        }
-    },
     ["spirv-cross"] = {
-        __enabled = true,
-        static = true,
         version = "1.3.268+0",
-        __requirestr = "spirv-cross",
-        sysincludedirs = "/home/zheyuan/.xmake/packages/s/spirv-cross/1.3.268+0/d7a93afe605f48d1a4ffa8a3b70669c3/include",
-        links = {
-            "spirv-cross-c",
-            "spirv-cross-cpp",
-            "spirv-cross-reflect",
-            "spirv-cross-msl",
-            "spirv-cross-util",
-            "spirv-cross-hlsl",
-            "spirv-cross-glsl",
-            "spirv-cross-core"
-        },
+        installdir = "/home/zheyuan/.xmake/packages/s/spirv-cross/1.3.268+0/d7a93afe605f48d1a4ffa8a3b70669c3",
+        license = "Apache-2.0",
         envs = {
             PATH = {
                 "/home/zheyuan/.xmake/packages/s/spirv-cross/1.3.268+0/d7a93afe605f48d1a4ffa8a3b70669c3/bin",
@@ -68,6 +13,8 @@
                 "/home/zheyuan/.xmake/packages/c/cmake/3.28.1/bbcbb83a4f444ac9ad5a8435d61f389d/lib"
             }
         },
+        linkdirs = "/home/zheyuan/.xmake/packages/s/spirv-cross/1.3.268+0/d7a93afe605f48d1a4ffa8a3b70669c3/lib",
+        __requirestr = "spirv-cross",
         libfiles = {
             "/home/zheyuan/.xmake/packages/s/spirv-cross/1.3.268+0/d7a93afe605f48d1a4ffa8a3b70669c3/lib/libspirv-cross-c.a",
             "/home/zheyuan/.xmake/packages/s/spirv-cross/1.3.268+0/d7a93afe605f48d1a4ffa8a3b70669c3/lib/libspirv-cross-cpp.a",
@@ -78,36 +25,89 @@
             "/home/zheyuan/.xmake/packages/s/spirv-cross/1.3.268+0/d7a93afe605f48d1a4ffa8a3b70669c3/lib/libspirv-cross-glsl.a",
             "/home/zheyuan/.xmake/packages/s/spirv-cross/1.3.268+0/d7a93afe605f48d1a4ffa8a3b70669c3/lib/libspirv-cross-core.a"
         },
-        license = "Apache-2.0",
-        installdir = "/home/zheyuan/.xmake/packages/s/spirv-cross/1.3.268+0/d7a93afe605f48d1a4ffa8a3b70669c3",
-        linkdirs = "/home/zheyuan/.xmake/packages/s/spirv-cross/1.3.268+0/d7a93afe605f48d1a4ffa8a3b70669c3/lib"
+        static = true,
+        sysincludedirs = "/home/zheyuan/.xmake/packages/s/spirv-cross/1.3.268+0/d7a93afe605f48d1a4ffa8a3b70669c3/include",
+        __enabled = true,
+        links = {
+            "spirv-cross-c",
+            "spirv-cross-cpp",
+            "spirv-cross-reflect",
+            "spirv-cross-msl",
+            "spirv-cross-util",
+            "spirv-cross-hlsl",
+            "spirv-cross-glsl",
+            "spirv-cross-core"
+        }
+    },
+    spdlog = {
+        version = "v1.13.0",
+        syslinks = "pthread",
+        installdir = "/home/zheyuan/.xmake/packages/s/spdlog/v1.13.0/1e5e36d080174116879d672ca4ac2478",
+        license = "MIT",
+        envs = {
+            LD_LIBRARY_PATH = {
+                "/home/zheyuan/.xmake/packages/s/spdlog/v1.13.0/1e5e36d080174116879d672ca4ac2478/lib"
+            }
+        },
+        sysincludedirs = "/home/zheyuan/.xmake/packages/s/spdlog/v1.13.0/1e5e36d080174116879d672ca4ac2478/include",
+        __enabled = true,
+        __requirestr = "spdlog"
     },
     vulkansdk = {
         __requireconfs = {
             system = true
         },
-        __enabled = true,
         envs = {
             PATH = { },
             LD_LIBRARY_PATH = {
                 "/home/zheyuan/.xmake/packages/v/vulkansdk/latest/ee751a523bd444cfa426da821e33470a/lib"
             }
         },
-        __requirestr = "vulkansdk",
-        links = "vulkan"
-    },
-    spdlog = {
-        version = "v1.13.0",
         __enabled = true,
-        syslinks = "pthread",
+        links = "vulkan",
+        __requirestr = "vulkansdk"
+    },
+    ["vulkan-memory-allocator"] = {
+        version = "v3.0.1",
+        sysincludedirs = "/home/zheyuan/.xmake/packages/v/vulkan-memory-allocator/v3.0.1/f7da89be499947a189b29a8c3550dab4/include",
         license = "MIT",
-        __requirestr = "spdlog",
-        sysincludedirs = "/home/zheyuan/.xmake/packages/s/spdlog/v1.13.0/1e5e36d080174116879d672ca4ac2478/include",
-        installdir = "/home/zheyuan/.xmake/packages/s/spdlog/v1.13.0/1e5e36d080174116879d672ca4ac2478",
+        envs = {
+            PATH = {
+                "/home/zheyuan/.xmake/packages/c/cmake/3.28.1/bbcbb83a4f444ac9ad5a8435d61f389d/bin"
+            },
+            LD_LIBRARY_PATH = {
+                "/home/zheyuan/.xmake/packages/v/vulkan-memory-allocator/v3.0.1/f7da89be499947a189b29a8c3550dab4/lib",
+                "/home/zheyuan/.xmake/packages/c/cmake/3.28.1/bbcbb83a4f444ac9ad5a8435d61f389d/lib",
+                "/home/zheyuan/.xmake/packages/v/vulkan-headers/1.3.275+0/74929154c24f4d7eb83abeeb1f7c6bdd/lib"
+            }
+        },
+        linkdirs = { },
+        __requirestr = "vulkan-memory-allocator",
+        installdir = "/home/zheyuan/.xmake/packages/v/vulkan-memory-allocator/v3.0.1/f7da89be499947a189b29a8c3550dab4",
+        links = "vulkan",
+        __enabled = true
+    },
+    glm = {
+        version = "0.9.9.6",
         envs = {
             LD_LIBRARY_PATH = {
-                "/home/zheyuan/.xmake/packages/s/spdlog/v1.13.0/1e5e36d080174116879d672ca4ac2478/lib"
+                "/home/zheyuan/.xmake/packages/g/glm/1.0.1/952bbd746cb64b819988ce7cb91f5af2/lib"
             }
-        }
+        },
+        __enabled = true,
+        __requirestr = "glm"
+    },
+    cli11 = {
+        version = "v2.3.2",
+        sysincludedirs = "/home/zheyuan/.xmake/packages/c/cli11/v2.3.2/dbc871d99f0940df8b0bd25e622e015e/include",
+        license = "BSD",
+        envs = {
+            LD_LIBRARY_PATH = {
+                "/home/zheyuan/.xmake/packages/c/cli11/v2.3.2/dbc871d99f0940df8b0bd25e622e015e/lib"
+            }
+        },
+        installdir = "/home/zheyuan/.xmake/packages/c/cli11/v2.3.2/dbc871d99f0940df8b0bd25e622e015e",
+        __enabled = true,
+        __requirestr = "cli11"
     }
 }
