@@ -16,21 +16,12 @@ class Application{
 	VkCommandBuffer commandBuffer;
 	VkFence fence;
 	VkDescriptorPool descriptorPool;
-	VkPipelineLayout pipelineLayout;
-	VkPipeline pipeline;
+	//VkPipelineLayout pipelineLayout;
+	//VkPipeline pipeline;
 	VkShaderModule shaderModule;
 
 	Application() = default;
 	virtual ~Application() {};
-
-	virtual void create_device() = 0;
-
-	virtual VkResult create_instance() = 0;
-	virtual void create_compute_queue() = 0;
-
-	virtual void build_command_pool() = 0;
-	virtual void create_command_buffer( const VkDescriptorSet *descriptor_set, uint32_t logical_block) = 0;
-	virtual void create_storage_buffer(const VkDeviceSize bufferSize, void* data, VkBuffer* device_buffer, VkDeviceMemory* device_memory, VkBuffer* host_buffer, VkDeviceMemory* host_memory) = 0;
 	/*
 	virtual const std::unordered_map<const char *, bool> get_instance_extensions();
 

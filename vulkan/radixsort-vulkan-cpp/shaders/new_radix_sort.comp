@@ -64,7 +64,7 @@ layout(set = 1, binding = 4) coherent buffer BPassHist {
     uint b_passHist[BIN_THREAD_BLOCKS*256];
 };
 
-layout(set = 1, binding = 5) buffer Params{
+layout(push_constant) uniform Params{
     uint pass_num;
     uint radix_shift;
 };

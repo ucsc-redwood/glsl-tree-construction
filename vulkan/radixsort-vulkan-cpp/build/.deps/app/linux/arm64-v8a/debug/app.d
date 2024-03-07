@@ -1,4 +1,7 @@
 {
+    files = {
+        "build/.objs/app/linux/arm64-v8a/debug/src/main.cpp.o"
+    },
     values = {
         "/usr/bin/g++",
         {
@@ -14,8 +17,5 @@
             "-lvulkan",
             "-lpthread"
         }
-    },
-    files = {
-        "build/.objs/app/linux/arm64-v8a/debug/src/main.cpp.o"
     }
 }
