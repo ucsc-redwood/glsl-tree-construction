@@ -1,0 +1,42 @@
+#version 450
+#extension GL_KHR_shader_subgroup_basic:enable
+#extension GL_KHR_shader_subgroup_ballot:enable
+#extension GL_KHR_shader_subgroup_arithmetic:enable
+#extension GL_KHR_shader_subgroup_vote:enable
+
+layout(set=0,binding=0)buffer Data{
+    int data[];
+};
+
+layout(set=0,binding=1)buffer dFirst{
+    int d_first[];
+};
+
+layout(set=0,binding=2)uniform Constants{
+    uint first;
+    uint last;
+};
+
+layout(local_size_x=1)in;
+
+void k_PartialSum(){
+    if(gl_GlobalInvocationID.x==0){
+        if(first==last){
+            return;
+        }
+        int sum=data[first];
+        int count=0;// To keep track of how many elements have been processed
+        
+        d_first[count]=sum;// Store the first sum and increment count
+        for(uint i=first+1;i<last;++i){
+            sum+=data[i];
+            d_first[++count]=sum;
+            
+        }
+        //return count; // Return the number of elements processed
+    }
+}
+
+void main(){
+    k_PartialSum();
+}
