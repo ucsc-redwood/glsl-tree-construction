@@ -11,68 +11,50 @@ class Morton : public ApplicationBase{
     public:
     Morton() : ApplicationBase() {};
     ~Morton() {};
-    std::vector<uint32_t>         execute();
-	void 		 cleanup(VkPipeline *histogram_pipeline, VkPipeline *binning_pipeline);
-	void run(std::vector<uint32_t> input_data, int logical_blocks);
+	void 		submit(uint32_t* morton_keys, size_t size);
+	void 		cleanup(VkPipeline *pipeline);
+	void 		run(glm::vec4* data, uint32_t* morton_keys, const uint32_t n, const float min_coord, const float range, const int logical_blocks);
 
     private:
 	VkShaderModule shaderModule;
 
 
-	VkDescriptorSetLayout descriptorSetLayouts[2] = {VkDescriptorSetLayout{}, VkDescriptorSetLayout{}};
-	VkDescriptorSet descriptorSets[2] = {VkDescriptorSet{}, VkDescriptorSet{}};
-	VkDescriptorSetLayoutCreateInfo descriptorLayout[2] = {VkDescriptorSetLayoutCreateInfo{}, VkDescriptorSetLayoutCreateInfo{}};
+	VkDescriptorSetLayout descriptorSetLayouts[1] = {VkDescriptorSetLayout{}};
+	VkDescriptorSet descriptorSets[1] = {VkDescriptorSet{}};
+	VkDescriptorSetLayoutCreateInfo descriptorLayout[1] = {VkDescriptorSetLayoutCreateInfo{}};
 
 	struct PushConstant {
         uint32_t n;
 		uint32_t min_coord;
 		uint32_t range;
-	} push_constant;
+	} morton_push_constant;
     
 	struct{
-		VkBuffer b_sort_buffer;
-		VkBuffer g_histogram_buffer;
-		VkBuffer b_alt_buffer;
-		VkBuffer b_index_buffer;
-		VkBuffer b_pass_first_histogram_buffer;
-		VkBuffer pass_num_buffer;
-	} radix_sort_buffer;
+		VkBuffer data_buffer;
+		VkBuffer morton_keys_buffer;
+	} buffer;
 
 	struct{
-		VkBuffer b_sort_buffer;
-		VkBuffer g_histogram_buffer;
-		VkBuffer b_alt_buffer;
-		VkBuffer b_index_buffer;
-		VkBuffer b_pass_first_histogram_buffer;
-		VkBuffer pass_num_buffer;
-		
+		VkBuffer data_buffer;
+		VkBuffer morton_keys_buffer;
 	} temp_buffer;
 
 	struct{
-		VkDeviceMemory b_sort_memory;
-		VkDeviceMemory g_histogram_memory;
-		VkDeviceMemory b_alt_memory;
-		VkDeviceMemory b_index_memory;
-		VkDeviceMemory b_pass_first_histogram_memory;
-		VkDeviceMemory pass_num_memory;
-	} radix_sort_memory;
+		VkDeviceMemory data_memory;
+		VkDeviceMemory morton_keys_memory;
+	} memory;
 
 	struct{
-		VkDeviceMemory b_sort_memory;
-		VkDeviceMemory g_histogram_memory;
-		VkDeviceMemory b_alt_memory;
-		VkDeviceMemory b_index_memory;
-		VkDeviceMemory b_pass_first_histogram_memory;
-		VkDeviceMemory pass_num_memory;
+		VkDeviceMemory data_memory;
+		VkDeviceMemory morton_keys_memory;
 	} temp_memory;
 
 };
 
 
-std::vector<uint32_t> Morton::execute(){
+void Morton::submit(uint32_t* morton_keys, size_t size){
 			// todo: change the harded coded for map
 			printf("execute\n");
-			std::vector<uint32_t> computeOutput(BUFFER_ELEMENTS);
 			vkResetFences(singleton.device, 1, &fence);
 			const VkPipelineStageFlags waitStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
 			VkSubmitInfo computeSubmitInfo {};
@@ -85,132 +67,93 @@ std::vector<uint32_t> Morton::execute(){
 
 			// Make device writes visible to the host
 			void *mapped;
-			vkMapMemory(singleton.device, /*temp_memory.g_histogram_memory*/ temp_memory.b_sort_memory, 0, VK_WHOLE_SIZE, 0, &mapped);
+			vkMapMemory(singleton.device,temp_memory.morton_keys_memory, 0, VK_WHOLE_SIZE, 0, &mapped);
 			VkMappedMemoryRange mappedRange{};
 			mappedRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-			mappedRange.memory = /*temp_memory.g_histogram_memory;*/temp_memory.b_sort_memory;
+			mappedRange.memory = temp_memory.morton_keys_memory;
 			mappedRange.offset = 0;
 			mappedRange.size = VK_WHOLE_SIZE;
 			vkInvalidateMappedMemoryRanges(singleton.device, 1, &mappedRange);
 			
-			// todo: change the buffer size
 			// Copy to output
-			const VkDeviceSize bufferSize = BUFFER_ELEMENTS * sizeof(uint32_t);
-			memcpy(computeOutput.data(), mapped, bufferSize);
-			vkUnmapMemory(singleton.device, /*temp_memory.g_histogram_memory*/temp_memory.b_sort_memory);
-
-			return computeOutput;
+			const VkDeviceSize bufferSize = size * sizeof(uint32_t);
+			memcpy(morton_keys, mapped, bufferSize);
+			vkUnmapMemory(singleton.device,temp_memory.morton_keys_memory);
 }
 
-void Morton::cleanup(VkPipeline *histogram_pipeline, VkPipeline *binning_pipeline){
-		vkDestroyBuffer(singleton.device, radix_sort_buffer.b_sort_buffer, nullptr);
-		vkFreeMemory(singleton.device, radix_sort_memory.b_sort_memory, nullptr);
-		vkDestroyBuffer(singleton.device, radix_sort_buffer.g_histogram_buffer, nullptr);
-		vkFreeMemory(singleton.device, radix_sort_memory.g_histogram_memory, nullptr);
-		vkDestroyBuffer(singleton.device, temp_buffer.b_sort_buffer, nullptr);
-		vkFreeMemory(singleton.device, temp_memory.b_sort_memory, nullptr);
-		vkDestroyBuffer(singleton.device, temp_buffer.g_histogram_buffer, nullptr);
-		vkFreeMemory(singleton.device, temp_memory.g_histogram_memory, nullptr);
-		vkDestroyBuffer(singleton.device, radix_sort_buffer.b_alt_buffer, nullptr);
-		vkFreeMemory(singleton.device, radix_sort_memory.b_alt_memory, nullptr);
-		vkDestroyBuffer(singleton.device, temp_buffer.b_alt_buffer, nullptr);
-		vkFreeMemory(singleton.device, temp_memory.b_alt_memory, nullptr);
-		vkDestroyBuffer(singleton.device, radix_sort_buffer.b_index_buffer, nullptr);
-		vkFreeMemory(singleton.device, radix_sort_memory.b_index_memory, nullptr);
-		vkDestroyBuffer(singleton.device, temp_buffer.b_index_buffer, nullptr);
-		vkFreeMemory(singleton.device, temp_memory.b_index_memory, nullptr);
-		vkDestroyBuffer(singleton.device, radix_sort_buffer.b_pass_first_histogram_buffer, nullptr);
-		vkFreeMemory(singleton.device, radix_sort_memory.b_pass_first_histogram_memory, nullptr);
-		vkDestroyBuffer(singleton.device, temp_buffer.b_pass_first_histogram_buffer, nullptr);
-		vkFreeMemory(singleton.device, temp_memory.b_pass_first_histogram_memory, nullptr);
+void Morton::cleanup(VkPipeline *pipeline){
+		
+		vkDestroyBuffer(singleton.device, buffer.data_buffer, nullptr);
+		vkFreeMemory(singleton.device, memory.data_memory, nullptr);
+		vkDestroyBuffer(singleton.device, buffer.morton_keys_buffer, nullptr);
+		vkFreeMemory(singleton.device, memory.morton_keys_memory, nullptr);
+		vkDestroyBuffer(singleton.device, temp_buffer.data_buffer, nullptr);
+		vkFreeMemory(singleton.device, temp_memory.data_memory, nullptr);
+		vkDestroyBuffer(singleton.device, temp_buffer.morton_keys_buffer, nullptr);
+		vkFreeMemory(singleton.device, temp_memory.morton_keys_memory, nullptr);
+
 
 
 		vkDestroyDescriptorSetLayout(singleton.device, descriptorSetLayouts[0], nullptr);
 		vkDestroyDescriptorSetLayout(singleton.device, descriptorSetLayouts[1], nullptr);
-		vkDestroyPipeline(singleton.device, *histogram_pipeline, nullptr);
-		vkDestroyPipeline(singleton.device, *binning_pipeline, nullptr);
-		vkDestroyShaderModule(singleton.device, binning_shaderModule, nullptr);
-		vkDestroyShaderModule(singleton.device, histogram_shaderModule, nullptr);
+		vkDestroyPipeline(singleton.device, *pipeline, nullptr);
+		vkDestroyShaderModule(singleton.device, shaderModule, nullptr);
 		
 }
 
-void Morton::run(std::vector<glm::uvec4>input, std::vector<uint32_t> mortons, int size, int logical_blocks){
+void Morton::run(glm::vec4* data, uint32_t* morton_keys, const uint32_t n, const float min_coord, const float range, const int logical_blocks){
 	 
 	
-	VkPipeline histogram_pipeline;
-	VkPipeline binning_pipeline;
+	VkPipeline pipeline;
 
 
-	create_storage_buffer(bufferSize, computeInput.data(), &radix_sort_buffer.b_sort_buffer, &radix_sort_memory.b_sort_memory, &temp_buffer.b_sort_buffer, &temp_memory.b_sort_memory);
-	create_storage_buffer(1024*sizeof(uint32_t), g_histogram.data(), &radix_sort_buffer.g_histogram_buffer, &radix_sort_memory.g_histogram_memory, &temp_buffer.g_histogram_buffer, &temp_memory.g_histogram_memory);
-	create_storage_buffer(bufferSize, b_alt.data(), &radix_sort_buffer.b_alt_buffer, &radix_sort_memory.b_alt_memory, &temp_buffer.b_alt_buffer, &temp_memory.b_alt_memory);
-	create_storage_buffer(4*sizeof(uint32_t), b_index.data(), &radix_sort_buffer.b_index_buffer, &radix_sort_memory.b_index_memory, &temp_buffer.b_index_buffer, &temp_memory.b_index_memory);
-	create_storage_buffer(b_pass_first_histogram.size()*sizeof(glm::uvec4), b_pass_first_histogram.data(), &radix_sort_buffer.b_pass_first_histogram_buffer, &radix_sort_memory.b_pass_first_histogram_memory, &temp_buffer.b_pass_first_histogram_buffer, &temp_memory.b_pass_first_histogram_memory);
-
+	create_storage_buffer(n*sizeof(uint32_t), morton_keys, &buffer.morton_keys_buffer, &memory.morton_keys_memory, &temp_buffer.morton_keys_buffer, &temp_memory.morton_keys_memory);
+	create_uniform_buffer(n*sizeof(glm::vec4), data, &buffer.data_buffer, &memory.data_memory, &temp_buffer.data_buffer, &temp_memory.data_memory);
 	// create descriptor pool
 	std::vector<VkDescriptorPoolSize> poolSizes = {
-		VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 9},
+		VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1},
 		VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1}
 	};
 
-	create_descriptor_pool(poolSizes, 2);
+	create_descriptor_pool(poolSizes, 1);
 
 	// create layout binding
-	VkDescriptorSetLayoutBinding b_sort_layoutBinding = build_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 0, 1);
-	VkDescriptorSetLayoutBinding b_alt_layoutBinding = build_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 2, 1);
-	VkDescriptorSetLayoutBinding b_global_hist_layoutBinding = build_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 1, 1);
-	VkDescriptorSetLayoutBinding b_index_layoutBinding = build_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 3, 1);
-	VkDescriptorSetLayoutBinding b_pass_hist_layoutBinding = build_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 4, 1);
-	std::vector<VkDescriptorSetLayoutBinding> histogram_set_layout_bindings = {
-		b_sort_layoutBinding, b_global_hist_layoutBinding
-	};
-	std::vector<VkDescriptorSetLayoutBinding> binning_set_layout_bindings = {
-		b_sort_layoutBinding, b_alt_layoutBinding, b_global_hist_layoutBinding, b_index_layoutBinding, b_pass_hist_layoutBinding
+	VkDescriptorSetLayoutBinding b_data_layoutBinding = build_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 0, 1);
+	VkDescriptorSetLayoutBinding b_morton_keys_layoutBinding = build_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 1, 1);
+
+	std::vector<VkDescriptorSetLayoutBinding> set_layout_bindings = {
+		b_morton_keys_layoutBinding, b_data_layoutBinding
 	};
 
 	// create descriptor set layout for both histogram and binning
-	create_descriptor_set_layout(histogram_set_layout_bindings, &descriptorLayout[0], &descriptorSetLayouts[0]);
-	create_descriptor_set_layout(binning_set_layout_bindings, &descriptorLayout[1], &descriptorSetLayouts[1]);
+	create_descriptor_set_layout(set_layout_bindings, &descriptorLayout[0], &descriptorSetLayouts[0]);
 
 	// initialize pipeline_layout and attach descriptor set layout to pipeline layout
-	VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = init_pipeline_layout(2, descriptorSetLayouts);
+	VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = init_pipeline_layout(1, descriptorSetLayouts);
 	//add push constant to the pipeline layout
-	VkPushConstantRange push_constant = init_push_constant(VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RadixSortPushConstant));
+	VkPushConstantRange push_constant = init_push_constant(VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstant));
 	add_push_constant(&pipelineLayoutCreateInfo, &push_constant, 1);
 	vkCreatePipelineLayout(singleton.device, &pipelineLayoutCreateInfo, nullptr, &pipelineLayout);
 	// allocate descriptor sets
 	allocate_descriptor_sets(2, descriptorSetLayouts, descriptorSets);
 
 	// update descriptor sets, first we need to create write descriptor, then specify the destination set, binding number, descriptor type, and number of descriptors(buffers) to bind
-	// for histogram
-	VkDescriptorBufferInfo b_sort_bufferDescriptor = { radix_sort_buffer.b_sort_buffer, 0, VK_WHOLE_SIZE };
-	VkWriteDescriptorSet b_sort_descriptor_write  = create_descriptor_write(descriptorSets[0], 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &b_sort_bufferDescriptor);
-	VkDescriptorBufferInfo g_histogram_bufferDescriptor = { radix_sort_buffer.g_histogram_buffer, 0, VK_WHOLE_SIZE };
-	VkWriteDescriptorSet g_histogram_descriptor_write = create_descriptor_write(descriptorSets[0],1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &g_histogram_bufferDescriptor);
+	VkDescriptorBufferInfo data_bufferDescriptor = { buffer.data_buffer, 0, VK_WHOLE_SIZE };
+	VkWriteDescriptorSet data_descriptor_write  = create_descriptor_write(descriptorSets[0], 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, &data_bufferDescriptor);
+	VkDescriptorBufferInfo morton_keys_bufferDescriptor = { buffer.morton_keys_buffer, 0, VK_WHOLE_SIZE };
+	VkWriteDescriptorSet morton_keys_descriptor_write = create_descriptor_write(descriptorSets[0],1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &morton_keys_bufferDescriptor);
 	
-	// for binning
-	VkDescriptorBufferInfo b_sort_binning_bufferDescriptor = { radix_sort_buffer.b_sort_buffer, 0, VK_WHOLE_SIZE };
-	VkWriteDescriptorSet b_sort_binning_descriptor_write  = create_descriptor_write(descriptorSets[1], 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &b_sort_binning_bufferDescriptor);
-	VkDescriptorBufferInfo g_histogram_binning_bufferDescriptor = { radix_sort_buffer.g_histogram_buffer, 0, VK_WHOLE_SIZE };
-	VkWriteDescriptorSet g_histogram_binning_descriptor_write = create_descriptor_write(descriptorSets[1],1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &g_histogram_binning_bufferDescriptor);
-	VkDescriptorBufferInfo b_alt_binning_bufferDescriptor = { radix_sort_buffer.b_alt_buffer, 0, VK_WHOLE_SIZE };
-	VkWriteDescriptorSet b_alt_binning_descriptor_write  = create_descriptor_write(descriptorSets[1], 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &b_alt_binning_bufferDescriptor);
-	VkDescriptorBufferInfo b_index_binning_bufferDescriptor = { radix_sort_buffer.b_index_buffer, 0, VK_WHOLE_SIZE };
-	VkWriteDescriptorSet b_index_binning_descriptor_write  = create_descriptor_write(descriptorSets[1], 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &b_index_binning_bufferDescriptor);
 	
-	VkDescriptorBufferInfo b_pass_first_histogram_binning_bufferDescriptor = { radix_sort_buffer.b_pass_first_histogram_buffer, 0, VK_WHOLE_SIZE };
-	VkWriteDescriptorSet b_pass_histogram_binning_descriptor_write  = create_descriptor_write(descriptorSets[1], 4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &b_pass_first_histogram_binning_bufferDescriptor);
-	
-	std::vector<VkWriteDescriptorSet> descriptor_writes = {b_sort_descriptor_write, g_histogram_descriptor_write,  b_sort_binning_descriptor_write, g_histogram_binning_descriptor_write, b_alt_binning_descriptor_write, b_index_binning_descriptor_write, b_pass_histogram_binning_descriptor_write};
+	std::vector<VkWriteDescriptorSet> descriptor_writes = {
+		data_descriptor_write, morton_keys_descriptor_write
+	};
 	vkUpdateDescriptorSets(singleton.device, static_cast<uint32_t>(descriptor_writes.size()), descriptor_writes.data(), 0, NULL);
 	
-	// create pipeline for histogram
-	VkPipelineShaderStageCreateInfo histogram_shader_stage = load_shader("histogram.spv", &histogram_shaderModule);
-	create_pipeline(&histogram_shader_stage,&pipelineLayout, &histogram_pipeline);
+	// create pipeline
+	VkPipelineShaderStageCreateInfo shader_stage = load_shader("morton.spv", &shaderModule);
+	create_pipeline(&shader_stage,&pipelineLayout, &pipeline);
 
-	//create pipeline for binning
-	VkPipelineShaderStageCreateInfo binning_shader_stage = load_shader("new_radix_sort.spv", &binning_shaderModule);
-	create_pipeline(&binning_shader_stage,&pipelineLayout, &binning_pipeline);
+
 
 	// allocate the command buffer, specify the number of commands within a command buffer.
 	allocate_command_buffer(1);
@@ -222,100 +165,28 @@ void Morton::run(std::vector<glm::uvec4>input, std::vector<uint32_t> mortons, in
 	cmdBufInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 	// preparation
 	vkBeginCommandBuffer(commandBuffer, &cmdBufInfo);
-	VkBufferMemoryBarrier b_sort_barrier = create_buffer_barrier(&radix_sort_buffer.b_sort_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-	VkBufferMemoryBarrier g_histogram_barrier = create_buffer_barrier(&radix_sort_buffer.g_histogram_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-	VkBufferMemoryBarrier b_alt_barrier = create_buffer_barrier(&radix_sort_buffer.b_alt_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-	VkBufferMemoryBarrier b_index_barrier = create_buffer_barrier(&radix_sort_buffer.b_index_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-	VkBufferMemoryBarrier b_pass_first_histogram_barrier = create_buffer_barrier(&radix_sort_buffer.b_pass_first_histogram_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+	VkBufferMemoryBarrier data_barrier = create_buffer_barrier(&buffer.data_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+	VkBufferMemoryBarrier morton_keys_barrier = create_buffer_barrier(&buffer.morton_keys_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
 
-	create_pipeline_barrier(&b_sort_barrier, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-	create_pipeline_barrier(&g_histogram_barrier, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-	create_pipeline_barrier(&b_alt_barrier, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-	create_pipeline_barrier(&b_index_barrier, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-	create_pipeline_barrier(&b_pass_first_histogram_barrier, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+	create_pipeline_barrier(&data_barrier, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+	create_pipeline_barrier(&morton_keys_barrier, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
-	// for histogram
-	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, histogram_pipeline);
-	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 2, descriptorSets, 0, 0);
-	vkCmdDispatch(commandBuffer, 4, 1, 1);
+	morton_push_constant.min_coord = min_coord;
+	morton_push_constant.range = range;
+	morton_push_constant.n = n;
+	vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstant), &morton_push_constant);
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 1, descriptorSets, 0, 0);
+	vkCmdDispatch(commandBuffer, logical_blocks, 1, 1);
 	
-	b_sort_barrier = create_buffer_barrier(&radix_sort_buffer.b_sort_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-	g_histogram_barrier = create_buffer_barrier(&radix_sort_buffer.g_histogram_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-	create_pipeline_barrier(&b_sort_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-	create_pipeline_barrier(&g_histogram_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-	
-
-	// for first binning
-		// push data to the push constants
-	vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RadixSortPushConstant), &radix_sort_push_constant);
-	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, binning_pipeline);
-	vkCmdDispatch(commandBuffer, 32, 1, 1);
-
-	b_sort_barrier = create_buffer_barrier(&radix_sort_buffer.b_sort_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-	b_alt_barrier = create_buffer_barrier(&radix_sort_buffer.b_alt_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-	g_histogram_barrier = create_buffer_barrier(&radix_sort_buffer.g_histogram_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-	b_index_barrier = create_buffer_barrier(&radix_sort_buffer.b_index_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-	b_pass_first_histogram_barrier = create_buffer_barrier(&radix_sort_buffer.b_pass_first_histogram_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-	create_pipeline_barrier(&b_sort_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-	create_pipeline_barrier(&b_alt_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-	create_pipeline_barrier(&g_histogram_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-	create_pipeline_barrier(&b_index_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-	create_pipeline_barrier(&b_pass_first_histogram_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-	
-
-	// for second binning
-	radix_sort_push_constant.pass_num = 1;
-	radix_sort_push_constant.radix_shift = 8;
-	vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RadixSortPushConstant), &radix_sort_push_constant);
-	vkCmdDispatch(commandBuffer, 32, 1, 1);
-	b_sort_barrier = create_buffer_barrier(&radix_sort_buffer.b_sort_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-	b_alt_barrier = create_buffer_barrier(&radix_sort_buffer.b_alt_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-	g_histogram_barrier = create_buffer_barrier(&radix_sort_buffer.g_histogram_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-	b_index_barrier = create_buffer_barrier(&radix_sort_buffer.b_index_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-	b_pass_first_histogram_barrier = create_buffer_barrier(&radix_sort_buffer.b_pass_first_histogram_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-	create_pipeline_barrier(&b_sort_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-	create_pipeline_barrier(&b_alt_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-	create_pipeline_barrier(&g_histogram_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-	create_pipeline_barrier(&b_index_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-	create_pipeline_barrier(&b_pass_first_histogram_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-
-	// for third binning
-	radix_sort_push_constant.pass_num = 2;
-	radix_sort_push_constant.radix_shift = 16;
-	vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RadixSortPushConstant), &radix_sort_push_constant);
-	vkCmdDispatch(commandBuffer, 32, 1, 1);
-	b_sort_barrier = create_buffer_barrier(&radix_sort_buffer.b_sort_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-	b_alt_barrier = create_buffer_barrier(&radix_sort_buffer.b_alt_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-	g_histogram_barrier = create_buffer_barrier(&radix_sort_buffer.g_histogram_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-	b_index_barrier = create_buffer_barrier(&radix_sort_buffer.b_index_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-	b_pass_first_histogram_barrier = create_buffer_barrier(&radix_sort_buffer.b_pass_first_histogram_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-	create_pipeline_barrier(&b_sort_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-	create_pipeline_barrier(&b_alt_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-	create_pipeline_barrier(&g_histogram_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-	create_pipeline_barrier(&b_index_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-	create_pipeline_barrier(&b_pass_first_histogram_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-
-	// for fourth binning
-	radix_sort_push_constant.pass_num = 3;
-	radix_sort_push_constant.radix_shift = 24;
-	vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RadixSortPushConstant), &radix_sort_push_constant);
-	vkCmdDispatch(commandBuffer, 32, 1, 1);
-	b_sort_barrier = create_buffer_barrier(&radix_sort_buffer.b_sort_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
-	b_alt_barrier = create_buffer_barrier(&radix_sort_buffer.b_alt_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
-	g_histogram_barrier = create_buffer_barrier(&radix_sort_buffer.g_histogram_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
-	b_index_barrier = create_buffer_barrier(&radix_sort_buffer.b_index_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
-	b_pass_first_histogram_barrier = create_buffer_barrier(&radix_sort_buffer.b_pass_first_histogram_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
-	create_pipeline_barrier(&b_sort_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-	create_pipeline_barrier(&b_alt_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-	create_pipeline_barrier(&g_histogram_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-	create_pipeline_barrier(&b_index_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-	create_pipeline_barrier(&b_pass_first_histogram_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+	morton_keys_barrier = create_buffer_barrier(&buffer.morton_keys_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
+	create_pipeline_barrier(&morton_keys_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
 	VkBufferCopy copyRegion = {};
-	copyRegion.size = 1024* sizeof(uint32_t);
-	vkCmdCopyBuffer(commandBuffer, radix_sort_buffer.b_sort_buffer, temp_buffer.b_sort_buffer, 1, &copyRegion);
-	b_sort_barrier = create_buffer_barrier(&radix_sort_buffer.b_sort_buffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT);
-	create_pipeline_barrier(&b_sort_barrier, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT);
+	copyRegion.size = n* sizeof(uint32_t);
+	vkCmdCopyBuffer(commandBuffer, buffer.morton_keys_buffer, temp_buffer.morton_keys_buffer, 1, &copyRegion);
+	morton_keys_barrier = create_buffer_barrier(&buffer.morton_keys_buffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT);
+	create_pipeline_barrier(&morton_keys_barrier, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT);
 
 
 	vkEndCommandBuffer(commandBuffer);
@@ -325,11 +196,10 @@ void Morton::run(std::vector<glm::uvec4>input, std::vector<uint32_t> mortons, in
 	create_fence();
 
 	// submit the command buffer, fence and flush
-	auto output = execute();
+	submit(morton_keys, n);
+
 	vkQueueWaitIdle(queue);
-	for (int i = 0; i < 1024; i++){
-		printf("output[%d]: %d\n", i, output[i]);
-	}
-	cleanup(&histogram_pipeline, &binning_pipeline);
+
+	cleanup(&pipeline);
 }
 
