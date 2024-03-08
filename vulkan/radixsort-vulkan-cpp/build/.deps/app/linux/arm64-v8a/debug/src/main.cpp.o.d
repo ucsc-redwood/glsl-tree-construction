@@ -1,4 +1,6 @@
 {
+    depfiles_gcc = "main.o: src/main.cpp include/vma_usage.hpp include/radixsort.hpp  include/application.hpp include/core/VulkanTools.h include/vma_usage.hpp\
+",
     values = {
         "/usr/bin/gcc",
         {
@@ -19,7 +21,5 @@
     },
     files = {
         "src/main.cpp"
-    },
-    depfiles_gcc = "main.o: src/main.cpp include/vma_usage.hpp include/radixsort.hpp  include/application.hpp include/core/VulkanTools.h include/vma_usage.hpp\
-"
+    }
 }

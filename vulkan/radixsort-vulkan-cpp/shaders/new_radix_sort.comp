@@ -61,7 +61,7 @@ layout(set = 1, binding = 3) coherent buffer BIndex {
 };
 
 layout(set = 1, binding = 4) coherent buffer BPassHist {
-    uint b_passHist[BIN_THREAD_BLOCKS*256];
+    uvec4 b_passHist[BIN_THREAD_BLOCKS*256];
 };
 
 layout(push_constant) uniform Params{
@@ -137,7 +137,7 @@ void k_DigitBinning(){
         // load the keys
         uint keys[BIN_KEYS_PER_THREAD];
         for (uint i = 0, t = gl_SubgroupInvocationID + BIN_SUB_PART_START + BIN_PART_START; i < BIN_KEYS_PER_THREAD; i++, t += LANE_COUNT){
-            keys[i] = b_sort[t];
+            keys[i] = pass_num % 2 == 0 ? b_sort[t] : b_alt[t];
         }
 
         uint _offsets[BIN_KEYS_PER_THREAD];
@@ -172,7 +172,7 @@ void k_DigitBinning(){
                 s_subgroupHistograms[i] = reduction - s_subgroupHistograms[i];
             }
             //uint val = ((partitionIndex > 0) ? FLAG_AGGREGATE : FLAG_INCLUSIVE) | reduction << 2;
-            atomicAdd(b_passHist[gl_LocalInvocationID.x* gl_NumWorkGroups.x + partitionIndex]/*[pass_num]*/,((partitionIndex > 0) ? FLAG_AGGREGATE : FLAG_INCLUSIVE) | (reduction << 2));
+            atomicAdd(b_passHist[gl_LocalInvocationID.x* gl_NumWorkGroups.x + partitionIndex][pass_num],((partitionIndex > 0) ? FLAG_AGGREGATE : FLAG_INCLUSIVE) | (reduction << 2));
             // exclusive prefix sum across reduction
             s_subgroupHistograms[gl_LocalInvocationID.x] = InclusiveWarpScanCircularShift(reduction);
         }
@@ -206,11 +206,11 @@ void k_DigitBinning(){
             if (partitionIndex > 0){
                 uint reduction = 0;
                 for( int k = int(partitionIndex); k > 0; ){
-                    const uint flagPayload = b_passHist[gl_LocalInvocationID.x * gl_NumWorkGroups.x + k - 1];//[pass_num];
+                    const uint flagPayload = b_passHist[gl_LocalInvocationID.x * gl_NumWorkGroups.x + k - 1][pass_num];
                     
                     if ((flagPayload & FLAG_MASK) == FLAG_INCLUSIVE){
                         reduction += flagPayload >> 2;
-                        atomicAdd(b_passHist[gl_LocalInvocationID.x * gl_NumWorkGroups.x + partitionIndex]/*[pass_num]*/, 1 | (reduction << 2));
+                        atomicAdd(b_passHist[gl_LocalInvocationID.x * gl_NumWorkGroups.x + partitionIndex][pass_num], 1 | (reduction << 2));
                         s_localHistograms[gl_LocalInvocationID.x] += reduction - s_subgroupHistograms[gl_LocalInvocationID.x];
                         break;
                     }
@@ -238,7 +238,7 @@ void k_DigitBinning(){
 
         // scatter keys into device memory
         for (uint i = gl_LocalInvocationID.x; i < BIN_PART_SIZE; i += gl_WorkGroupSize.x){
-            b_alt[s_localHistograms[s_subgroupHistograms[i] >> radix_shift & RADIX_MASK] + i] = s_subgroupHistograms[i];
+           pass_num % 2 == 0 ? b_alt[s_localHistograms[s_subgroupHistograms[i] >> radix_shift & RADIX_MASK] + i] = s_subgroupHistograms[i] : b_sort[s_localHistograms[s_subgroupHistograms[i] >> radix_shift & RADIX_MASK] + i] = s_subgroupHistograms[i];
         }
         
     }
@@ -255,7 +255,7 @@ void k_DigitBinning(){
             if(gl_LocalInvocationID.x < RADIX_BIN){
                 uint reduction = 0;    
                 for (int k = int(partitionIndex); k > 0;){
-                    const uint flagPayload = b_passHist[gl_LocalInvocationID.x * gl_NumWorkGroups.x + k - 1];
+                    const uint flagPayload = b_passHist[gl_LocalInvocationID.x * gl_NumWorkGroups.x + k - 1][pass_num];
 
                     if ((flagPayload & FLAG_MASK) == FLAG_INCLUSIVE){
                         reduction += flagPayload >> 2;
@@ -282,7 +282,7 @@ void k_DigitBinning(){
             uint warpFlags = 0xFFFFFFFF;
 
             if ( i < input_size)
-                key = b_sort[i];
+                key = pass_num % 2 == 0 ? b_sort[i] : b_alt[i];
             
             for (uint k = 0; k < RADIX_LOG; ++k){
                 const bool t = (key >> k + radix_shift & 1) > 0;
@@ -304,7 +304,7 @@ void k_DigitBinning(){
             }
 
             if (i < input_size)
-                b_alt[offset] = key;
+               pass_num % 2 == 0 ? b_alt[offset] = key : b_sort[offset] = key;
         }
         
     }

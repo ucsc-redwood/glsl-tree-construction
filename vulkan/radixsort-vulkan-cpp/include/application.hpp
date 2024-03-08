@@ -16,7 +16,7 @@ class Application{
 	VkCommandBuffer commandBuffer;
 	VkFence fence;
 	VkDescriptorPool descriptorPool;
-	//VkPipelineLayout pipelineLayout;
+	VkPipelineLayout pipelineLayout;
 	//VkPipeline pipeline;
 	VkShaderModule shaderModule;
 
