@@ -8,31 +8,31 @@
 #define IDX gl_GlobalInvocationID.x
 #define STRIDE gl_WorkGroupSize.x * gl_NumWorkGroups.x
 
-layout(set = 0, binding = 0) uniform N{
+layout(push_constant) uniform N{
     int n;
 };
 
-layout (set = 0, binding = 1) buffer Codes{
+layout (set = 0, binding = 0) buffer Codes{
     uint codes[];
 };
 
-layout(set = 0, binding = 2) buffer PrefixN{
+layout(set = 0, binding = 1) buffer PrefixN{
     uint8_t prefix_n[];
 };
 
-layout(set = 0, binding = 3) buffer HasLeafLeft{
+layout(set = 0, binding = 2) buffer HasLeafLeft{
     bool has_leaf_left[];
 };
 
-layout(set = 0, binding = 4) buffer HasLeafRight{
+layout(set = 0, binding = 3) buffer HasLeafRight{
     bool has_leaf_right[];
 };
 
-layout(set = 0, binding = 5) buffer LeftChild{
+layout(set = 0, binding = 4) buffer LeftChild{
     int left_child[];
 };
 
-layout(set = 0, binding = 6) buffer Parent{
+layout(set = 0, binding = 5) buffer Parent{
     int parent[];
 };
 

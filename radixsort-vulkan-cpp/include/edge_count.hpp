@@ -4,8 +4,6 @@
 #include <iostream>
 
 #define BUFFER_ELEMENTS 131072
-#define PARTITION_SIZE 7680
-#define BINNING_THREAD_BLOCKS  (BUFFER_ELEMENTS + PARTITION_SIZE - 1) / PARTITION_SIZE
 
 class Morton : public ApplicationBase{
     public:
@@ -13,7 +11,7 @@ class Morton : public ApplicationBase{
     ~Morton() {};
 	void 		submit(uint32_t* morton_keys, size_t size);
 	void 		cleanup(VkPipeline *pipeline);
-	void 		run( const int logical_blocks, glm::vec4* data, uint32_t* morton_keys, const uint32_t n, const float min_coord, const float range);
+	void 		run(glm::vec4* data, uint32_t* morton_keys, const uint32_t n, const float min_coord, const float range, const int logical_blocks);
 
     private:
 	VkShaderModule shaderModule;
@@ -101,7 +99,7 @@ void Morton::cleanup(VkPipeline *pipeline){
 		
 }
 
-void Morton::run(const int logical_blocks, glm::vec4* data, uint32_t* morton_keys, const uint32_t n, const float min_coord, const float range){
+void Morton::run(glm::vec4* data, uint32_t* morton_keys, const uint32_t n, const float min_coord, const float range, const int logical_blocks){
 	 
 	
 	VkPipeline pipeline;
@@ -135,7 +133,7 @@ void Morton::run(const int logical_blocks, glm::vec4* data, uint32_t* morton_key
 	add_push_constant(&pipelineLayoutCreateInfo, &push_constant, 1);
 	vkCreatePipelineLayout(singleton.device, &pipelineLayoutCreateInfo, nullptr, &pipelineLayout);
 	// allocate descriptor sets
-	allocate_descriptor_sets(1, descriptorSetLayouts, descriptorSets);
+	allocate_descriptor_sets(2, descriptorSetLayouts, descriptorSets);
 
 	// update descriptor sets, first we need to create write descriptor, then specify the destination set, binding number, descriptor type, and number of descriptors(buffers) to bind
 	VkDescriptorBufferInfo data_bufferDescriptor = { buffer.data_buffer, 0, VK_WHOLE_SIZE };
