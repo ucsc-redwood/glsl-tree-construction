@@ -3,3 +3,4 @@
 .vscode/
 **/.xmake
 **/build
+**/compiled_shader
