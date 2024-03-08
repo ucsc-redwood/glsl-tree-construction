@@ -112,7 +112,7 @@ uint getLaneMaskLt() {
     return mask;
 }
 
-void k_DigitBinning(){
+void k_DigitBinning(uint zheyuan_block_id, uint logical_blocks){
 
     // clear shared memory
     for(uint i = gl_LocalInvocationID.x; i < BIN_HISTS_SIZE; i += gl_WorkGroupSize.x){
@@ -133,7 +133,7 @@ void k_DigitBinning(){
     
     
     // handle size that is not prect multiple of parition size
-    if (partitionIndex < gl_NumWorkGroups.x -1){
+    if (partitionIndex < logical_blocks -1){
         // load the keys
         uint keys[BIN_KEYS_PER_THREAD];
         for (uint i = 0, t = gl_SubgroupInvocationID + BIN_SUB_PART_START + BIN_PART_START; i < BIN_KEYS_PER_THREAD; i++, t += LANE_COUNT){
@@ -172,7 +172,7 @@ void k_DigitBinning(){
                 s_subgroupHistograms[i] = reduction - s_subgroupHistograms[i];
             }
             //uint val = ((partitionIndex > 0) ? FLAG_AGGREGATE : FLAG_INCLUSIVE) | reduction << 2;
-            atomicAdd(b_passHist[gl_LocalInvocationID.x* gl_NumWorkGroups.x + partitionIndex][pass_num],((partitionIndex > 0) ? FLAG_AGGREGATE : FLAG_INCLUSIVE) | (reduction << 2));
+            atomicAdd(b_passHist[gl_LocalInvocationID.x* logical_blocks + partitionIndex][pass_num],((partitionIndex > 0) ? FLAG_AGGREGATE : FLAG_INCLUSIVE) | (reduction << 2));
             // exclusive prefix sum across reduction
             s_subgroupHistograms[gl_LocalInvocationID.x] = InclusiveWarpScanCircularShift(reduction);
         }
@@ -206,11 +206,11 @@ void k_DigitBinning(){
             if (partitionIndex > 0){
                 uint reduction = 0;
                 for( int k = int(partitionIndex); k > 0; ){
-                    const uint flagPayload = b_passHist[gl_LocalInvocationID.x * gl_NumWorkGroups.x + k - 1][pass_num];
+                    const uint flagPayload = b_passHist[gl_LocalInvocationID.x * logical_blocks + k - 1][pass_num];
                     
                     if ((flagPayload & FLAG_MASK) == FLAG_INCLUSIVE){
                         reduction += flagPayload >> 2;
-                        atomicAdd(b_passHist[gl_LocalInvocationID.x * gl_NumWorkGroups.x + partitionIndex][pass_num], 1 | (reduction << 2));
+                        atomicAdd(b_passHist[gl_LocalInvocationID.x * logical_blocks + partitionIndex][pass_num], 1 | (reduction << 2));
                         s_localHistograms[gl_LocalInvocationID.x] += reduction - s_subgroupHistograms[gl_LocalInvocationID.x];
                         break;
                     }
@@ -246,7 +246,7 @@ void k_DigitBinning(){
 
     
     // process final partition
-    if (partitionIndex == gl_NumWorkGroups.x - 1){
+    if (partitionIndex == logical_blocks - 1){
         groupMemoryBarrier();
         barrier();
 
@@ -255,7 +255,7 @@ void k_DigitBinning(){
             if(gl_LocalInvocationID.x < RADIX_BIN){
                 uint reduction = 0;    
                 for (int k = int(partitionIndex); k > 0;){
-                    const uint flagPayload = b_passHist[gl_LocalInvocationID.x * gl_NumWorkGroups.x + k - 1][pass_num];
+                    const uint flagPayload = b_passHist[gl_LocalInvocationID.x * logical_blocks + k - 1][pass_num];
 
                     if ((flagPayload & FLAG_MASK) == FLAG_INCLUSIVE){
                         reduction += flagPayload >> 2;
@@ -314,5 +314,8 @@ void k_DigitBinning(){
 
 
 void main(){
-    k_DigitBinning();
+    uint logical_blocks = uint(ceil(float(input_size) / float(BIN_PART_SIZE)));
+    for (uint zheyuan_block_id = gl_WorkGroupID.x; zheyuan_block_id < logical_blocks; zheyuan_block_id += gl_NumWorkGroups.x){
+        k_DigitBinning(zheyuan_block_id, logical_blocks);
+    }
 }

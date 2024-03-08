@@ -50,7 +50,7 @@ shared uint s_globalHistFourth[RADIX_BIN * 2];
 
 
 uint InclusiveWarpScanCircularShift(uint val){
-    for (uint i = 1; i <= 16; i <<= 1){
+    for (uint i = 1; i <= (LANE_COUNT>>1); i <<= 1){
         const uint t = subgroupShuffleUp(val, i);
         if (gl_SubgroupInvocationID >= i)
             val += t;
@@ -60,7 +60,7 @@ uint InclusiveWarpScanCircularShift(uint val){
 
 
 
-void k_GlobalHistogram(){
+void k_GlobalHistogram(uint zheyuan_block_id, uint logical_blocks){
     for (uint i = gl_LocalInvocationID.x; i < RADIX_BIN * 2; i += gl_WorkGroupSize.x){
         s_globalHistFirst[i] = 0;
         s_globalHistSec[i] = 0;
@@ -74,9 +74,9 @@ void k_GlobalHistogram(){
     {
         uint segmentIndex = gl_LocalInvocationID.x / 64 * RADIX_BIN;
 
-        if (gl_WorkGroupID.x < gl_NumWorkGroups.x - 1){
-            const uint partEnd = (gl_WorkGroupID.x + 1) * G_HIST_VEC_SIZE;
-            for (uint i = gl_LocalInvocationID.x + (gl_WorkGroupID.x * G_HIST_VEC_SIZE); i < partEnd; i += gl_WorkGroupSize.x){
+        if (zheyuan_block_id < logical_blocks - 1){
+            const uint partEnd = (zheyuan_block_id + 1) * G_HIST_VEC_SIZE;
+            for (uint i = gl_LocalInvocationID.x + (zheyuan_block_id * G_HIST_VEC_SIZE); i < partEnd; i += gl_WorkGroupSize.x){
                 const uvec4 t = uvec4(b_sort[i*4], b_sort[i*4 + 1], b_sort[i*4 + 2], b_sort[i*4 + 3]);
 
                 atomicAdd(s_globalHistFirst[segmentIndex + ((t.x) & 0xFF)], 1);
@@ -102,8 +102,8 @@ void k_GlobalHistogram(){
             }
         }
         
-        if (gl_WorkGroupID.x == gl_NumWorkGroups.x - 1){
-            for (uint i = gl_LocalInvocationID.x + (gl_WorkGroupID.x * G_HIST_PART_SIZE); i < input_size; i += gl_WorkGroupSize.x){
+        if (zheyuan_block_id == logical_blocks - 1){
+            for (uint i = gl_LocalInvocationID.x + (zheyuan_block_id * G_HIST_PART_SIZE); i < input_size; i += gl_WorkGroupSize.x){
                 uint t = b_sort[i];
                 atomicAdd(s_globalHistFirst[segmentIndex + ((t) & 0xFF)], 1);
                 atomicAdd(s_globalHistSec[segmentIndex + ((t >> 8) & 0xFF)], 1);
@@ -156,5 +156,9 @@ void k_GlobalHistogram(){
 
 
 void main() {
-    k_GlobalHistogram();
+    uint logical_blocks = uint(ceil(float(input_size) / float(G_HIST_PART_SIZE)));
+    for (uint zheyuan_block_id = gl_WorkGroupID.x; zheyuan_block_id < logical_blocks; zheyuan_block_id += gl_NumWorkGroups.x){
+        k_GlobalHistogram(zheyuan_block_id, logical_blocks);
+    }
+    //k_GlobalHistogram();
 }

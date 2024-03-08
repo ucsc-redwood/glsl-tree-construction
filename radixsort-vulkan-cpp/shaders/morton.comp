@@ -4,16 +4,6 @@
 #extension GL_KHR_shader_subgroup_arithmetic: enable
 #extension GL_KHR_shader_subgroup_vote: enable
 
-
-#define TotalThreadsX gl_NumWorkGroups.x * gl_WorkGroupSize.x
-#define TotalThreadsY gl_NumWorkGroups.y * gl_WorkGroupSize.y
-#define TotalThreadsZ gl_NumWorkGroups.z * gl_WorkGroupSize.z
-#define TotalThreads TotalThreadsX * TotalThreadsY * TotalThreadsZ
-#define ITEM_PER_THREAD n/(TotalThreads)
-
-#define IDX gl_GlobalInvocationID.x
-#define STRIDE gl_WorkGroupSize.x * gl_NumWorkGroups.x
-
 layout(set = 0, binding = 0) buffer Data{
   float data[][4];
 };
@@ -57,10 +47,9 @@ uint single_point_to_code_v2(float x, float y, float z, const float min_coord, c
 
 
 void k_ComputeMortonCode(){
-   // int startIdx = int(gl_GlobalInvocationID.x * ITEM_PER_THREAD + 1);
-   // int endIdx = int(min(startIdx + ITEM_PER_THREAD, n));
-
-    for(int i = int(IDX); i < n; i += int(STRIDE)){
+    const uint idx = gl_LocalInvocationID.x + gl_WorkGroupSize.x * gl_WorkGroupID.x;
+    const uint stride = gl_WorkGroupSize.x * gl_NumWorkGroups.x;
+    for(uint i = idx; i < n; i += stride){
       morton_keys[i] = single_point_to_code_v2(data[i][0], data[i][1], data[i][2], min_coord, range);
     }
 }

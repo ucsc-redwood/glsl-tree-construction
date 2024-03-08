@@ -301,7 +301,7 @@ VkWriteDescriptorSet RadixSort::create_descriptor_write(VkDescriptorSet dstSet, 
 }
 
 VkPipelineShaderStageCreateInfo RadixSort::load_shader(const std::string shader_name){
-	const std::string shadersPath = "/home/zheyuan/vulkan-tree-construction/vulkan/radixsort-vulkan-cpp/shaders/compiled_shaders/";
+	const std::string shadersPath = "/home/zheyuan/vulkan-tree-construction/radixsort-vulkan-cpp/shaders/compiled_shaders/";
 
 	VkPipelineShaderStageCreateInfo shaderStage = {};
 	shaderStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -439,123 +439,6 @@ void RadixSort::create_pipeline_barrier(VkBufferMemoryBarrier* bufferBarrier, Vk
 		1, bufferBarrier,
 		0, nullptr);
 }
-
-void RadixSort::create_command_buffer(const VkDescriptorSet *descriptor_sets, uint32_t logical_block){
-	/*
-			printf("create_command_buffer\n");
-			VkCommandBufferBeginInfo cmdBufInfo {};
-			cmdBufInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-
-			vkBeginCommandBuffer(commandBuffer, &cmdBufInfo);
-			
-			// Barrier to ensure that input buffer transfer is finished before compute shader reads from it
-			VkBufferMemoryBarrier bufferBarrier {};
-			bufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-			bufferBarrier.buffer = radix_sort_buffer.b_sort_buffer;
-			bufferBarrier.size = VK_WHOLE_SIZE;
-			bufferBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-			bufferBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-			bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-
-			VkBufferMemoryBarrier g_histogram_bufferBarrier {};
-			g_histogram_bufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-			g_histogram_bufferBarrier.buffer = radix_sort_buffer.g_histogram_buffer;
-			g_histogram_bufferBarrier.size = VK_WHOLE_SIZE;
-			g_histogram_bufferBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-			g_histogram_bufferBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-			g_histogram_bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			g_histogram_bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-
-			vkCmdPipelineBarrier(
-				commandBuffer,
-				VK_PIPELINE_STAGE_HOST_BIT,
-				VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-				VK_FLAGS_NONE,
-				0, nullptr,
-				1, &bufferBarrier,
-				0, nullptr);
-
-				vkCmdPipelineBarrier(
-				commandBuffer,
-				VK_PIPELINE_STAGE_HOST_BIT,
-				VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-				VK_FLAGS_NONE,
-				0, nullptr,
-				1, &g_histogram_bufferBarrier,
-				0, nullptr);
-
-			
-
-			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
-			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 2, descriptor_sets, 0, 0);
-
-			vkCmdDispatch(commandBuffer, logical_block, 1, 1);
-
-			// Barrier to ensure that shader writes are finished before buffer is read back from GPU
-			bufferBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-			bufferBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-			bufferBarrier.buffer = radix_sort_buffer.b_sort_buffer;
-			bufferBarrier.size = VK_WHOLE_SIZE;
-			bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-
-			g_histogram_bufferBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-			g_histogram_bufferBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-			g_histogram_bufferBarrier.buffer = radix_sort_buffer.g_histogram_buffer;
-			g_histogram_bufferBarrier.size = VK_WHOLE_SIZE;
-			g_histogram_bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			g_histogram_bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-
-			vkCmdPipelineBarrier(
-				commandBuffer,
-				VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-				VK_PIPELINE_STAGE_TRANSFER_BIT,
-				VK_FLAGS_NONE,
-				0, nullptr,
-				1, &bufferBarrier,
-				0, nullptr);
-
-
-			vkCmdPipelineBarrier(
-				commandBuffer,
-				VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-				VK_PIPELINE_STAGE_TRANSFER_BIT,
-				VK_FLAGS_NONE,
-				0, nullptr,
-				1, &g_histogram_bufferBarrier,
-				0, nullptr);
-
-		
-			// todo: change the hardcode
-			// Read back to host visible buffer
-			
-			const VkDeviceSize bufferSize = 1024 * sizeof(uint32_t);
-			VkBufferCopy copyRegion = {};
-			copyRegion.size = bufferSize;
-			vkCmdCopyBuffer(commandBuffer, radix_sort_buffer.g_histogram_buffer, temp_buffer.g_histogram_buffer, 1, &copyRegion);
-
-			// Barrier to ensure that buffer copy is finished before host reading from it
-			bufferBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-			bufferBarrier.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
-			bufferBarrier.buffer = temp_buffer.g_histogram_buffer;
-			bufferBarrier.size = VK_WHOLE_SIZE;
-			bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-
-			vkCmdPipelineBarrier(
-				commandBuffer,
-				VK_PIPELINE_STAGE_TRANSFER_BIT,
-				VK_PIPELINE_STAGE_HOST_BIT,
-				VK_FLAGS_NONE,
-				0, nullptr,
-				1, &bufferBarrier,
-				0, nullptr);
-
-			vkEndCommandBuffer(commandBuffer);
-			*/
-}
-
 
 void RadixSort::create_fence(){
 	VkFenceCreateInfo fenceCreateInfo {};
@@ -753,7 +636,7 @@ void RadixSort::run(){
 	// for histogram
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, histogram_pipeline);
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 2, descriptorSets, 0, 0);
-	vkCmdDispatch(commandBuffer, 2, 1, 1);
+	vkCmdDispatch(commandBuffer, 4, 1, 1);
 	
 	b_sort_barrier = create_buffer_barrier(&radix_sort_buffer.b_sort_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
 	g_histogram_barrier = create_buffer_barrier(&radix_sort_buffer.g_histogram_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
@@ -765,7 +648,7 @@ void RadixSort::run(){
 		// push data to the push constants
 	vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RadixSortPushConstant), &radix_sort_push_constant);
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, binning_pipeline);
-	vkCmdDispatch(commandBuffer, BINNING_THREAD_BLOCKS, 1, 1);
+	vkCmdDispatch(commandBuffer, 32, 1, 1);
 
 	b_sort_barrier = create_buffer_barrier(&radix_sort_buffer.b_sort_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
 	b_alt_barrier = create_buffer_barrier(&radix_sort_buffer.b_alt_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
@@ -783,7 +666,7 @@ void RadixSort::run(){
 	radix_sort_push_constant.pass_num = 1;
 	radix_sort_push_constant.radix_shift = 8;
 	vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RadixSortPushConstant), &radix_sort_push_constant);
-	vkCmdDispatch(commandBuffer, BINNING_THREAD_BLOCKS, 1, 1);
+	vkCmdDispatch(commandBuffer, 32, 1, 1);
 	b_sort_barrier = create_buffer_barrier(&radix_sort_buffer.b_sort_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
 	b_alt_barrier = create_buffer_barrier(&radix_sort_buffer.b_alt_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
 	g_histogram_barrier = create_buffer_barrier(&radix_sort_buffer.g_histogram_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
@@ -799,7 +682,7 @@ void RadixSort::run(){
 	radix_sort_push_constant.pass_num = 2;
 	radix_sort_push_constant.radix_shift = 16;
 	vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RadixSortPushConstant), &radix_sort_push_constant);
-	vkCmdDispatch(commandBuffer, BINNING_THREAD_BLOCKS, 1, 1);
+	vkCmdDispatch(commandBuffer, 32, 1, 1);
 	b_sort_barrier = create_buffer_barrier(&radix_sort_buffer.b_sort_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
 	b_alt_barrier = create_buffer_barrier(&radix_sort_buffer.b_alt_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
 	g_histogram_barrier = create_buffer_barrier(&radix_sort_buffer.g_histogram_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
@@ -815,7 +698,7 @@ void RadixSort::run(){
 	radix_sort_push_constant.pass_num = 3;
 	radix_sort_push_constant.radix_shift = 24;
 	vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RadixSortPushConstant), &radix_sort_push_constant);
-	vkCmdDispatch(commandBuffer, BINNING_THREAD_BLOCKS, 1, 1);
+	vkCmdDispatch(commandBuffer, 32, 1, 1);
 	b_sort_barrier = create_buffer_barrier(&radix_sort_buffer.b_sort_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
 	b_alt_barrier = create_buffer_barrier(&radix_sort_buffer.b_alt_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
 	g_histogram_barrier = create_buffer_barrier(&radix_sort_buffer.g_histogram_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);

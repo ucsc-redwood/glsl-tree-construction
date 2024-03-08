@@ -20,21 +20,13 @@ class Application{
 	//VkPipeline pipeline;
 	VkShaderModule shaderModule;
 
-	Application() = default;
+	Application(const Application&) = delete;
+	Application& operator=(const Application&) = delete;
+	static Application& get_instance(){
+		static Application instance;
+		return instance;
+	}
 	virtual ~Application() {};
-	/*
-	virtual const std::unordered_map<const char *, bool> get_instance_extensions();
-
-	virtual const std::unordered_map<const char *, bool> get_device_extensions();
-
-	virtual void add_device_extension(const char *extension, bool optional = false);
-
-	virtual void add_instance_extension(const char *extension, bool optional = false);
-
-	virtual void set_api_version(uint32_t requested_api_version);
-
-	virtual void request_gpu_features(VULKAN_HPP_NAMESPACE::PhysicalDevice &gpu);
-	*/
 	VkResult createBuffer(VkBufferUsageFlags usageFlags, VkMemoryPropertyFlags memoryPropertyFlags, VkBuffer *buffer, VkDeviceMemory *memory, VkDeviceSize size, void *data = nullptr);
 	protected:
 		std::unordered_map<const char *, bool> device_extensions;
@@ -44,6 +36,131 @@ class Application{
 		std::vector<const char*> enabledInstanceExtensions;
 		uint32_t api_version = VK_API_VERSION_1_2;
 		bool high_priority_graphics_queue{false};
+	
+	private:
+
+	VkResult create_instance(){
+	VkApplicationInfo appInfo = {};
+	appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+	appInfo.pApplicationName = name.c_str();
+	appInfo.pEngineName = name.c_str();
+	appInfo.apiVersion = api_version;
+
+	std::vector<const char*> instanceExtensions = { VK_KHR_SURFACE_EXTENSION_NAME };
+
+	uint32_t extCount = 0;
+	vkEnumerateInstanceExtensionProperties(nullptr, &extCount, nullptr);
+	if (extCount > 0)
+	{
+		std::vector<VkExtensionProperties> extensions(extCount);
+		if (vkEnumerateInstanceExtensionProperties(nullptr, &extCount, &extensions.front()) == VK_SUCCESS)
+		{
+			for (VkExtensionProperties& extension : extensions)
+			{
+				supportedInstanceExtensions.push_back(extension.extensionName);
+			}
+		}
+	}
+
+	// Enabled requested instance extensions
+	if (enabledInstanceExtensions.size() > 0)
+	{
+		for (const char * enabledExtension : enabledInstanceExtensions)
+		{
+			// Output message if requested extension is not available
+			if (std::find(supportedInstanceExtensions.begin(), supportedInstanceExtensions.end(), enabledExtension) == supportedInstanceExtensions.end())
+			{
+				std::cerr << "Enabled instance extension \"" << enabledExtension << "\" is not present at instance level\n";
+			}
+			instanceExtensions.push_back(enabledExtension);
+		}
+	}
+
+    if (enableValidationLayers && !checkValidationLayerSupport()) {
+        throw std::runtime_error("validation layers requested, but not available!");
+    }
+
+	VkInstanceCreateInfo instanceCreateInfo = {};
+	if (enableValidationLayers) {
+    	instanceCreateInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
+    	instanceCreateInfo.ppEnabledLayerNames = validationLayers.data();
+	} else {
+    	instanceCreateInfo.enabledLayerCount = 0;
+	}
+	instanceCreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+	instanceCreateInfo.pNext = NULL;
+	instanceCreateInfo.pApplicationInfo = &appInfo;
+
+	if (instanceExtensions.size() > 0)
+	{
+		instanceCreateInfo.enabledExtensionCount = (uint32_t)instanceExtensions.size();
+		instanceCreateInfo.ppEnabledExtensionNames = instanceExtensions.data();
+	}
+
+    VkResult result = vkCreateInstance(&instanceCreateInfo, nullptr, &instance);
+
+    return result;
+	}
+
+	void create_device(){
+		uint32_t deviceCount = 0;
+		vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
+		std::vector<VkPhysicalDevice> physicalDevices(deviceCount);
+		vkEnumeratePhysicalDevices(instance, &deviceCount, physicalDevices.data());
+		physicalDevice = physicalDevices[0];
+
+		VkPhysicalDeviceProperties deviceProperties;
+		vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
+		printf("GPU: %s\n", deviceProperties.deviceName);
+	}
+
+void create_compute_queue(){
+		printf("create_compute_queue\n");
+			// Request a single compute queue
+		const float defaultQueuePriority(0.0f);
+		VkDeviceQueueCreateInfo queueCreateInfo = {};
+		uint32_t queueFamilyCount;
+		vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, nullptr);
+		std::vector<VkQueueFamilyProperties> queueFamilyProperties(queueFamilyCount);
+		vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilyProperties.data());
+		for (uint32_t i = 0; i < static_cast<uint32_t>(queueFamilyProperties.size()); i++) {
+			if (queueFamilyProperties[i].queueFlags & VK_QUEUE_COMPUTE_BIT) {
+				queueFamilyIndex = i;
+				queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+				queueCreateInfo.queueFamilyIndex = i;
+				queueCreateInfo.queueCount = 1;
+				queueCreateInfo.pQueuePriorities = &defaultQueuePriority;
+				break;
+			}
+		}
+		// Create logical device
+		VkDeviceCreateInfo deviceCreateInfo = {};
+		deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+		deviceCreateInfo.queueCreateInfoCount = 1;
+		deviceCreateInfo.pQueueCreateInfos = &queueCreateInfo;
+		std::vector<const char*> deviceExtensions = {};
+
+
+		deviceCreateInfo.enabledExtensionCount = (uint32_t)deviceExtensions.size();
+		deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions.data();
+		vkCreateDevice(physicalDevice, &deviceCreateInfo, nullptr, &device);
+
+		// Get a compute queue
+		vkGetDeviceQueue(device, queueFamilyIndex, 0, &queue);
+	}
+
+void build_command_pool() {
+		printf("build_command_pool\n");
+		VkCommandPoolCreateInfo cmdPoolInfo = {};
+		cmdPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+		cmdPoolInfo.queueFamilyIndex = queueFamilyIndex;
+		cmdPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+		vkCreateCommandPool(device, &cmdPoolInfo, nullptr, &commandPool);
+	}
+
+	Application(){
+
+	}
 };
 
 
