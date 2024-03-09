@@ -1,4 +1,10 @@
+#include "morton.hpp"
+#include "unique.hpp"
 #include "radixsort.hpp"
+#include "radix_tree.hpp"
+#include "edge_count.hpp"
+#include "prefix_sum.hpp"
+#include "octree.hpp"
 #include <vulkan/vulkan.hpp>
 
 int main(){

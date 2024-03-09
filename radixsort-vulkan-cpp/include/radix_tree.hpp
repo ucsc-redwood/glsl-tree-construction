@@ -5,11 +5,11 @@
 
 #define BUFFER_ELEMENTS 131072
 
-class Morton : public ApplicationBase{
+class RadixTree : public ApplicationBase{
     public:
-    Morton() : ApplicationBase() {};
-    ~Morton() {};
-	void 		submit(uint32_t* morton_keys, size_t size);
+    RadixTree() : ApplicationBase() {};
+    ~RadixTree() {};
+	void 		submit();
 	void 		cleanup(VkPipeline *pipeline);
 	void 		run(const int logical_blocks, uint32_t* morton_keys, uint8_t* prefix_n, bool* has_leaf_left, bool* has_leaf_right, int* left_child, int* parent, const int n_unique);
 
@@ -64,7 +64,7 @@ class Morton : public ApplicationBase{
 };
 
 
-void Morton::submit(uint32_t* morton_keys, size_t size){
+void RadixTree::submit(){
 			printf("execute\n");
 			vkResetFences(singleton.device, 1, &fence);
 			const VkPipelineStageFlags waitStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
@@ -75,44 +75,50 @@ void Morton::submit(uint32_t* morton_keys, size_t size){
 			computeSubmitInfo.pCommandBuffers = &commandBuffer;
 			vkQueueSubmit(queue, 1, &computeSubmitInfo, fence);
 			vkWaitForFences(singleton.device, 1, &fence, VK_TRUE, UINT64_MAX);
-
-			// Make device writes visible to the host
-			void *mapped;
-			vkMapMemory(singleton.device,temp_memory.morton_keys_memory, 0, VK_WHOLE_SIZE, 0, &mapped);
-			VkMappedMemoryRange mappedRange{};
-			mappedRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-			mappedRange.memory = temp_memory.morton_keys_memory;
-			mappedRange.offset = 0;
-			mappedRange.size = VK_WHOLE_SIZE;
-			vkInvalidateMappedMemoryRanges(singleton.device, 1, &mappedRange);
-			
-			// Copy to output
-			const VkDeviceSize bufferSize = size * sizeof(uint32_t);
-			memcpy(morton_keys, mapped, bufferSize);
-			vkUnmapMemory(singleton.device,temp_memory.morton_keys_memory);
 }
 
-void Morton::cleanup(VkPipeline *pipeline){
+void RadixTree::cleanup(VkPipeline *pipeline){
 		
-		vkDestroyBuffer(singleton.device, buffer.data_buffer, nullptr);
-		vkFreeMemory(singleton.device, memory.data_memory, nullptr);
 		vkDestroyBuffer(singleton.device, buffer.morton_keys_buffer, nullptr);
 		vkFreeMemory(singleton.device, memory.morton_keys_memory, nullptr);
-		vkDestroyBuffer(singleton.device, temp_buffer.data_buffer, nullptr);
-		vkFreeMemory(singleton.device, temp_memory.data_memory, nullptr);
 		vkDestroyBuffer(singleton.device, temp_buffer.morton_keys_buffer, nullptr);
 		vkFreeMemory(singleton.device, temp_memory.morton_keys_memory, nullptr);
+
+		vkDestroyBuffer(singleton.device, buffer.prefix_n_buffer, nullptr);
+		vkFreeMemory(singleton.device, memory.prefix_n_memory, nullptr);
+		vkDestroyBuffer(singleton.device, temp_buffer.prefix_n_buffer, nullptr);
+		vkFreeMemory(singleton.device, temp_memory.prefix_n_memory, nullptr);
+
+		vkDestroyBuffer(singleton.device, buffer.has_leaf_left_buffer, nullptr);
+		vkFreeMemory(singleton.device, memory.has_leaf_left_memory, nullptr);
+		vkDestroyBuffer(singleton.device, temp_buffer.has_leaf_left_buffer, nullptr);
+		vkFreeMemory(singleton.device, temp_memory.has_leaf_left_memory, nullptr);
+		
+		vkDestroyBuffer(singleton.device, buffer.has_leaf_right_buffer, nullptr);
+		vkFreeMemory(singleton.device, memory.has_leaf_right_memory, nullptr);
+		vkDestroyBuffer(singleton.device, temp_buffer.has_leaf_right_buffer, nullptr);
+		vkFreeMemory(singleton.device, temp_memory.has_leaf_right_memory, nullptr);
+
+		vkDestroyBuffer(singleton.device, buffer.left_child_buffer, nullptr);
+		vkFreeMemory(singleton.device, memory.left_child_memory, nullptr);
+		vkDestroyBuffer(singleton.device, temp_buffer.left_child_buffer, nullptr);
+		vkFreeMemory(singleton.device, temp_memory.left_child_memory, nullptr);
+
+		vkDestroyBuffer(singleton.device, buffer.parent_buffer, nullptr);
+		vkFreeMemory(singleton.device, memory.parent_memory, nullptr);
+		vkDestroyBuffer(singleton.device, temp_buffer.parent_buffer, nullptr);
+		vkFreeMemory(singleton.device, temp_memory.parent_memory, nullptr);
+
 
 
 
 		vkDestroyDescriptorSetLayout(singleton.device, descriptorSetLayouts[0], nullptr);
-		vkDestroyDescriptorSetLayout(singleton.device, descriptorSetLayouts[1], nullptr);
 		vkDestroyPipeline(singleton.device, *pipeline, nullptr);
 		vkDestroyShaderModule(singleton.device, shaderModule, nullptr);
 		
 }
 
-void Morton::run(const int logical_blocks, uint32_t* morton_keys, uint8_t* prefix_n, bool* has_leaf_left, bool* has_leaf_right, int* left_child, int* parent, const int n_unique){
+void RadixTree::run(const int logical_blocks, uint32_t* morton_keys, uint8_t* prefix_n, bool* has_leaf_left, bool* has_leaf_right, int* left_child, int* parent, const int n_unique){
 	 
 	
 	VkPipeline pipeline;
@@ -212,24 +218,101 @@ void Morton::run(const int logical_blocks, uint32_t* morton_keys, uint8_t* prefi
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 1, descriptorSets, 0, 0);
 	vkCmdDispatch(commandBuffer, logical_blocks, 1, 1);
 	
-	morton_keys_barrier = create_buffer_barrier(&buffer.morton_keys_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
-	create_pipeline_barrier(&morton_keys_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+	prefix_n_barrier = create_buffer_barrier(&buffer.prefix_n_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
+	has_leaf_left_barrier = create_buffer_barrier(&buffer.has_leaf_left_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
+	has_leaf_right_barrier = create_buffer_barrier(&buffer.has_leaf_right_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
+	left_child_barrier = create_buffer_barrier(&buffer.left_child_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
+	parent_barrier = create_buffer_barrier(&buffer.parent_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
 
-	VkBufferCopy copyRegion = {};
-	copyRegion.size = n* sizeof(uint32_t);
-	vkCmdCopyBuffer(commandBuffer, buffer.morton_keys_buffer, temp_buffer.morton_keys_buffer, 1, &copyRegion);
-	morton_keys_barrier = create_buffer_barrier(&buffer.morton_keys_buffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT);
-	create_pipeline_barrier(&morton_keys_barrier, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT);
+	create_pipeline_barrier(&prefix_n_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+	create_pipeline_barrier(&has_leaf_left_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+	create_pipeline_barrier(&has_leaf_right_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+	create_pipeline_barrier(&left_child_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+	create_pipeline_barrier(&parent_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
+	VkBufferCopy prefix_n_copyRegion = {};
+	prefix_n_copyRegion.size = n* sizeof(uint8_t);
+	VkBufferCopy has_leaf_left_copyRegion = {};
+	has_leaf_left_copyRegion.size = n* sizeof(bool);
+	VkBufferCopy has_leaf_right_copyRegion = {};
+	has_leaf_right_copyRegion.size = n* sizeof(bool);
+	VkBufferCopy left_child_copyRegion = {};
+	left_child_copyRegion.size = n* sizeof(int);
+	VkBufferCopy parent_copyRegion = {};
+	parent_copyRegion.size = n* sizeof(int);
+	vkCmdCopyBuffer(commandBuffer, buffer.prefix_n_buffer, temp_buffer.prefix_n_buffer, 1, &prefix_n_copyRegion);
+	vkCmdCopyBuffer(commandBuffer, buffer.has_leaf_left_buffer, temp_buffer.has_leaf_left_buffer, 1, &has_leaf_left_copyRegion);
+	vkCmdCopyBuffer(commandBuffer, buffer.has_leaf_right_buffer, temp_buffer.has_leaf_right_buffer, 1, &has_leaf_right_copyRegion);
+	vkCmdCopyBuffer(commandBuffer, buffer.left_child_buffer, temp_buffer.left_child_buffer, 1, &left_child_copyRegion);
+	vkCmdCopyBuffer(commandBuffer, buffer.parent_buffer, temp_buffer.parent_buffer, 1, &parent_copyRegion);
+
+
+	prefix_n_barrier = create_buffer_barrier(&buffer.prefix_n_buffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT);
+	has_leaf_left_barrier = create_buffer_barrier(&buffer.has_leaf_left_buffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT);
+	has_leaf_right_barrier = create_buffer_barrier(&buffer.has_leaf_right_buffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT);
+	left_child_barrier = create_buffer_barrier(&buffer.left_child_buffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT);
+	parent_barrier = create_buffer_barrier(&buffer.parent_buffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT);
+	create_pipeline_barrier(&prefix_n_barrier, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT);
+	create_pipeline_barrier(&has_leaf_left_barrier, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT);
+	create_pipeline_barrier(&has_leaf_right_barrier, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT);
+	create_pipeline_barrier(&left_child_barrier, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT);
+	create_pipeline_barrier(&parent_barrier, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT);
 
 	vkEndCommandBuffer(commandBuffer);
-
 
 	// create fence
 	create_fence();
 
 	// submit the command buffer, fence and flush
-	submit(morton_keys, n);
+	submit();
+
+	// Make device writes visible to the host
+	void *mapped;
+	vkMapMemory(singleton.device,temp_memory.prefix_n_memory, 0, VK_WHOLE_SIZE, 0, &mapped);
+	VkMappedMemoryRange mappedRange{};
+	mappedRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+	mappedRange.memory = temp_memory.prefix_n_memory;
+	mappedRange.offset = 0;
+	mappedRange.size = VK_WHOLE_SIZE;
+	vkInvalidateMappedMemoryRanges(singleton.device, 1, &mappedRange);
+	VkDeviceSize bufferSize = n * sizeof(uint8_t);
+	memcpy(prefix_n, mapped, bufferSize);
+	vkUnmapMemory(singleton.device,temp_memory.prefix_n_memory);
+
+	vkMapMemory(singleton.device,temp_memory.has_leaf_left_memory, 0, VK_WHOLE_SIZE, 0, &mapped);
+	mappedRange.memory = temp_memory.has_leaf_left_memory;
+	mappedRange.offset = 0;
+	mappedRange.size = VK_WHOLE_SIZE;
+	vkInvalidateMappedMemoryRanges(singleton.device, 1, &mappedRange);
+	bufferSize = n * sizeof(bool);
+	memcpy(has_leaf_left, mapped, bufferSize);
+	vkUnmapMemory(singleton.device,temp_memory.has_leaf_left_memory);
+
+	vkMapMemory(singleton.device,temp_memory.has_leaf_right_memory, 0, VK_WHOLE_SIZE, 0, &mapped);
+	mappedRange.memory = temp_memory.has_leaf_right_memory;
+	mappedRange.offset = 0;
+	mappedRange.size = VK_WHOLE_SIZE;
+	vkInvalidateMappedMemoryRanges(singleton.device, 1, &mappedRange);
+	bufferSize = n * sizeof(bool);
+	memcpy(has_leaf_right, mapped, bufferSize);
+	vkUnmapMemory(singleton.device,temp_memory.has_leaf_right_memory);
+
+	vkMapMemory(singleton.device,temp_memory.left_child_memory, 0, VK_WHOLE_SIZE, 0, &mapped);
+	mappedRange.memory = temp_memory.left_child_memory;
+	mappedRange.offset = 0;
+	mappedRange.size = VK_WHOLE_SIZE;
+	vkInvalidateMappedMemoryRanges(singleton.device, 1, &mappedRange);
+	bufferSize = n * sizeof(int);
+	memcpy(left_child, mapped, bufferSize);
+	vkUnmapMemory(singleton.device,temp_memory.left_child_memory);
+
+	vkMapMemory(singleton.device,temp_memory.parent_memory, 0, VK_WHOLE_SIZE, 0, &mapped);
+	mappedRange.memory = temp_memory.parent_memory;
+	mappedRange.offset = 0;
+	mappedRange.size = VK_WHOLE_SIZE;
+	vkInvalidateMappedMemoryRanges(singleton.device, 1, &mappedRange);
+	bufferSize = n * sizeof(int);
+	memcpy(parent, mapped, bufferSize);
 
 	vkQueueWaitIdle(queue);
 

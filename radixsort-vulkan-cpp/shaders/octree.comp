@@ -51,7 +51,7 @@ layout(set=0,binding=2)buffer RtNodeCounts{
 };
 
 layout(set=0,binding=3)buffer Codes{
-    int codes[];
+    uint codes[];
 };
 
 layout(set=0,binding=4)buffer PrefixN{
@@ -75,7 +75,7 @@ layout(set=0,binding=8)buffer RtHasLeafRight{
 };
 
 
-layout(set=0,binding=9)uniform Constants{
+layout(push_constant)uniform Constants{
     float min_coord;
     float range;
     int n_brt_nodes;
@@ -131,7 +131,7 @@ void k_MakeOctNodes(int i){
         // for each nodes, make n_new_nodes
         for(int j=0;j<n_new_nodes-1;++j){
             const int level=rt_prefixN[i]/3-j;
-            const int node_prefix=codes[i]>>(morton_bits-(3*level));
+            const int node_prefix=int(codes[i]>>(morton_bits-(3*level)));
             const int which_child=node_prefix&0x7;
             const int parent=oct_idx+1;
             
@@ -165,7 +165,7 @@ void k_MakeOctNodes(int i){
             
             const int oct_parent= int(node_offsets[rt_parent]);
             const int top_level=rt_prefixN[i]/3-n_new_nodes+1;
-            const int top_node_prefix=codes[i]>>(morton_bits-(3*top_level));
+            const int top_node_prefix=int(codes[i]>>(morton_bits-(3*top_level)));
             
             const int which_child=top_node_prefix&0x7;
             
@@ -184,13 +184,14 @@ void k_MakeOctNodes(int i){
     
 }
 
+/*
 void k_LinkLeafNodes(int i ){
 
     if(i<n_brt_nodes){
         if(rt_hasLeafLeft[i] == 1){
             int leaf_idx=rt_leftChild[i];
             int leaf_level=rt_prefixN[i]/3+1;
-            int leaf_prefix=codes[leaf_idx]>>(morton_bits-(3*leaf_level));
+            int leaf_prefix=int(codes[leaf_idx]>>(morton_bits-(3*leaf_level)));
             int which_child=leaf_prefix&0x7;
             // walk up the radix tree until finding a node which contributes an
             // octnode
@@ -206,7 +207,7 @@ void k_LinkLeafNodes(int i ){
         if(rt_hasLeafRight[i] == 1){
             int leaf_idx=rt_leftChild[i]+1;
             int leaf_level=rt_prefixN[i]/3+1;
-            int leaf_prefix=codes[leaf_idx]>>(morton_bits-(3*leaf_level));
+            int leaf_prefix=int(codes[leaf_idx]>>(morton_bits-(3*leaf_level)));
             int which_child=leaf_prefix&0x7;
             int rt_node=i;
             while(rt_node_counts[rt_node]==0){
@@ -219,7 +220,7 @@ void k_LinkLeafNodes(int i ){
         }
     }
 }
-
+*/
 
 void main(){
     for (int i = int(IDX); i < n_brt_nodes; i += int(STRIDE)) {

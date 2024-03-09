@@ -17,11 +17,11 @@ layout(set = 0, binding = 1 ) buffer Parent{
 };
 
 layout(set = 0, binding = 2 ) buffer EdgeCount{
-    uint edge_count[];
+    int edge_count[];
 };
 
-layout (set = 0, binding = 3) uniform constants{
-    uint n_brt_nodes;
+layout (push_constant) uniform Constant{
+    int n_brt_nodes;
 };
 
 layout(local_size_x = 512) in;

@@ -79,7 +79,7 @@ shared uint s_localHistograms[RADIX_BIN];
 
 
 uint InclusiveWarpScanCircularShift(uint val){
-    for (uint i = 1; i <= 16; i <<= 1){
+    for (uint i = 1; i <= (LANE_COUNT >> 1); i <<= 1){
         const uint t = subgroupShuffleUp(val, i);
         if (gl_SubgroupInvocationID >= i)
             val += t;

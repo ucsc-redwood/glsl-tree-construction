@@ -5,13 +5,13 @@
 
 #define BUFFER_ELEMENTS 131072
 
-class Morton : public ApplicationBase{
+class EdgeCount : public ApplicationBase{
     public:
-    Morton() : ApplicationBase() {};
-    ~Morton() {};
-	void 		submit(uint32_t* morton_keys, size_t size);
+    EdgeCount() : ApplicationBase() {};
+    ~EdgeCount() {};
+	void 		submit();
 	void 		cleanup(VkPipeline *pipeline);
-	void 		run(glm::vec4* data, uint32_t* morton_keys, const uint32_t n, const float min_coord, const float range, const int logical_blocks);
+	void 		run(const int logical_blocks, uint8_t* prefix_n, int* parent, int* edge_count, int n_brt_nodes);
 
     private:
 	VkShaderModule shaderModule;
@@ -22,36 +22,39 @@ class Morton : public ApplicationBase{
 	VkDescriptorSetLayoutCreateInfo descriptorLayout[1] = {VkDescriptorSetLayoutCreateInfo{}};
 
 	struct PushConstant {
-        uint32_t n;
-		float min_coord;
-		float range;
-	} morton_push_constant;
+		int n_brt_nodes;
+	} edge_count_push_constant;
     
 	struct{
-		VkBuffer data_buffer;
-		VkBuffer morton_keys_buffer;
+		VkBuffer prefix_n_buffer;
+		VkBuffer parent_buffer;
+		VkBuffer edge_count_buffer;
+
 	} buffer;
 
 	struct{
-		VkBuffer data_buffer;
-		VkBuffer morton_keys_buffer;
+		VkBuffer prefix_n_buffer;
+		VkBuffer parent_buffer;
+		VkBuffer edge_count_buffer;
 	} temp_buffer;
 
 	struct{
-		VkDeviceMemory data_memory;
-		VkDeviceMemory morton_keys_memory;
+		VkDeviceMemory prefix_n_memory;
+		VkDeviceMemory parent_memory;
+		VkDeviceMemory edge_count_memory;
 	} memory;
 
 	struct{
-		VkDeviceMemory data_memory;
-		VkDeviceMemory morton_keys_memory;
+		VkDeviceMemory prefix_n_memory;
+		VkDeviceMemory parent_memory;
+		VkDeviceMemory edge_count_memory;
+
 	} temp_memory;
 
 };
 
 
-void Morton::submit(uint32_t* morton_keys, size_t size){
-			// todo: change the harded coded for map
+void EdgeCount::submit(){
 			printf("execute\n");
 			vkResetFences(singleton.device, 1, &fence);
 			const VkPipelineStageFlags waitStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
@@ -62,65 +65,55 @@ void Morton::submit(uint32_t* morton_keys, size_t size){
 			computeSubmitInfo.pCommandBuffers = &commandBuffer;
 			vkQueueSubmit(queue, 1, &computeSubmitInfo, fence);
 			vkWaitForFences(singleton.device, 1, &fence, VK_TRUE, UINT64_MAX);
-
-			// Make device writes visible to the host
-			void *mapped;
-			vkMapMemory(singleton.device,temp_memory.morton_keys_memory, 0, VK_WHOLE_SIZE, 0, &mapped);
-			VkMappedMemoryRange mappedRange{};
-			mappedRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-			mappedRange.memory = temp_memory.morton_keys_memory;
-			mappedRange.offset = 0;
-			mappedRange.size = VK_WHOLE_SIZE;
-			vkInvalidateMappedMemoryRanges(singleton.device, 1, &mappedRange);
-			
-			// Copy to output
-			const VkDeviceSize bufferSize = size * sizeof(uint32_t);
-			memcpy(morton_keys, mapped, bufferSize);
-			vkUnmapMemory(singleton.device,temp_memory.morton_keys_memory);
 }
 
-void Morton::cleanup(VkPipeline *pipeline){
+void EdgeCount::cleanup(VkPipeline *pipeline){
 		
-		vkDestroyBuffer(singleton.device, buffer.data_buffer, nullptr);
-		vkFreeMemory(singleton.device, memory.data_memory, nullptr);
-		vkDestroyBuffer(singleton.device, buffer.morton_keys_buffer, nullptr);
-		vkFreeMemory(singleton.device, memory.morton_keys_memory, nullptr);
-		vkDestroyBuffer(singleton.device, temp_buffer.data_buffer, nullptr);
-		vkFreeMemory(singleton.device, temp_memory.data_memory, nullptr);
-		vkDestroyBuffer(singleton.device, temp_buffer.morton_keys_buffer, nullptr);
-		vkFreeMemory(singleton.device, temp_memory.morton_keys_memory, nullptr);
 
+		vkDestroyBuffer(singleton.device, buffer.prefix_n_buffer, nullptr);
+		vkFreeMemory(singleton.device, memory.prefix_n_memory, nullptr);
+		vkDestroyBuffer(singleton.device, temp_buffer.prefix_n_buffer, nullptr);
+		vkFreeMemory(singleton.device, temp_memory.prefix_n_memory, nullptr);
 
+		vkDestroyBuffer(singleton.device, buffer.parent_buffer, nullptr);
+		vkFreeMemory(singleton.device, memory.parent_memory, nullptr);
+		vkDestroyBuffer(singleton.device, temp_buffer.parent_buffer, nullptr);
+		vkFreeMemory(singleton.device, temp_memory.parent_memory, nullptr);
+
+		vkDestroyBuffer(singleton.device, buffer.edge_count_buffer, nullptr);
+		vkFreeMemory(singleton.device, memory.edge_count_memory, nullptr);
+		vkDestroyBuffer(singleton.device, temp_buffer.edge_count_buffer, nullptr);
+		vkFreeMemory(singleton.device, temp_memory.edge_count_memory, nullptr);
 
 		vkDestroyDescriptorSetLayout(singleton.device, descriptorSetLayouts[0], nullptr);
-		vkDestroyDescriptorSetLayout(singleton.device, descriptorSetLayouts[1], nullptr);
 		vkDestroyPipeline(singleton.device, *pipeline, nullptr);
 		vkDestroyShaderModule(singleton.device, shaderModule, nullptr);
 		
 }
 
-void Morton::run(glm::vec4* data, uint32_t* morton_keys, const uint32_t n, const float min_coord, const float range, const int logical_blocks){
+void EdgeCount::run(const int logical_blocks, uint8_t* prefix_n, int* parent, int* edge_count, int n_brt_nodes){
 	 
 	
 	VkPipeline pipeline;
 
+	create_storage_buffer(n_brt_nodes*sizeof(uint8_t), prefix_n, &buffer.prefix_n_buffer, &memory.prefix_n_memory, &temp_buffer.prefix_n_buffer, &temp_memory.prefix_n_memory);
+	create_storage_buffer(n_brt_nodes*sizeof(int), parent, &buffer.parent_buffer, &memory.parent_memory, &temp_buffer.parent_buffer, &temp_memory.parent_memory);
+	create_storage_buffer(n_brt_nodes*sizeof(int), edge_count, &buffer.edge_count_buffer, &memory.edge_count_memory, &temp_buffer.edge_count_buffer, &temp_memory.edge_count_memory);
 
-	create_storage_buffer(n*sizeof(uint32_t), morton_keys, &buffer.morton_keys_buffer, &memory.morton_keys_memory, &temp_buffer.morton_keys_buffer, &temp_memory.morton_keys_memory);
-	create_uniform_buffer(n*sizeof(glm::vec4), data, &buffer.data_buffer, &memory.data_memory, &temp_buffer.data_buffer, &temp_memory.data_memory);
 	// create descriptor pool
 	std::vector<VkDescriptorPoolSize> poolSizes = {
-		VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1},
-		VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1}
+		VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3},
 	};
 
 	create_descriptor_pool(poolSizes, 1);
 
 	// create layout binding
-	VkDescriptorSetLayoutBinding b_data_layoutBinding = build_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 0, 1);
-	VkDescriptorSetLayoutBinding b_morton_keys_layoutBinding = build_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 1, 1);
+	VkDescriptorSetLayoutBinding b_prefix_n_layoutBinding = build_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 0, 1);
+	VkDescriptorSetLayoutBinding b_parent_layoutBinding = build_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 1, 1);
+	VkDescriptorSetLayoutBinding b_edge_count_layoutBinding = build_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 2, 1);
 
 	std::vector<VkDescriptorSetLayoutBinding> set_layout_bindings = {
-		b_morton_keys_layoutBinding, b_data_layoutBinding
+		b_prefix_n_layoutBinding, b_parent_layoutBinding, b_edge_count_layoutBinding
 	};
 
 	// create descriptor set layout for both histogram and binning
@@ -133,22 +126,25 @@ void Morton::run(glm::vec4* data, uint32_t* morton_keys, const uint32_t n, const
 	add_push_constant(&pipelineLayoutCreateInfo, &push_constant, 1);
 	vkCreatePipelineLayout(singleton.device, &pipelineLayoutCreateInfo, nullptr, &pipelineLayout);
 	// allocate descriptor sets
-	allocate_descriptor_sets(2, descriptorSetLayouts, descriptorSets);
+	allocate_descriptor_sets(1, descriptorSetLayouts, descriptorSets);
 
 	// update descriptor sets, first we need to create write descriptor, then specify the destination set, binding number, descriptor type, and number of descriptors(buffers) to bind
-	VkDescriptorBufferInfo data_bufferDescriptor = { buffer.data_buffer, 0, VK_WHOLE_SIZE };
-	VkWriteDescriptorSet data_descriptor_write  = create_descriptor_write(descriptorSets[0], 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, &data_bufferDescriptor);
-	VkDescriptorBufferInfo morton_keys_bufferDescriptor = { buffer.morton_keys_buffer, 0, VK_WHOLE_SIZE };
-	VkWriteDescriptorSet morton_keys_descriptor_write = create_descriptor_write(descriptorSets[0],1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &morton_keys_bufferDescriptor);
+
+	VkDescriptorBufferInfo prefix_n_bufferDescriptor = { buffer.prefix_n_buffer, 0, VK_WHOLE_SIZE };
+	VkWriteDescriptorSet prefix_n_descriptor_write = create_descriptor_write(descriptorSets[0], 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &prefix_n_bufferDescriptor);
+	VkDescriptorBufferInfo parent_bufferDescriptor = { buffer.parent_buffer, 0, VK_WHOLE_SIZE };
+	VkWriteDescriptorSet parent_descriptor_write = create_descriptor_write(descriptorSets[0], 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &parent_bufferDescriptor);
+	VkDescriptorBufferInfo edge_count_bufferDescriptor = { buffer.edge_count_buffer, 0, VK_WHOLE_SIZE };
+	VkWriteDescriptorSet edge_count_descriptor_write = create_descriptor_write(descriptorSets[0], 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &edge_count_bufferDescriptor);
 	
 	
 	std::vector<VkWriteDescriptorSet> descriptor_writes = {
-		data_descriptor_write, morton_keys_descriptor_write
+		prefix_n_descriptor_write, parent_descriptor_write, edge_count_descriptor_write
 	};
 	vkUpdateDescriptorSets(singleton.device, static_cast<uint32_t>(descriptor_writes.size()), descriptor_writes.data(), 0, NULL);
 	
 	// create pipeline
-	VkPipelineShaderStageCreateInfo shader_stage = load_shader("morton.spv", &shaderModule);
+	VkPipelineShaderStageCreateInfo shader_stage = load_shader("edge_count.spv", &shaderModule);
 	create_pipeline(&shader_stage,&pipelineLayout, &pipeline);
 
 
@@ -163,38 +159,57 @@ void Morton::run(glm::vec4* data, uint32_t* morton_keys, const uint32_t n, const
 	cmdBufInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 	// preparation
 	vkBeginCommandBuffer(commandBuffer, &cmdBufInfo);
-	VkBufferMemoryBarrier data_barrier = create_buffer_barrier(&buffer.data_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-	VkBufferMemoryBarrier morton_keys_barrier = create_buffer_barrier(&buffer.morton_keys_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+	VkBufferMemoryBarrier prefix_n_barrier = create_buffer_barrier(&buffer.prefix_n_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+	VkBufferMemoryBarrier parent_barrier = create_buffer_barrier(&buffer.parent_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+	VkBufferMemoryBarrier edge_count_barrier = create_buffer_barrier(&buffer.edge_count_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
 
-	create_pipeline_barrier(&data_barrier, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-	create_pipeline_barrier(&morton_keys_barrier, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
-	morton_push_constant.min_coord = min_coord;
-	morton_push_constant.range = range;
-	morton_push_constant.n = n;
-	vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstant), &morton_push_constant);
+	create_pipeline_barrier(&prefix_n_barrier, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+	create_pipeline_barrier(&parent_barrier, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+	create_pipeline_barrier(&edge_count_barrier, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+
+	edge_count_push_constant.n_brt_nodes = n_brt_nodes;
+	vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstant), &edge_count_push_constant);
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 1, descriptorSets, 0, 0);
 	vkCmdDispatch(commandBuffer, logical_blocks, 1, 1);
 	
-	morton_keys_barrier = create_buffer_barrier(&buffer.morton_keys_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
-	create_pipeline_barrier(&morton_keys_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+	prefix_n_barrier = create_buffer_barrier(&buffer.prefix_n_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
+	parent_barrier = create_buffer_barrier(&buffer.parent_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
+	edge_count_barrier = create_buffer_barrier(&buffer.edge_count_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
 
-	VkBufferCopy copyRegion = {};
-	copyRegion.size = n* sizeof(uint32_t);
-	vkCmdCopyBuffer(commandBuffer, buffer.morton_keys_buffer, temp_buffer.morton_keys_buffer, 1, &copyRegion);
-	morton_keys_barrier = create_buffer_barrier(&buffer.morton_keys_buffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT);
-	create_pipeline_barrier(&morton_keys_barrier, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT);
+	create_pipeline_barrier(&prefix_n_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+	create_pipeline_barrier(&parent_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+	create_pipeline_barrier(&edge_count_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
+
+	VkBufferCopy edge_count_copyRegion = {};
+	edge_count_copyRegion.size = n_brt_nodes* sizeof(int);
+	vkCmdCopyBuffer(commandBuffer, buffer.edge_count_buffer, temp_buffer.edge_count_buffer, 1, &edge_count_copyRegion);
+	edge_count_barrier = create_buffer_barrier(&buffer.edge_count_buffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT);
+	create_pipeline_barrier(&edge_count_barrier, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT);
 
 	vkEndCommandBuffer(commandBuffer);
-
 
 	// create fence
 	create_fence();
 
 	// submit the command buffer, fence and flush
-	submit(morton_keys, n);
+	submit();
+
+	// Make device writes visible to the host
+	void *mapped;
+	vkMapMemory(singleton.device,temp_memory.edge_count_memory, 0, VK_WHOLE_SIZE, 0, &mapped);
+	VkMappedMemoryRange mappedRange{};
+	mappedRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+	mappedRange.memory = temp_memory.edge_count_memory;
+	mappedRange.offset = 0;
+	mappedRange.size = VK_WHOLE_SIZE;
+	vkInvalidateMappedMemoryRanges(singleton.device, 1, &mappedRange);
+	VkDeviceSize bufferSize = n_brt_nodes * sizeof(int);
+	memcpy(edge_count, mapped, bufferSize);
+	vkUnmapMemory(singleton.device,temp_memory.edge_count_memory);
+
 
 	vkQueueWaitIdle(queue);
 

@@ -1,0 +1,206 @@
+#version 450
+#extension GL_KHR_shader_subgroup_basic:enable
+#extension GL_KHR_shader_subgroup_ballot:enable
+#extension GL_KHR_shader_subgroup_arithmetic:enable
+#extension GL_KHR_shader_subgroup_vote:enable
+#extension GL_KHR_shader_subgroup_shuffle_relative:enable
+#extension GL_KHR_shader_subgroup_shuffle:enable
+
+#define PARTITION_SIZE 3072
+#define PART_VEC_SIZE	768
+#define LANE_COUNT 32
+#define LANE_MASK 31
+
+#define WORKGROUP_NUM 256
+#define SUBGROUP_PARTITIONS 3
+#define SUBROUP_PART_SIZE 96
+#define SUBGROUP_PART_START (gl_SubgroupID * SUBROUP_PART_SIZE)
+#define PATR_START (partitionIndex * PART_VEC_SIZE)
+
+
+#define FLAG_NOT_READY  0           //Flag indicating this partition tile's local reduction is not ready
+#define FLAG_REDUCTION  1           //Flag indicating this partition tile's local reduction is ready
+#define FLAG_INCLUSIVE  2           //Flag indicating this partition tile has summed all preceding tiles and added to its sum.
+#define FLAG_MASK       3 
+
+layout(set=0,binding=0) buffer Data{
+    uint scan[];
+};
+
+layout(set=0,binding=1) buffer Reduction{
+    uint workgroup_reduction[];
+};
+
+layout(set = 0, binding=2) buffer Index{
+    uint index[];
+};
+
+layout(push_constant)uniform Constants{
+    uint size;
+    uint aligned_size;
+};
+
+layout(local_size_x=256)in;
+
+shared uvec4 s_lookback[PART_VEC_SIZE];
+shared uint s_reduction[WORKGROUP_NUM / LANE_COUNT];
+shared uint s_broadcast;
+
+uint InclusiveWarpScanCircularShift(uint val){
+    for (uint i = 1; i <= (LANE_COUNT >> 1); i <<= 1){
+        const uint t = subgroupShuffleUp(val, i);
+        if (gl_SubgroupInvocationID >= i)
+            val += t;
+    }
+    return subgroupShuffle(val, (gl_SubgroupInvocationID + LANE_MASK) & LANE_MASK);
+}
+
+uint subgroupReduceSum(uint val){
+    for (int mask = LANE_COUNT >> 1; mask > 0; mask >> 1){
+        val += subgroupShuffleXor(val, mask);
+    }
+    return val;
+}
+
+uvec4 setXAddYZW(uint val_to_add, uvec4 val){
+    return uvec4(val_to_add, val_to_add + val.y, val_to_add + val.z, val_to_add + val.w);
+}
+
+uvec4 AddToUvec4(uint val_to_add, uvec4 val){
+    return uvec4(val.x + val_to_add, val.y + val_to_add, val.z + val_to_add, val.w + val_to_add);
+}
+
+void prefix_sum(){
+    // get partition index
+    if (gl_LocalInvocationID.x == 0){
+        s_broadcast = atomicAdd(index[0], 1);
+    }
+    groupMemoryBarrier();
+    barrier();
+
+    const uint partitionIndex = s_broadcast;
+
+    // local eclusive scan
+    if (partitionIndex < WORKGROUP_NUM - 1){
+        uint subgroup_reduction = 0;
+        for(uint i = gl_SubgroupInvocationID.x + SUBGROUP_PART_START, k = 0; k < SUBGROUP_PARTITIONS; i += LANE_COUNT, ++k){
+            uvec4 t = uvec4(scan[i + PATR_START], scan[i + PATR_START + 1], scan[i + PATR_START + 2], scan[i + PATR_START + 3]);
+
+            uint t2 = t.x;
+            t.x += t.y;
+            t.y = t2;
+
+            t2 = t.x;
+            t.x += t.z;
+            t.z = t2;
+
+            t2 = t.x;
+            t.x += t.w;
+            t.w = t2;
+
+            t2 = InclusiveWarpScanCircularShift(t.x);
+            s_lookback[i] = setXAddYZW((gl_SubgroupInvocationID.x > 0 ? t2 : 0) + (k > 0 ? subgroup_reduction : 0), t);
+            subgroup_reduction += subgroupBroadcast(t2, 0);
+        }
+        if (gl_SubgroupInvocationID.x == 0){
+            s_reduction[partitionIndex] = subgroup_reduction;
+        
+        }
+    }
+
+    if (partitionIndex == WORKGROUP_NUM - 1){
+        uint subgroup_reduction = 0;
+        const uint final_part_size = aligned_size - PATR_START;
+        for(uint i = gl_SubgroupInvocationID.x + SUBGROUP_PART_START, k = 0; k < SUBGROUP_PARTITIONS; i += LANE_COUNT, ++k){
+            uvec4 t = i < final_part_size ? uvec4(scan[i + PATR_START], scan[i + PATR_START + 1], scan[i + PATR_START + 2], scan[i + PATR_START + 3]) : uvec4(0, 0, 0, 0);
+
+            uint t2 = t.x;
+            t.x += t.y;
+            t.y = t2;
+
+            t2 = t.x;
+            t.x += t.z;
+            t.z = t2;
+
+            t2 = t.x;
+            t.x += t.w;
+            t.w = t2;
+
+            t2 = InclusiveWarpScanCircularShift(t.x);
+            s_lookback[i] = setXAddYZW((gl_SubgroupInvocationID.x > 0 ? t2 : 0) + (k > 0 ? subgroup_reduction : 0), t);
+            subgroup_reduction += subgroupBroadcast(t2, 0);
+        }
+        if (gl_SubgroupInvocationID.x == 0){
+            s_reduction[partitionIndex] = subgroup_reduction;
+        }
+    }
+    groupMemoryBarrier();
+    barrier();
+
+    // local reduce and device broadcast
+    if (gl_LocalInvocationID.x < WORKGROUP_NUM / LANE_COUNT){
+        s_reduction[gl_LocalInvocationID.x] = subgroupInclusiveAdd(s_reduction[gl_LocalInvocationID.x]);
+    }
+    if (gl_LocalInvocationID.x == WORKGROUP_NUM / LANE_COUNT -1){
+        atomicAdd(workgroup_reduction[partitionIndex], (partitionIndex > 0 ? FLAG_REDUCTION : FLAG_INCLUSIVE) | s_reduction[gl_LocalInvocationID.x] << 2);
+    }
+
+    // look back
+    uint prev_reduction = 0;
+    if (partitionIndex > 0 && gl_LocalInvocationID.x < LANE_COUNT){
+        uint k = partitionIndex + LANE_COUNT - gl_SubgroupInvocationID.x;
+
+        while(true){
+            const uint flagPayload = k > LANE_COUNT ? workgroup_reduction[k - LANE_COUNT - 1] : FLAG_INCLUSIVE;
+
+            if (subgroupAll((flagPayload & FLAG_MASK) > FLAG_NOT_READY)){
+                uint inclusve_ballot = subgroupBallot((flagPayload & FLAG_MASK) == FLAG_INCLUSIVE).x;
+                if(inclusve_ballot > 0){
+                    prev_reduction += subgroupReduceSum(gl_SubgroupInvocationID < (findLSB(inclusve_ballot) + 1) ? flagPayload >> 2 : 0);
+
+                    if (gl_SubgroupInvocationID.x == 0){
+                        s_broadcast = prev_reduction;
+                        atomicAdd(workgroup_reduction[partitionIndex], 1 | (prev_reduction << 2));
+                    }
+                    break;
+                }else{
+                    prev_reduction += subgroupReduceSum(flagPayload >> 2);
+                    k -= LANE_COUNT;
+                }
+            }
+        }
+    }
+
+    groupMemoryBarrier();
+    barrier();
+
+    if (gl_LocalInvocationID.x >= LANE_COUNT){
+        prev_reduction += s_broadcast + s_reduction[gl_SubgroupID.x - 1];
+    }
+
+    if (partitionIndex < WORKGROUP_NUM - 1){
+        for (uint i = gl_SubgroupInvocationID.x + SUBGROUP_PART_START, k = 0; k < SUBGROUP_PARTITIONS; i += LANE_COUNT, ++k){
+            uvec4 add  = AddToUvec4(prev_reduction, s_lookback[i]);
+            scan[i + PATR_START] = add.x;
+            scan[i + PATR_START + 1] = add.y;
+            scan[i + PATR_START + 2] = add.z;
+            scan[i + PATR_START + 3] = add.w;
+        }
+    }
+
+    if (partitionIndex == WORKGROUP_NUM - 1){
+        const uint final_part_size = aligned_size - PATR_START;
+        for (uint i = gl_SubgroupInvocationID.x + SUBGROUP_PART_START, k = 0; k < SUBGROUP_PARTITIONS && i < final_part_size; i += LANE_COUNT, ++k){
+            uvec4 add  = AddToUvec4(prev_reduction, s_lookback[i]);
+            scan[i + PATR_START] = add.x;
+            scan[i + PATR_START + 1] = add.y;
+            scan[i + PATR_START + 2] = add.z;
+            scan[i + PATR_START + 3] = add.w;
+        }
+    }
+}
+
+void main(){
+
+    prefix_sum();
+}
