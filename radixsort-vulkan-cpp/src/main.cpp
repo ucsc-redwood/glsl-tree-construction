@@ -26,7 +26,7 @@ int main(){
     std::vector<glm::vec4> data(BUFFER_ELEMENTS ,glm::vec4(0,0,0,0));
     std::vector<uint8_t> prefix_n(app_params.n, 0);
     std::vector<uint32_t> edge_count(app_params.n, 0);
-    int n_brt_nodes = BUFFER_ELEMENTS;
+    int n_brt_nodes = BUFFER_ELEMENTS - 1;
     std::vector<int> parents(app_params.n, 0);
     std::vector<int> left_child(app_params.n, 0);
     bool has_leaf_left[app_params.n] = {0};
@@ -45,16 +45,21 @@ int main(){
         std::cout << morton_keys[i] << std::endl;
     }
     
+    for(int i = 0; i < BUFFER_ELEMENTS; ++i){
+        morton_keys[i] = i;
+    }
+
     auto radixsort_stage = RadixSort();
     radixsort_stage.run(app_params.n_blocks, morton_keys.data(), app_params.n);
 
-
+    /*
 	for (int i = 0; i < 1024; i++){
 		printf("sorted_key[%d]: %d\n", i, morton_keys[i]);
 	}
+    */
 
     auto build_radix_tree_stage = RadixTree();
-    build_radix_tree_stage.run(app_params.n_blocks, morton_keys.data(), prefix_n.data(), has_leaf_left, has_leaf_right, left_child.data(), parents.data(), n_brt_nodes);
+    build_radix_tree_stage.run(app_params.n_blocks, morton_keys.data(), prefix_n.data(), has_leaf_left, has_leaf_right, left_child.data(), parents.data(), app_params.n);
 
     for (int i = 0; i < 1024; i++){
         printf("prefix_n[%d]: %d\n", i, prefix_n[i]);

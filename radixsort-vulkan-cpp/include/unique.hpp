@@ -23,7 +23,7 @@ class Unique : public ApplicationBase{
 	struct PushConstant {
 		uint32_t pass_num = 0;
 		uint32_t radix_shift = 0;
-	} prefix_sum_push_constant;
+	} unique_push_constant;
 	struct{
 		VkBuffer u_keys_buffer;
         VkBuffer reduction_buffer;

@@ -275,7 +275,7 @@ void RadixTree::run(const int logical_blocks, uint32_t* morton_keys, uint8_t* pr
 	mappedRange.offset = 0;
 	mappedRange.size = VK_WHOLE_SIZE;
 	vkInvalidateMappedMemoryRanges(singleton.device, 1, &mappedRange);
-	VkDeviceSize bufferSize = n * sizeof(uint8_t);
+	VkDeviceSize bufferSize = n_unique * sizeof(uint8_t);
 	memcpy(prefix_n, mapped, bufferSize);
 	vkUnmapMemory(singleton.device,temp_memory.prefix_n_memory);
 
@@ -284,7 +284,7 @@ void RadixTree::run(const int logical_blocks, uint32_t* morton_keys, uint8_t* pr
 	mappedRange.offset = 0;
 	mappedRange.size = VK_WHOLE_SIZE;
 	vkInvalidateMappedMemoryRanges(singleton.device, 1, &mappedRange);
-	bufferSize = n * sizeof(bool);
+	bufferSize = n_unique * sizeof(bool);
 	memcpy(has_leaf_left, mapped, bufferSize);
 	vkUnmapMemory(singleton.device,temp_memory.has_leaf_left_memory);
 
@@ -293,7 +293,7 @@ void RadixTree::run(const int logical_blocks, uint32_t* morton_keys, uint8_t* pr
 	mappedRange.offset = 0;
 	mappedRange.size = VK_WHOLE_SIZE;
 	vkInvalidateMappedMemoryRanges(singleton.device, 1, &mappedRange);
-	bufferSize = n * sizeof(bool);
+	bufferSize = n_unique * sizeof(bool);
 	memcpy(has_leaf_right, mapped, bufferSize);
 	vkUnmapMemory(singleton.device,temp_memory.has_leaf_right_memory);
 
@@ -302,7 +302,7 @@ void RadixTree::run(const int logical_blocks, uint32_t* morton_keys, uint8_t* pr
 	mappedRange.offset = 0;
 	mappedRange.size = VK_WHOLE_SIZE;
 	vkInvalidateMappedMemoryRanges(singleton.device, 1, &mappedRange);
-	bufferSize = n * sizeof(int);
+	bufferSize = n_unique * sizeof(int);
 	memcpy(left_child, mapped, bufferSize);
 	vkUnmapMemory(singleton.device,temp_memory.left_child_memory);
 
@@ -311,7 +311,7 @@ void RadixTree::run(const int logical_blocks, uint32_t* morton_keys, uint8_t* pr
 	mappedRange.offset = 0;
 	mappedRange.size = VK_WHOLE_SIZE;
 	vkInvalidateMappedMemoryRanges(singleton.device, 1, &mappedRange);
-	bufferSize = n * sizeof(int);
+	bufferSize = n_unique * sizeof(int);
 	memcpy(parent, mapped, bufferSize);
 
 	vkQueueWaitIdle(singleton.queue);

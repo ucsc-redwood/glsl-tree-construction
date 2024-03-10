@@ -43,18 +43,17 @@ uint ceil_div_u32(const uint a, const uint b) {
 }
 
 uint8_t delta_u32(const uint a, const uint b) {
-  /*
+  
   //uint bit1_mask = uint(1) << (4 * 8 - 1);
   uint val = a ^ b;
   int msb = findMSB(val);
-  if (val == 0){
-    return uint8_t(32);
-  }
-  else{
-    return uint8_t(31 - msb);
-  }
+  return uint8_t(31 - msb);
+
+
+  /*
+  
+  return uint8_t(findMSB(a ^ b));
   */
-  return findMSB(a ^ b);
 }
 
 int log2_ceil_u32(const uint x) {
@@ -132,7 +131,7 @@ void k_BuildRadixTree(int i ){
     const int gamma = i + s * d + min(d, 0);
     left_child[i] = gamma;
     has_leaf_left[i] = (min(i, j) == gamma);
-    has_leaf_right[i] = (max(i, j) == gamma + 1);
+    has_leaf_right[i] = (max(i, j) == (gamma + 1));
     // Set parents of left and right children, if they aren't leaves
     // can't set this node as parent of its leaves, because the
     // leaf also represents an internal node with a differnent parent
@@ -142,14 +141,12 @@ void k_BuildRadixTree(int i ){
     if (!has_leaf_right[i]) {
       parent[gamma + 1] = i;
     }
-
 }
 
 void main(){
   const uint idx = gl_LocalInvocationID.x + gl_WorkGroupSize.x * gl_WorkGroupID.x;
   const uint stride = gl_WorkGroupSize.x * gl_NumWorkGroups.x;
-  const int n_brt_nodes = n - 1;
-  for (int i = int(idx); i < n_brt_nodes; i += int(stride)){
+  for (int i = int(idx); i < n; i += int(stride)){
     k_BuildRadixTree(i);
   }
   

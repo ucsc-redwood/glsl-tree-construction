@@ -83,18 +83,22 @@ void RadixSort::cleanup(VkPipeline *histogram_pipeline, VkPipeline *binning_pipe
 		vkFreeMemory(singleton.device, radix_sort_memory.b_sort_memory, nullptr);
 		vkDestroyBuffer(singleton.device, radix_sort_buffer.g_histogram_buffer, nullptr);
 		vkFreeMemory(singleton.device, radix_sort_memory.g_histogram_memory, nullptr);
+
 		vkDestroyBuffer(singleton.device, temp_buffer.b_sort_buffer, nullptr);
 		vkFreeMemory(singleton.device, temp_memory.b_sort_memory, nullptr);
 		vkDestroyBuffer(singleton.device, temp_buffer.g_histogram_buffer, nullptr);
 		vkFreeMemory(singleton.device, temp_memory.g_histogram_memory, nullptr);
+
 		vkDestroyBuffer(singleton.device, radix_sort_buffer.b_alt_buffer, nullptr);
 		vkFreeMemory(singleton.device, radix_sort_memory.b_alt_memory, nullptr);
 		vkDestroyBuffer(singleton.device, temp_buffer.b_alt_buffer, nullptr);
 		vkFreeMemory(singleton.device, temp_memory.b_alt_memory, nullptr);
+
 		vkDestroyBuffer(singleton.device, radix_sort_buffer.b_index_buffer, nullptr);
 		vkFreeMemory(singleton.device, radix_sort_memory.b_index_memory, nullptr);
 		vkDestroyBuffer(singleton.device, temp_buffer.b_index_buffer, nullptr);
 		vkFreeMemory(singleton.device, temp_memory.b_index_memory, nullptr);
+		
 		vkDestroyBuffer(singleton.device, radix_sort_buffer.b_pass_first_histogram_buffer, nullptr);
 		vkFreeMemory(singleton.device, radix_sort_memory.b_pass_first_histogram_memory, nullptr);
 		vkDestroyBuffer(singleton.device, temp_buffer.b_pass_first_histogram_buffer, nullptr);
