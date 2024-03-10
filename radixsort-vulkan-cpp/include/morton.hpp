@@ -11,7 +11,7 @@ class Morton : public ApplicationBase{
     public:
     Morton() : ApplicationBase() {};
     ~Morton() {};
-	void 		submit(uint32_t* morton_keys, size_t size);
+	void 		submit();
 	void 		cleanup(VkPipeline *pipeline);
 	void 		run( const int logical_blocks, glm::vec4* data, uint32_t* morton_keys, const uint32_t n, const float min_coord, const float range);
 
@@ -52,7 +52,7 @@ class Morton : public ApplicationBase{
 };
 
 
-void Morton::submit(uint32_t* morton_keys, size_t size){
+void Morton::submit(){
 			// todo: change the harded coded for map
 			printf("execute\n");
 			vkResetFences(singleton.device, 1, &fence);
@@ -65,20 +65,6 @@ void Morton::submit(uint32_t* morton_keys, size_t size){
 			vkQueueSubmit(singleton.queue, 1, &computeSubmitInfo, fence);
 			vkWaitForFences(singleton.device, 1, &fence, VK_TRUE, UINT64_MAX);
 
-			// Make device writes visible to the host
-			void *mapped;
-			vkMapMemory(singleton.device,temp_memory.morton_keys_memory, 0, VK_WHOLE_SIZE, 0, &mapped);
-			VkMappedMemoryRange mappedRange{};
-			mappedRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-			mappedRange.memory = temp_memory.morton_keys_memory;
-			mappedRange.offset = 0;
-			mappedRange.size = VK_WHOLE_SIZE;
-			vkInvalidateMappedMemoryRanges(singleton.device, 1, &mappedRange);
-			
-			// Copy to output
-			const VkDeviceSize bufferSize = size * sizeof(uint32_t);
-			memcpy(morton_keys, mapped, bufferSize);
-			vkUnmapMemory(singleton.device,temp_memory.morton_keys_memory);
 }
 
 void Morton::cleanup(VkPipeline *pipeline){
@@ -194,7 +180,21 @@ void Morton::run(const int logical_blocks, glm::vec4* data, uint32_t* morton_key
 	create_fence();
 
 	// submit the command buffer, fence and flush
-	submit(morton_keys, n);
+	submit();
+
+	// Make device writes visible to the host
+	void *mapped;
+	vkMapMemory(singleton.device,temp_memory.morton_keys_memory, 0, VK_WHOLE_SIZE, 0, &mapped);
+	VkMappedMemoryRange mappedRange{};
+	mappedRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+	mappedRange.memory = temp_memory.morton_keys_memory;
+	mappedRange.offset = 0;
+	mappedRange.size = VK_WHOLE_SIZE;
+	vkInvalidateMappedMemoryRanges(singleton.device, 1, &mappedRange);
+			
+	const VkDeviceSize bufferSize = n * sizeof(uint32_t);
+	memcpy(morton_keys, mapped, bufferSize);
+	vkUnmapMemory(singleton.device,temp_memory.morton_keys_memory);
 
 	vkQueueWaitIdle(singleton.queue);
 

@@ -17,7 +17,7 @@ layout(set = 0, binding = 1 ) buffer Parent{
 };
 
 layout(set = 0, binding = 2 ) buffer EdgeCount{
-    int edge_count[];
+    uint edge_count[];
 };
 
 layout (push_constant) uniform Constant{
@@ -32,8 +32,8 @@ void countEdges(){
     int endIdx = int(min(startIdx + ITEM_PER_THREAD, n_brt_nodes));
     */
     for(int i = int(IDX); i < n_brt_nodes; i += int(STRIDE)){
-        int my_depth = prefix_n[i]/3;
-        int parent_depth = prefix_n[parent[i]]/3;
+        uint my_depth = prefix_n[i]/3;
+        uint parent_depth = prefix_n[parent[i]]/3;
         edge_count[i] = my_depth - parent_depth;
 
     }

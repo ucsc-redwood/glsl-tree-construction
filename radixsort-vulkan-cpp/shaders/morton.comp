@@ -7,7 +7,7 @@
 #define input_size 131072
 
 layout(set = 0, binding = 0) buffer Data{
-  uvec4 data[input_size];
+  vec4 data[input_size];
 };
 
 layout(set = 0, binding = 1) buffer MortonKeys{
@@ -22,7 +22,7 @@ layout (push_constant) uniform Constants {
 
 
 
-layout(local_size_x = 512) in;
+layout(local_size_x = 768) in;
 
 uint morton3D_SplitBy3bits(const float a){
   uint b = uint(a);
@@ -52,7 +52,7 @@ void k_ComputeMortonCode(){
     const uint idx = gl_LocalInvocationID.x + gl_WorkGroupSize.x * gl_WorkGroupID.x;
     const uint stride = gl_WorkGroupSize.x * gl_NumWorkGroups.x;
     for(uint i = idx; i < n; i += stride){
-      morton_keys[i] = single_point_to_code_v2(data[i][0], data[i][1], data[i][2], min_coord, range);
+      morton_keys[i] = single_point_to_code_v2(data[i].x, data[i].y, data[i].z, min_coord, range);
     }
 }
 

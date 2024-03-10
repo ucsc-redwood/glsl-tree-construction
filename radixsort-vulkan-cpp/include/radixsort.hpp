@@ -3,17 +3,16 @@
 #include <glm/glm.hpp>
 #include <iostream>
 
-#define BUFFER_ELEMENTS 131072
 #define PARTITION_SIZE 7680
-#define BINNING_THREAD_BLOCKS  (BUFFER_ELEMENTS + PARTITION_SIZE - 1) / PARTITION_SIZE
+#define BINNING_THREAD_BLOCKS  (n + PARTITION_SIZE - 1) / PARTITION_SIZE
 
 class RadixSort : public ApplicationBase{
     public:
     RadixSort() : ApplicationBase() {};
     ~RadixSort() {};
-    std::vector<uint32_t>         execute();
+	void submit();
 	void 		 cleanup(VkPipeline *histogram_pipeline, VkPipeline *binning_pipeline);
-	void run();
+	void run(const int logical_blocks, uint32_t* computeInput, const int n);
 
     private:
 	VkShaderModule histogram_shaderModule;
@@ -67,10 +66,7 @@ class RadixSort : public ApplicationBase{
 };
 
 
-std::vector<uint32_t> RadixSort::execute(){
-			// todo: change the harded coded for map
-			printf("execute\n");
-			std::vector<uint32_t> computeOutput(BUFFER_ELEMENTS);
+void RadixSort::submit(){
 			vkResetFences(singleton.device, 1, &fence);
 			const VkPipelineStageFlags waitStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
 			VkSubmitInfo computeSubmitInfo {};
@@ -78,26 +74,8 @@ std::vector<uint32_t> RadixSort::execute(){
 			computeSubmitInfo.pWaitDstStageMask = &waitStageMask;
 			computeSubmitInfo.commandBufferCount = 1;
 			computeSubmitInfo.pCommandBuffers = &commandBuffer;
-			vkQueueSubmit(queue, 1, &computeSubmitInfo, fence);
+			vkQueueSubmit(singleton.queue, 1, &computeSubmitInfo, fence);
 			vkWaitForFences(singleton.device, 1, &fence, VK_TRUE, UINT64_MAX);
-
-			// Make device writes visible to the host
-			void *mapped;
-			vkMapMemory(singleton.device, /*temp_memory.g_histogram_memory*/ temp_memory.b_sort_memory, 0, VK_WHOLE_SIZE, 0, &mapped);
-			VkMappedMemoryRange mappedRange{};
-			mappedRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-			mappedRange.memory = /*temp_memory.g_histogram_memory;*/temp_memory.b_sort_memory;
-			mappedRange.offset = 0;
-			mappedRange.size = VK_WHOLE_SIZE;
-			vkInvalidateMappedMemoryRanges(singleton.device, 1, &mappedRange);
-			
-			// todo: change the buffer size
-			// Copy to output
-			const VkDeviceSize bufferSize = BUFFER_ELEMENTS * sizeof(uint32_t);
-			memcpy(computeOutput.data(), mapped, bufferSize);
-			vkUnmapMemory(singleton.device, /*temp_memory.g_histogram_memory*/temp_memory.b_sort_memory);
-
-			return computeOutput;
 }
 
 void RadixSort::cleanup(VkPipeline *histogram_pipeline, VkPipeline *binning_pipeline){
@@ -132,29 +110,24 @@ void RadixSort::cleanup(VkPipeline *histogram_pipeline, VkPipeline *binning_pipe
 		
 }
 
-void RadixSort::run(){
+void RadixSort::run(const int logical_blocks, uint32_t* computeInput, const int n){
 	 
-	std::vector<uint32_t> computeInput(BUFFER_ELEMENTS);
 	std::vector<uint32_t> g_histogram(1024, 0);
-	std::vector<uint32_t> b_alt(BUFFER_ELEMENTS, 0);
+	std::vector<uint32_t> b_alt(n, 0);
 	std::vector<uint32_t> b_index(4, 0);
 	std::vector<glm::uvec4> b_pass_first_histogram(BINNING_THREAD_BLOCKS*1024, glm::uvec4(0, 0, 0, 0));
 	
 	VkPipeline histogram_pipeline;
 	VkPipeline binning_pipeline;
 
-	// Fill input data
-	uint32_t n = 131072;
-	std::generate(computeInput.begin(), computeInput.end(), [&n] { return n--; });
-
-	const VkDeviceSize bufferSize = BUFFER_ELEMENTS * sizeof(uint32_t);
+	const VkDeviceSize bufferSize = n * sizeof(uint32_t);
 	/*
 	create_instance();
 	create_device();
 	create_compute_queue();
 	build_command_pool();
 	*/
-	create_storage_buffer(bufferSize, computeInput.data(), &radix_sort_buffer.b_sort_buffer, &radix_sort_memory.b_sort_memory, &temp_buffer.b_sort_buffer, &temp_memory.b_sort_memory);
+	create_storage_buffer(bufferSize, computeInput, &radix_sort_buffer.b_sort_buffer, &radix_sort_memory.b_sort_memory, &temp_buffer.b_sort_buffer, &temp_memory.b_sort_memory);
 	create_storage_buffer(1024*sizeof(uint32_t), g_histogram.data(), &radix_sort_buffer.g_histogram_buffer, &radix_sort_memory.g_histogram_memory, &temp_buffer.g_histogram_buffer, &temp_memory.g_histogram_memory);
 	create_storage_buffer(bufferSize, b_alt.data(), &radix_sort_buffer.b_alt_buffer, &radix_sort_memory.b_alt_memory, &temp_buffer.b_alt_buffer, &temp_memory.b_alt_memory);
 	create_storage_buffer(4*sizeof(uint32_t), b_index.data(), &radix_sort_buffer.b_index_buffer, &radix_sort_memory.b_index_memory, &temp_buffer.b_index_buffer, &temp_memory.b_index_memory);
@@ -250,7 +223,7 @@ void RadixSort::run(){
 	// for histogram
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, histogram_pipeline);
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 2, descriptorSets, 0, 0);
-	vkCmdDispatch(commandBuffer, 4, 1, 1);
+	vkCmdDispatch(commandBuffer, logical_blocks, 1, 1);
 	
 	b_sort_barrier = create_buffer_barrier(&radix_sort_buffer.b_sort_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
 	g_histogram_barrier = create_buffer_barrier(&radix_sort_buffer.g_histogram_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
@@ -262,7 +235,7 @@ void RadixSort::run(){
 		// push data to the push constants
 	vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RadixSortPushConstant), &radix_sort_push_constant);
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, binning_pipeline);
-	vkCmdDispatch(commandBuffer, 32, 1, 1);
+	vkCmdDispatch(commandBuffer, logical_blocks, 1, 1);
 
 	b_sort_barrier = create_buffer_barrier(&radix_sort_buffer.b_sort_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
 	b_alt_barrier = create_buffer_barrier(&radix_sort_buffer.b_alt_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
@@ -280,7 +253,7 @@ void RadixSort::run(){
 	radix_sort_push_constant.pass_num = 1;
 	radix_sort_push_constant.radix_shift = 8;
 	vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RadixSortPushConstant), &radix_sort_push_constant);
-	vkCmdDispatch(commandBuffer, 32, 1, 1);
+	vkCmdDispatch(commandBuffer, logical_blocks, 1, 1);
 	b_sort_barrier = create_buffer_barrier(&radix_sort_buffer.b_sort_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
 	b_alt_barrier = create_buffer_barrier(&radix_sort_buffer.b_alt_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
 	g_histogram_barrier = create_buffer_barrier(&radix_sort_buffer.g_histogram_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
@@ -296,7 +269,7 @@ void RadixSort::run(){
 	radix_sort_push_constant.pass_num = 2;
 	radix_sort_push_constant.radix_shift = 16;
 	vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RadixSortPushConstant), &radix_sort_push_constant);
-	vkCmdDispatch(commandBuffer, 32, 1, 1);
+	vkCmdDispatch(commandBuffer, logical_blocks, 1, 1);
 	b_sort_barrier = create_buffer_barrier(&radix_sort_buffer.b_sort_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
 	b_alt_barrier = create_buffer_barrier(&radix_sort_buffer.b_alt_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
 	g_histogram_barrier = create_buffer_barrier(&radix_sort_buffer.g_histogram_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
@@ -312,7 +285,7 @@ void RadixSort::run(){
 	radix_sort_push_constant.pass_num = 3;
 	radix_sort_push_constant.radix_shift = 24;
 	vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RadixSortPushConstant), &radix_sort_push_constant);
-	vkCmdDispatch(commandBuffer, 32, 1, 1);
+	vkCmdDispatch(commandBuffer, logical_blocks, 1, 1);
 	b_sort_barrier = create_buffer_barrier(&radix_sort_buffer.b_sort_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
 	b_alt_barrier = create_buffer_barrier(&radix_sort_buffer.b_alt_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
 	g_histogram_barrier = create_buffer_barrier(&radix_sort_buffer.g_histogram_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
@@ -338,11 +311,27 @@ void RadixSort::run(){
 	create_fence();
 
 	// submit the command buffer, fence and flush
-	auto output = execute();
-	vkQueueWaitIdle(queue);
-	for (int i = 0; i < 1024; i++){
-		printf("output[%d]: %d\n", i, output[i]);
-	}
+	submit();
+
+	void *mapped;
+	vkMapMemory(singleton.device, temp_memory.b_sort_memory, 0, VK_WHOLE_SIZE, 0, &mapped);
+	VkMappedMemoryRange mappedRange{};
+	mappedRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+	mappedRange.memory = /*temp_memory.g_histogram_memory;*/temp_memory.b_sort_memory;
+	mappedRange.offset = 0;
+	mappedRange.size = VK_WHOLE_SIZE;
+	vkInvalidateMappedMemoryRanges(singleton.device, 1, &mappedRange);
+			
+	// todo: change the buffer size
+	// Copy to output
+	memcpy(computeInput, mapped, bufferSize);
+	vkUnmapMemory(singleton.device, temp_memory.b_sort_memory);
+
+	vkQueueWaitIdle(singleton.queue);
+
+	// Make device writes visible to the host
+
+
 	cleanup(&histogram_pipeline, &binning_pipeline);
 }
 

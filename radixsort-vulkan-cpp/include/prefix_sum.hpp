@@ -5,10 +5,10 @@
 
 #define PARTITION_SIZE 3072
 
-class Unique : public ApplicationBase{
+class PrefixSum : public ApplicationBase{
     public:
-    Unique() : ApplicationBase() {};
-    ~Unique() {};
+    PrefixSum() : ApplicationBase() {};
+    ~PrefixSum() {};
     void        execute();
 	void 		 cleanup(VkPipeline *prefix_sum_pipeline);
 	void run(const int logical_block, uint32_t *u_keys, const int n);
@@ -52,7 +52,7 @@ class Unique : public ApplicationBase{
 };
 
 
-void Unique::execute(){
+void PrefixSum::execute(){
 			// todo: change the harded coded for map
 			printf("execute\n");
 			std::vector<uint32_t> computeOutput(BUFFER_ELEMENTS);
@@ -63,12 +63,12 @@ void Unique::execute(){
 			computeSubmitInfo.pWaitDstStageMask = &waitStageMask;
 			computeSubmitInfo.commandBufferCount = 1;
 			computeSubmitInfo.pCommandBuffers = &commandBuffer;
-			vkQueueSubmit(queue, 1, &computeSubmitInfo, fence);
+			vkQueueSubmit(singleton.queue, 1, &computeSubmitInfo, fence);
 			vkWaitForFences(singleton.device, 1, &fence, VK_TRUE, UINT64_MAX);
 
 }
 
-void Unique::cleanup(VkPipeline *pipeline){
+void PrefixSum::cleanup(VkPipeline *pipeline){
         vkDestroyBuffer(singleton.device, buffer.u_keys_buffer, nullptr);
         vkFreeMemory(singleton.device, memory.u_keys_memory, nullptr);
         vkDestroyBuffer(singleton.device, temp_buffer.u_keys_buffer, nullptr);
@@ -92,7 +92,7 @@ void Unique::cleanup(VkPipeline *pipeline){
 		
 }
 
-void Unique::run(const int logical_block, uint32_t *u_keys, const int n){
+void PrefixSum::run(const int logical_block, uint32_t *u_keys, const int n){
 
     VkPipeline pipeline;
 
@@ -207,7 +207,7 @@ void Unique::run(const int logical_block, uint32_t *u_keys, const int n){
 	vkUnmapMemory(singleton.device, temp_memory.u_keys_memory);
 
 
-	vkQueueWaitIdle(queue);
+	vkQueueWaitIdle(singleton.queue);
 
 
 	cleanup(&pipeline);

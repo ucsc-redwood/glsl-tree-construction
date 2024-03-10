@@ -116,7 +116,7 @@ void Octree::submit(){
 			computeSubmitInfo.pWaitDstStageMask = &waitStageMask;
 			computeSubmitInfo.commandBufferCount = 1;
 			computeSubmitInfo.pCommandBuffers = &commandBuffer;
-			vkQueueSubmit(queue, 1, &computeSubmitInfo, fence);
+			vkQueueSubmit(singleton.queue, 1, &computeSubmitInfo, fence);
 			vkWaitForFences(singleton.device, 1, &fence, VK_TRUE, UINT64_MAX);
 }
 
@@ -450,7 +450,7 @@ void Octree::run(
     memcpy(rt_parents, mapped, bufferSize);
     vkUnmapMemory(singleton.device,temp_memory.rt_parents_memory);
 
-	vkQueueWaitIdle(queue);
+	vkQueueWaitIdle(singleton.queue);
 
 	cleanup(&pipeline);
 }

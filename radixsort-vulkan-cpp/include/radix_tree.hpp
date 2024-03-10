@@ -73,7 +73,7 @@ void RadixTree::submit(){
 			computeSubmitInfo.pWaitDstStageMask = &waitStageMask;
 			computeSubmitInfo.commandBufferCount = 1;
 			computeSubmitInfo.pCommandBuffers = &commandBuffer;
-			vkQueueSubmit(queue, 1, &computeSubmitInfo, fence);
+			vkQueueSubmit(singleton.queue, 1, &computeSubmitInfo, fence);
 			vkWaitForFences(singleton.device, 1, &fence, VK_TRUE, UINT64_MAX);
 }
 
@@ -183,7 +183,7 @@ void RadixTree::run(const int logical_blocks, uint32_t* morton_keys, uint8_t* pr
 	vkUpdateDescriptorSets(singleton.device, static_cast<uint32_t>(descriptor_writes.size()), descriptor_writes.data(), 0, NULL);
 	
 	// create pipeline
-	VkPipelineShaderStageCreateInfo shader_stage = load_shader("buil_radix_tree.spv", &shaderModule);
+	VkPipelineShaderStageCreateInfo shader_stage = load_shader("build_radix_tree.spv", &shaderModule);
 	create_pipeline(&shader_stage,&pipelineLayout, &pipeline);
 
 
@@ -314,7 +314,7 @@ void RadixTree::run(const int logical_blocks, uint32_t* morton_keys, uint8_t* pr
 	bufferSize = n * sizeof(int);
 	memcpy(parent, mapped, bufferSize);
 
-	vkQueueWaitIdle(queue);
+	vkQueueWaitIdle(singleton.queue);
 
 	cleanup(&pipeline);
 }

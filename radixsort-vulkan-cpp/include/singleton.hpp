@@ -134,16 +134,34 @@ class Singleton{
 				break;
 			}
 		}
+
+		// todo: chane the queue count to 2
 		// Create logical device
+
+		// First, query the supported Vulkan version and features
+		VkPhysicalDeviceFeatures2 physicalDeviceFeatures2 = {};
+		physicalDeviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+
+		VkPhysicalDeviceVulkan12Features vulkan12Features = {};
+		vulkan12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+		vulkan12Features.storageBuffer8BitAccess = VK_TRUE; // Enable 8-bit storage buffers
+
+		// Chain the structures
+		physicalDeviceFeatures2.pNext = &vulkan12Features;
+
+		// Pass physicalDeviceFeatures2 to vkGetPhysicalDeviceFeatures2
+		vkGetPhysicalDeviceFeatures2(physicalDevice, &physicalDeviceFeatures2);
+
 		VkDeviceCreateInfo deviceCreateInfo = {};
 		deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 		deviceCreateInfo.queueCreateInfoCount = 1;
 		deviceCreateInfo.pQueueCreateInfos = &queueCreateInfo;
-		std::vector<const char*> deviceExtensions = {};
+		std::vector<const char*> deviceExtensions = {"VK_KHR_8bit_storage"};
 
 
 		deviceCreateInfo.enabledExtensionCount = (uint32_t)deviceExtensions.size();
 		deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions.data();
+		deviceCreateInfo.pNext = &vulkan12Features;
 		vkCreateDevice(physicalDevice, &deviceCreateInfo, nullptr, &device);
 
 		// Get a compute queue
