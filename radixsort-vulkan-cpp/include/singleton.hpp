@@ -11,19 +11,26 @@ class Singleton{
 	VkInstance instance;
 	VkPhysicalDevice physicalDevice;
 	VkDevice device;
+	uint32_t queueFamilyIndex;
+	VkQueue queue;
 
-	Singleton(const Singleton&) = delete;
-	Singleton& operator=(const Singleton&) = delete;
+    Singleton(const Singleton&) = delete;
+    Singleton(Singleton&&) = delete;
+    Singleton& operator=(const Singleton&) = delete;
+    Singleton& operator=(Singleton&&) = delete;
 	~Singleton(){
 		vkDestroyDevice(device, nullptr);
 		vkDestroyInstance(instance, nullptr);
 	}
 	static Singleton& get_singleton(){
-		static Singleton singleton;
-		return singleton;
-	}
+		if (singleton == nullptr){
+			singleton =  new Singleton();
+		}
+		return *singleton;
+	};
 	VkResult createBuffer(VkBufferUsageFlags usageFlags, VkMemoryPropertyFlags memoryPropertyFlags, VkBuffer *buffer, VkDeviceMemory *memory, VkDeviceSize size, void *data = nullptr);
 	protected:
+		inline static Singleton* singleton;
 		std::unordered_map<const char *, bool> device_extensions;
 		std::unordered_map<const char *, bool> instance_extensions;
 		std::vector<std::string> supportedInstanceExtensions;
@@ -108,12 +115,49 @@ class Singleton{
 		printf("GPU: %s\n", deviceProperties.deviceName);
 	}
 
+   void create_compute_queue(){
+		printf("create_compute_queue\n");
+			// Request a single compute queue
+		const float defaultQueuePriority(0.0f);
+		VkDeviceQueueCreateInfo queueCreateInfo = {};
+		uint32_t queueFamilyCount;
+		vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, nullptr);
+		std::vector<VkQueueFamilyProperties> queueFamilyProperties(queueFamilyCount);
+		vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilyProperties.data());
+		for (uint32_t i = 0; i < static_cast<uint32_t>(queueFamilyProperties.size()); i++) {
+			if (queueFamilyProperties[i].queueFlags & VK_QUEUE_COMPUTE_BIT) {
+				queueFamilyIndex = i;
+				queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+				queueCreateInfo.queueFamilyIndex = i;
+				queueCreateInfo.queueCount = 1;
+				queueCreateInfo.pQueuePriorities = &defaultQueuePriority;
+				break;
+			}
+		}
+		// Create logical device
+		VkDeviceCreateInfo deviceCreateInfo = {};
+		deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+		deviceCreateInfo.queueCreateInfoCount = 1;
+		deviceCreateInfo.pQueueCreateInfos = &queueCreateInfo;
+		std::vector<const char*> deviceExtensions = {};
+
+
+		deviceCreateInfo.enabledExtensionCount = (uint32_t)deviceExtensions.size();
+		deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions.data();
+		vkCreateDevice(physicalDevice, &deviceCreateInfo, nullptr, &device);
+
+		// Get a compute queue
+		vkGetDeviceQueue(device, queueFamilyIndex, 0, &queue);
+	}
+
 
 
 	Singleton(){
 		create_instance();
 		create_device();
+		create_compute_queue();
 	}
+
 };
 
 
@@ -159,4 +203,14 @@ VkResult Singleton::createBuffer(VkBufferUsageFlags usageFlags, VkMemoryProperty
 		vkBindBufferMemory(device, *buffer, *memory, 0);
 
 		return VK_SUCCESS;
+};
+
+
+/*
+Singleton& Singleton::get_singleton(){
+	if (singleton == nullptr){
+		singleton =  new Singleton();
+	}
+	return *singleton;
 }
+*/

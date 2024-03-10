@@ -62,7 +62,7 @@ void Morton::submit(uint32_t* morton_keys, size_t size){
 			computeSubmitInfo.pWaitDstStageMask = &waitStageMask;
 			computeSubmitInfo.commandBufferCount = 1;
 			computeSubmitInfo.pCommandBuffers = &commandBuffer;
-			vkQueueSubmit(queue, 1, &computeSubmitInfo, fence);
+			vkQueueSubmit(singleton.queue, 1, &computeSubmitInfo, fence);
 			vkWaitForFences(singleton.device, 1, &fence, VK_TRUE, UINT64_MAX);
 
 			// Make device writes visible to the host
@@ -107,17 +107,16 @@ void Morton::run(const int logical_blocks, glm::vec4* data, uint32_t* morton_key
 
 
 	create_storage_buffer(n*sizeof(uint32_t), morton_keys, &buffer.morton_keys_buffer, &memory.morton_keys_memory, &temp_buffer.morton_keys_buffer, &temp_memory.morton_keys_memory);
-	create_uniform_buffer(n*sizeof(glm::vec4), data, &buffer.data_buffer, &memory.data_memory, &temp_buffer.data_buffer, &temp_memory.data_memory);
+	create_storage_buffer(n*sizeof(glm::vec4), data, &buffer.data_buffer, &memory.data_memory, &temp_buffer.data_buffer, &temp_memory.data_memory);
 	// create descriptor pool
 	std::vector<VkDescriptorPoolSize> poolSizes = {
-		VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1},
-		VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1}
+		VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2},
 	};
 
 	create_descriptor_pool(poolSizes, 1);
 
 	// create layout binding
-	VkDescriptorSetLayoutBinding b_data_layoutBinding = build_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 0, 1);
+	VkDescriptorSetLayoutBinding b_data_layoutBinding = build_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 0, 1);
 	VkDescriptorSetLayoutBinding b_morton_keys_layoutBinding = build_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 1, 1);
 
 	std::vector<VkDescriptorSetLayoutBinding> set_layout_bindings = {
@@ -138,7 +137,7 @@ void Morton::run(const int logical_blocks, glm::vec4* data, uint32_t* morton_key
 
 	// update descriptor sets, first we need to create write descriptor, then specify the destination set, binding number, descriptor type, and number of descriptors(buffers) to bind
 	VkDescriptorBufferInfo data_bufferDescriptor = { buffer.data_buffer, 0, VK_WHOLE_SIZE };
-	VkWriteDescriptorSet data_descriptor_write  = create_descriptor_write(descriptorSets[0], 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, &data_bufferDescriptor);
+	VkWriteDescriptorSet data_descriptor_write  = create_descriptor_write(descriptorSets[0], 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &data_bufferDescriptor);
 	VkDescriptorBufferInfo morton_keys_bufferDescriptor = { buffer.morton_keys_buffer, 0, VK_WHOLE_SIZE };
 	VkWriteDescriptorSet morton_keys_descriptor_write = create_descriptor_write(descriptorSets[0],1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &morton_keys_bufferDescriptor);
 	
@@ -197,7 +196,7 @@ void Morton::run(const int logical_blocks, glm::vec4* data, uint32_t* morton_key
 	// submit the command buffer, fence and flush
 	submit(morton_keys, n);
 
-	vkQueueWaitIdle(queue);
+	vkQueueWaitIdle(singleton.queue);
 
 	cleanup(&pipeline);
 }

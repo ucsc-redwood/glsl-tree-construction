@@ -87,7 +87,6 @@ void Unique::cleanup(VkPipeline *pipeline){
 
 
 		vkDestroyDescriptorSetLayout(singleton.device, descriptorSetLayouts[0], nullptr);
-		vkDestroyDescriptorSetLayout(singleton.device, descriptorSetLayouts[1], nullptr);
 		vkDestroyPipeline(singleton.device, *pipeline, nullptr);
 		vkDestroyShaderModule(singleton.device, shaderModule, nullptr);
 		

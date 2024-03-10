@@ -13,62 +13,28 @@ class ApplicationBase{
 
 
     protected:
-        Singleton& singleton;
+        Singleton &singleton;
         VkCommandPool commandPool;
         VkPipelineCache pipelineCache;
-        uint32_t queueFamilyIndex;
-	    VkQueue queue;
+       // uint32_t queueFamilyIndex;
+	   // VkQueue queue;
         VkCommandBuffer commandBuffer;
 	    VkFence fence;
 	    VkDescriptorPool descriptorPool;
 	    VkPipelineLayout pipelineLayout;
 
         ApplicationBase(): singleton(Singleton::get_singleton()) {
-	        create_compute_queue();
+	        //create_compute_queue();
 	        build_command_pool();
         }
 
 
-    void create_compute_queue(){
-		printf("create_compute_queue\n");
-			// Request a single compute queue
-		const float defaultQueuePriority(0.0f);
-		VkDeviceQueueCreateInfo queueCreateInfo = {};
-		uint32_t queueFamilyCount;
-		vkGetPhysicalDeviceQueueFamilyProperties(singleton.physicalDevice, &queueFamilyCount, nullptr);
-		std::vector<VkQueueFamilyProperties> queueFamilyProperties(queueFamilyCount);
-		vkGetPhysicalDeviceQueueFamilyProperties(singleton.physicalDevice, &queueFamilyCount, queueFamilyProperties.data());
-		for (uint32_t i = 0; i < static_cast<uint32_t>(queueFamilyProperties.size()); i++) {
-			if (queueFamilyProperties[i].queueFlags & VK_QUEUE_COMPUTE_BIT) {
-				queueFamilyIndex = i;
-				queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-				queueCreateInfo.queueFamilyIndex = i;
-				queueCreateInfo.queueCount = 1;
-				queueCreateInfo.pQueuePriorities = &defaultQueuePriority;
-				break;
-			}
-		}
-		// Create logical device
-		VkDeviceCreateInfo deviceCreateInfo = {};
-		deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-		deviceCreateInfo.queueCreateInfoCount = 1;
-		deviceCreateInfo.pQueueCreateInfos = &queueCreateInfo;
-		std::vector<const char*> deviceExtensions = {};
-
-
-		deviceCreateInfo.enabledExtensionCount = (uint32_t)deviceExtensions.size();
-		deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions.data();
-		vkCreateDevice(singleton.physicalDevice, &deviceCreateInfo, nullptr, &singleton.device);
-
-		// Get a compute queue
-		vkGetDeviceQueue(singleton.device, queueFamilyIndex, 0, &queue);
-	}
 
     void build_command_pool() {
 		printf("build_command_pool\n");
 		VkCommandPoolCreateInfo cmdPoolInfo = {};
 		cmdPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-		cmdPoolInfo.queueFamilyIndex = queueFamilyIndex;
+		cmdPoolInfo.queueFamilyIndex = singleton.queueFamilyIndex;
 		cmdPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 		vkCreateCommandPool(singleton.device, &cmdPoolInfo, nullptr, &commandPool);
 	}
@@ -252,7 +218,7 @@ void create_storage_buffer(const VkDeviceSize bufferSize, void* data, VkBuffer* 
 			vkCreateFence(singleton.device, &fenceInfo, nullptr, &fence);
 
 			// Submit to the queue
-			vkQueueSubmit(queue, 1, &submitInfo, fence);
+			vkQueueSubmit(singleton.queue, 1, &submitInfo, fence);
 			vkWaitForFences(singleton.device, 1, &fence, VK_TRUE, UINT64_MAX);
 
 			vkDestroyFence(singleton.device, fence, nullptr);
@@ -317,7 +283,7 @@ void create_uniform_buffer(const VkDeviceSize bufferSize, void* data, VkBuffer* 
 			vkCreateFence(singleton.device, &fenceInfo, nullptr, &fence);
 
 			// Submit to the queue
-			vkQueueSubmit(queue, 1, &submitInfo, fence);
+			vkQueueSubmit(singleton.queue, 1, &submitInfo, fence);
 			vkWaitForFences(singleton.device, 1, &fence, VK_TRUE, UINT64_MAX);
 
 			vkDestroyFence(singleton.device, fence, nullptr);

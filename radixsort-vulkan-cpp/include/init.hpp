@@ -59,7 +59,7 @@ void Init::submit(){
 			computeSubmitInfo.pWaitDstStageMask = &waitStageMask;
 			computeSubmitInfo.commandBufferCount = 1;
 			computeSubmitInfo.pCommandBuffers = &commandBuffer;
-			vkQueueSubmit(queue, 1, &computeSubmitInfo, fence);
+			vkQueueSubmit(singleton.queue, 1, &computeSubmitInfo, fence);
 			vkWaitForFences(singleton.device, 1, &fence, VK_TRUE, UINT64_MAX);
 
 }
@@ -183,7 +183,7 @@ void Init::run(const int blocks, glm::vec4* data, const int n, const int min_val
 	memcpy(data, mapped, bufferSize);
 	vkUnmapMemory(singleton.device,temp_memory.data_memory);
 
-	vkQueueWaitIdle(queue);
+	vkQueueWaitIdle(singleton.queue);
 
 	cleanup(&pipeline);
 	
