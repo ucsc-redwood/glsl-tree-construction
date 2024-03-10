@@ -2,7 +2,7 @@
 #include "init.hpp"
 #include "morton.hpp"
 
-#include "unique.hpp"
+//#include "unique.hpp"
 #include "radixsort.hpp"
 #include "radix_tree.hpp"
 #include "edge_count.hpp"
@@ -56,11 +56,22 @@ int main(){
     auto build_radix_tree_stage = RadixTree();
     build_radix_tree_stage.run(app_params.n_blocks, morton_keys.data(), prefix_n.data(), has_leaf_left, has_leaf_right, left_child.data(), parents.data(), n_brt_nodes);
 
+    for (int i = 0; i < 1024; i++){
+        printf("prefix_n[%d]: %d\n", i, prefix_n[i]);
+    }
     auto edge_count_stage = EdgeCount();
     edge_count_stage.run(app_params.n_blocks, prefix_n.data(), parents.data(),edge_count.data(), n_brt_nodes);
-
+    
+    for (int i = 0; i < 1024; i++){
+        printf("edge_count[%d]: %d\n", i, edge_count[i]);
+    }
     auto prefix_sum_stage = PrefixSum();
+    /*
     prefix_sum_stage.run(app_params.n_blocks, edge_count.data(), n_brt_nodes);
 
+    for (int i = 0; i < 1024; i++){
+        printf("scanededge_count[%d]: %d\n", i, edge_count[i]);
+    }
+    */
     
 }

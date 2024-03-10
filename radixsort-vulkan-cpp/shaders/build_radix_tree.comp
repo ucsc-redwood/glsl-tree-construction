@@ -5,8 +5,6 @@
 #extension GL_KHR_shader_subgroup_vote:enable
 #extension GL_EXT_shader_explicit_arithmetic_types_int8:enable
 
-#define IDX gl_GlobalInvocationID.x
-#define STRIDE gl_WorkGroupSize.x * gl_NumWorkGroups.x
 
 layout(push_constant) uniform N{
     int n;
@@ -45,6 +43,7 @@ uint ceil_div_u32(const uint a, const uint b) {
 }
 
 uint8_t delta_u32(const uint a, const uint b) {
+  /*
   //uint bit1_mask = uint(1) << (4 * 8 - 1);
   uint val = a ^ b;
   int msb = findMSB(val);
@@ -54,6 +53,8 @@ uint8_t delta_u32(const uint a, const uint b) {
   else{
     return uint8_t(31 - msb);
   }
+  */
+  return findMSB(a ^ b);
 }
 
 int log2_ceil_u32(const uint x) {
@@ -145,7 +146,10 @@ void k_BuildRadixTree(int i ){
 }
 
 void main(){
-  for (int i = int(IDX); i < n; i += int(STRIDE)){
+  const uint idx = gl_LocalInvocationID.x + gl_WorkGroupSize.x * gl_WorkGroupID.x;
+  const uint stride = gl_WorkGroupSize.x * gl_NumWorkGroups.x;
+  const int n_brt_nodes = n - 1;
+  for (int i = int(idx); i < n_brt_nodes; i += int(stride)){
     k_BuildRadixTree(i);
   }
   

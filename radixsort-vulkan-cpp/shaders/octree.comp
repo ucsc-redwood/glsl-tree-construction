@@ -7,8 +7,6 @@
 
 #define morton_bits 30
 
-#define IDX gl_GlobalInvocationID.x
-#define STRIDE gl_WorkGroupSize.x * gl_NumWorkGroups.x
 
 struct OctNode{
     int children[8];
@@ -122,7 +120,7 @@ const float range){
     ret[3]=1.f;
 }
 
-void k_MakeOctNodes(int i){
+void k_MakeOctNodes(uint i){
     const int root_level=rt_prefixN[i]/3;
     
     if(i<n_brt_nodes){
@@ -223,15 +221,9 @@ void k_LinkLeafNodes(int i ){
 */
 
 void main(){
-    for (int i = int(IDX); i < n_brt_nodes; i += int(STRIDE)) {
+    const uint idx = gl_LocalInvocationID.x + gl_WorkGroupSize.x * gl_WorkGroupID.x;
+    const uint stride = gl_WorkGroupSize.x * gl_NumWorkGroups.x;
+    for (uint i = idx; i < n_brt_nodes; i += stride){
         k_MakeOctNodes(i);
     }
-    /*
-    groupMemoryBarrier();
-    barrier();
-    
-    for (int i = int(IDX); i < n_brt_nodes; i += int(STRIDE)) {
-        k_LinkLeafNodes(i);
-    }
-    */
 }

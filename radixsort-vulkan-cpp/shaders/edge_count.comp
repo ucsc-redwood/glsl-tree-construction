@@ -5,8 +5,6 @@
 #extension GL_KHR_shader_subgroup_vote: enable
 #extension GL_EXT_shader_explicit_arithmetic_types_int8:enable
 
-#define IDX gl_GlobalInvocationID.x
-#define STRIDE gl_WorkGroupSize.x * gl_NumWorkGroups.x
 
 layout(set = 0, binding = 0 ) buffer PrefixN{
     uint8_t prefix_n[];
@@ -26,20 +24,21 @@ layout (push_constant) uniform Constant{
 
 layout(local_size_x = 512) in;
 
-void countEdges(){
-    /*
-    int startIdx = int(gl_GlobalInvocationID.x * ITEM_PER_THREAD);
-    int endIdx = int(min(startIdx + ITEM_PER_THREAD, n_brt_nodes));
-    */
-    for(int i = int(IDX); i < n_brt_nodes; i += int(STRIDE)){
+void countEdges(uint i){
         uint my_depth = prefix_n[i]/3;
         uint parent_depth = prefix_n[parent[i]]/3;
         edge_count[i] = my_depth - parent_depth;
-
-    }
 }
 
 
 void main(){
-    countEdges();
+    const uint idx = gl_LocalInvocationID.x + gl_WorkGroupSize.x * gl_WorkGroupID.x;
+    const uint stride = gl_WorkGroupSize.x * gl_NumWorkGroups.x;
+    for (uint i = idx; i < n_brt_nodes; i += stride){
+        if (i == 0){
+            edge_count[i] = 0;
+            continue;
+        }
+        countEdges(i);
+    }
 }
