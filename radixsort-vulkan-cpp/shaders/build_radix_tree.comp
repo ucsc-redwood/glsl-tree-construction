@@ -47,6 +47,7 @@ uint8_t delta_u32(const uint a, const uint b) {
   //uint bit1_mask = uint(1) << (4 * 8 - 1);
   uint val = a ^ b;
   int msb = findMSB(val);
+  
   return uint8_t(31 - msb);
 
 
