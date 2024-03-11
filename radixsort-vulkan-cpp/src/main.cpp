@@ -65,6 +65,8 @@ int main(){
     for (int i = 61563; i < 61563+1024; i++){
         printf("prefix_n[%d]: %d\n", i, prefix_n[i]);
     }
+
+    /*
     auto edge_count_stage = EdgeCount();
     edge_count_stage.run(app_params.n_blocks, prefix_n.data(), parents.data(),edge_count.data(), n_brt_nodes);
     
