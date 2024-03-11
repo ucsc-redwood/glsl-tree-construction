@@ -29,27 +29,36 @@ int main(){
     int n_brt_nodes = BUFFER_ELEMENTS - 1;
     std::vector<int> parents(app_params.n, 0);
     std::vector<int> left_child(app_params.n, 0);
-    bool has_leaf_left[app_params.n] = {0};
-    bool has_leaf_right[app_params.n] = {0};
+    bool* has_leaf_left = new bool[app_params.n];
+    std::fill_n(has_leaf_left, app_params.n, false);
+
+    bool* has_leaf_right = new bool[app_params.n];
+    std::fill_n(has_leaf_right, app_params.n, false);
     
     Init init_stage = Init();
     init_stage.run(app_params.n_blocks, data.data(), app_params.n, app_params.min_coord, app_params.getRange(), app_params.seed);
     for (int i = 0; i < 1024; ++i){
         std::cout << data[i].x << " " << data[i].y << " " << data[i].z << " " << data[i].w << std::endl;
     }
-    /*
+    
+    
     Morton morton_stage = Morton();
     morton_stage.run(app_params.n_blocks, data.data(), morton_keys.data(), app_params.n, app_params.min_coord, app_params.getRange());
     
+    /*
     for (int i = 0; i < 1024; ++i){
         std::cout << morton_keys[i] << std::endl;
     }
     */
     
+    
+    
     for(int i = 1; i <= BUFFER_ELEMENTS; ++i){
-        morton_keys[i] = i;
+        morton_keys[i-1] = i;
     }
+    
 
+    
     auto radixsort_stage = RadixSort();
     radixsort_stage.run(app_params.n_blocks, morton_keys.data(), app_params.n);
 
@@ -58,7 +67,8 @@ int main(){
 		printf("sorted_key[%d]: %d\n", i, morton_keys[i]);
 	}
     
-
+    
+    
     auto build_radix_tree_stage = RadixTree();
     build_radix_tree_stage.run(app_params.n_blocks, morton_keys.data(), prefix_n.data(), has_leaf_left, has_leaf_right, left_child.data(), parents.data(), app_params.n);
 
@@ -66,20 +76,23 @@ int main(){
         printf("prefix_n[%d]: %d\n", i, prefix_n[i]);
     }
 
-    /*
+    
     auto edge_count_stage = EdgeCount();
     edge_count_stage.run(app_params.n_blocks, prefix_n.data(), parents.data(),edge_count.data(), n_brt_nodes);
     
     for (int i = 0; i < 1024; i++){
         printf("edge_count[%d]: %d\n", i, edge_count[i]);
     }
+    
+    
     auto prefix_sum_stage = PrefixSum();
-    /*
-    prefix_sum_stage.run(app_params.n_blocks, edge_count.data(), n_brt_nodes);
+    
+    prefix_sum_stage.run(app_params.n_blocks, edge_count.data(), n_brt_nodes+1);
 
     for (int i = 0; i < 1024; i++){
         printf("scanededge_count[%d]: %d\n", i, edge_count[i]);
     }
-    */
     
+    delete[] has_leaf_left;
+    delete[] has_leaf_right;
 }

@@ -21,8 +21,7 @@ class PrefixSum : public ApplicationBase{
 	VkDescriptorSet descriptorSets[1] = {VkDescriptorSet{}};
 	VkDescriptorSetLayoutCreateInfo descriptorLayout[1] = {VkDescriptorSetLayoutCreateInfo{}};
 	struct PushConstant {
-		uint32_t pass_num = 0;
-		uint32_t radix_shift = 0;
+		uint32_t aligned_size;
 	} prefix_sum_push_constant;
 	struct{
 		VkBuffer u_keys_buffer;
@@ -55,7 +54,6 @@ class PrefixSum : public ApplicationBase{
 void PrefixSum::execute(){
 			// todo: change the harded coded for map
 			printf("execute\n");
-			std::vector<uint32_t> computeOutput(BUFFER_ELEMENTS);
 			vkResetFences(singleton.device, 1, &fence);
 			const VkPipelineStageFlags waitStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
 			VkSubmitInfo computeSubmitInfo {};
@@ -96,13 +94,15 @@ void PrefixSum::run(const int logical_block, uint32_t *u_keys, const int n){
 
     VkPipeline pipeline;
 
+	uint32_t aligned_size = ((n + 4 - 1)/ 4) * 4;
     uint32_t index[1] = {0};
-    const uint32_t num_blocks = (n + PARTITION_SIZE - 1) / PARTITION_SIZE;
-    uint32_t reduction[num_blocks] = {0};
+    const uint32_t num_blocks = (aligned_size + PARTITION_SIZE - 1) / PARTITION_SIZE;
+	std::vector<uint32_t> reduction(num_blocks, 0);
+    //uint32_t reduction[num_blocks] = {0};
 
     create_storage_buffer(n*sizeof(uint32_t), u_keys, &buffer.u_keys_buffer, &memory.u_keys_memory, &temp_buffer.u_keys_buffer, &temp_memory.u_keys_memory);
     create_storage_buffer(sizeof(uint32_t), index, &buffer.index_buffer, &memory.index_memory, &temp_buffer.index_buffer, &temp_memory.index_memory);
-    create_storage_buffer(num_blocks*sizeof(uint32_t), reduction, &buffer.reduction_buffer, &memory.reduction_memory, &temp_buffer.reduction_buffer, &temp_memory.reduction_memory);
+    create_storage_buffer(num_blocks*sizeof(uint32_t), reduction.data(), &buffer.reduction_buffer, &memory.reduction_memory, &temp_buffer.reduction_buffer, &temp_memory.reduction_memory);
     
 	// create descriptor pool
 	std::vector<VkDescriptorPoolSize> poolSizes = {
@@ -169,10 +169,11 @@ void PrefixSum::run(const int logical_block, uint32_t *u_keys, const int n){
     create_pipeline_barrier(&reduction_barrier, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
     create_pipeline_barrier(&index_barrier, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
-	// for histogram
+	prefix_sum_push_constant.aligned_size = aligned_size;
+	vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstant), &prefix_sum_push_constant);
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 1, descriptorSets, 0, 0);
-	vkCmdDispatch(commandBuffer, logical_block, 1, 1);
+	vkCmdDispatch(commandBuffer, num_blocks, 1, 1);
 
     u_keys_barrier = create_buffer_barrier(&buffer.u_keys_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
     create_pipeline_barrier(&u_keys_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);

@@ -76,9 +76,9 @@ void k_BuildRadixTree(int i ){
     if (i == 0) {
       d = 1;
     } else {
-      const uint8_t delta_diff_right = delta_u32(code_i, codes[i + 1]);
-      const uint8_t delta_diff_left = delta_u32(code_i, codes[i - 1]);
-      const uint8_t direction_difference = delta_diff_right - delta_diff_left;
+      const int delta_diff_right = delta_u32(code_i, codes[i + 1]);
+      const int delta_diff_left = delta_u32(code_i, codes[i - 1]);
+      const int direction_difference = delta_diff_right - delta_diff_left;
       d = ((direction_difference > 0) ? 1 : 0) - ((direction_difference < 0) ? 1 : 0);
     }
 
@@ -127,7 +127,7 @@ void k_BuildRadixTree(int i ){
         s += int(t);
       }
     }
-
+    
     // Split position
     const int gamma = i + s * d + min(d, 0);
     left_child[i] = gamma;
@@ -142,6 +142,7 @@ void k_BuildRadixTree(int i ){
     if (!has_leaf_right[i]) {
       parent[gamma + 1] = i;
     }
+    
 }
 
 void main(){

@@ -15,7 +15,7 @@
 #define SUBGROUP_PARTITIONS 3
 #define SUBROUP_PART_SIZE 96
 #define SUBGROUP_PART_START (gl_SubgroupID * SUBROUP_PART_SIZE)
-#define PATR_START (partitionIndex * PART_VEC_SIZE)
+#define PART_START (partitionIndex * PART_VEC_SIZE)
 
 
 #define FLAG_NOT_READY  0           //Flag indicating this partition tile's local reduction is not ready
@@ -36,7 +36,6 @@ layout(set = 0, binding=2) buffer Index{
 };
 
 layout(push_constant)uniform Constants{
-    uint size;
     uint aligned_size;
 };
 
@@ -81,10 +80,10 @@ void prefix_sum(){
     const uint partitionIndex = s_broadcast;
 
     // local eclusive scan
-    if (partitionIndex < WORKGROUP_NUM - 1){
+    if (partitionIndex < gl_NumWorkGroups.x - 1){
         uint subgroup_reduction = 0;
         for(uint i = gl_SubgroupInvocationID.x + SUBGROUP_PART_START, k = 0; k < SUBGROUP_PARTITIONS; i += LANE_COUNT, ++k){
-            uvec4 t = uvec4(scan[i + PATR_START], scan[i + PATR_START + 1], scan[i + PATR_START + 2], scan[i + PATR_START + 3]);
+            uvec4 t = uvec4(scan[i*4 + PART_START*4], scan[i*4 + PART_START*4 + 1], scan[i*4 + PART_START*4 + 2], scan[i*4 + PART_START*4 + 3]);
 
             uint t2 = t.x;
             t.x += t.y;
@@ -103,16 +102,16 @@ void prefix_sum(){
             subgroup_reduction += subgroupBroadcast(t2, 0);
         }
         if (gl_SubgroupInvocationID.x == 0){
-            s_reduction[partitionIndex] = subgroup_reduction;
+            s_reduction[gl_SubgroupID] = subgroup_reduction;
         
         }
     }
 
-    if (partitionIndex == WORKGROUP_NUM - 1){
+    if (partitionIndex == gl_NumWorkGroups.x - 1){
         uint subgroup_reduction = 0;
-        const uint final_part_size = aligned_size - PATR_START;
+        const uint final_part_size = aligned_size - PART_START;
         for(uint i = gl_SubgroupInvocationID.x + SUBGROUP_PART_START, k = 0; k < SUBGROUP_PARTITIONS; i += LANE_COUNT, ++k){
-            uvec4 t = i < final_part_size ? uvec4(scan[i + PATR_START], scan[i + PATR_START + 1], scan[i + PATR_START + 2], scan[i + PATR_START + 3]) : uvec4(0, 0, 0, 0);
+            uvec4 t = i < final_part_size ? uvec4(scan[i*4 + PART_START*4], scan[i*4 + PART_START*4 + 1], scan[i*4 + PART_START*4 + 2], scan[i*4 + PART_START*4 + 3]) : uvec4(0, 0, 0, 0);
 
             uint t2 = t.x;
             t.x += t.y;
@@ -131,7 +130,7 @@ void prefix_sum(){
             subgroup_reduction += subgroupBroadcast(t2, 0);
         }
         if (gl_SubgroupInvocationID.x == 0){
-            s_reduction[partitionIndex] = subgroup_reduction;
+            s_reduction[gl_SubgroupID] = subgroup_reduction;
         }
     }
     groupMemoryBarrier();
@@ -144,9 +143,10 @@ void prefix_sum(){
     if (gl_LocalInvocationID.x == WORKGROUP_NUM / LANE_COUNT -1){
         atomicAdd(workgroup_reduction[partitionIndex], (partitionIndex > 0 ? FLAG_REDUCTION : FLAG_INCLUSIVE) | s_reduction[gl_LocalInvocationID.x] << 2);
     }
-
+    
     // look back
     uint prev_reduction = 0;
+    /*
     if (partitionIndex > 0 && gl_LocalInvocationID.x < LANE_COUNT){
         uint k = partitionIndex + LANE_COUNT - gl_SubgroupInvocationID.x;
 
@@ -170,32 +170,32 @@ void prefix_sum(){
             }
         }
     }
-
+    */
     groupMemoryBarrier();
     barrier();
-
+    
     if (gl_LocalInvocationID.x >= LANE_COUNT){
         prev_reduction += s_broadcast + s_reduction[gl_SubgroupID.x - 1];
     }
 
-    if (partitionIndex < WORKGROUP_NUM - 1){
+    if (partitionIndex < gl_NumWorkGroups.x - 1){
         for (uint i = gl_SubgroupInvocationID.x + SUBGROUP_PART_START, k = 0; k < SUBGROUP_PARTITIONS; i += LANE_COUNT, ++k){
             uvec4 add  = AddToUvec4(prev_reduction, s_lookback[i]);
-            scan[i + PATR_START] = add.x;
-            scan[i + PATR_START + 1] = add.y;
-            scan[i + PATR_START + 2] = add.z;
-            scan[i + PATR_START + 3] = add.w;
+            scan[i*4 + PART_START*4] = add.x;
+            scan[i*4 + PART_START*4 + 1] = add.y;
+            scan[i*4 + PART_START*4 + 2] = add.z;
+            scan[i*4 + PART_START*4 + 3] = add.w;
         }
     }
 
-    if (partitionIndex == WORKGROUP_NUM - 1){
-        const uint final_part_size = aligned_size - PATR_START;
+    if (partitionIndex == gl_NumWorkGroups.x - 1){
+        const uint final_part_size = aligned_size - PART_START;
         for (uint i = gl_SubgroupInvocationID.x + SUBGROUP_PART_START, k = 0; k < SUBGROUP_PARTITIONS && i < final_part_size; i += LANE_COUNT, ++k){
             uvec4 add  = AddToUvec4(prev_reduction, s_lookback[i]);
-            scan[i + PATR_START] = add.x;
-            scan[i + PATR_START + 1] = add.y;
-            scan[i + PATR_START + 2] = add.z;
-            scan[i + PATR_START + 3] = add.w;
+            scan[i*4 + PART_START*4] = add.x;
+            scan[i*4 + PART_START*4 + 1] = add.y;
+            scan[i*4 + PART_START*4 + 2] = add.z;
+            scan[i*4 + PART_START*4 + 3] = add.w;
         }
     }
 }

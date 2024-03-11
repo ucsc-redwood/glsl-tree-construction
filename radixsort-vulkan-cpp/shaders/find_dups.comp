@@ -5,18 +5,20 @@
 #extension GL_KHR_shader_subgroup_vote: enable
 
 
-layout(set = 0, binding = 0) buffer Keys
+layout(set = 1, binding = 0) buffer Contributes{
+    uint contributes[];
+};
+
+layout(set = 1, binding = 1) buffer Keys
 {
     uint keys[];
 };
 
-layout(set = 0, binding = 1) uniform Constants{
-    uint n;
+
+layout(push_constant) uniform Constants{
+    int n;
 };
 
-layout(set = 0, binding = 2) buffer Contributes{
-    uint contributes[];
-};
 
 layout(local_size_x = 256) in;
 
