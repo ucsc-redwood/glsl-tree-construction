@@ -2,7 +2,7 @@
 #include "init.hpp"
 #include "morton.hpp"
 
-//#include "unique.hpp"
+#include "unique.hpp"
 #include "radixsort.hpp"
 #include "radix_tree.hpp"
 #include "edge_count.hpp"
@@ -10,19 +10,27 @@
 #include "octree.hpp"
 
 #include <vulkan/vulkan.hpp>
+#include <chrono>
 
-#define BUFFER_ELEMENTS 131072
+#define BUFFER_ELEMENTS 2000000
 
-int main(){
+int main(const int argc, const char* argv[]){
+    int n_blocks = 1;
+
+    if (argc > 1){
+        n_blocks = std::stoi(argv[1]);
+    }
     AppParams app_params;
     app_params.n = BUFFER_ELEMENTS;
     app_params.min_coord = 0.0f;
     app_params.max_coord = 1.0f;
     app_params.seed = 114514;
     app_params.n_threads = 4;
-    app_params.n_blocks = 16;
+    app_params.n_blocks = n_blocks;
     
     std::vector<uint32_t> morton_keys(BUFFER_ELEMENTS, 0);
+    std::vector<uint32_t> u_keys(BUFFER_ELEMENTS, 0);
+    //std::vector<>
     std::vector<glm::vec4> data(BUFFER_ELEMENTS ,glm::vec4(0,0,0,0));
     std::vector<uint8_t> prefix_n(app_params.n, 0);
     std::vector<uint32_t> edge_count(app_params.n, 0);
@@ -58,17 +66,19 @@ int main(){
     }
     
 
-    
     auto radixsort_stage = RadixSort();
     radixsort_stage.run(app_params.n_blocks, morton_keys.data(), app_params.n);
 
-    
+
 	for (int i = 0; i < 1024; i++){
 		printf("sorted_key[%d]: %d\n", i, morton_keys[i]);
 	}
+    /*
     
-    
-    
+    auto unique_stage = Unique();
+    unique_stage.run(app_params.n_blocks, morton_keys.data(), app_params.n);
+    */
+    /*
     auto build_radix_tree_stage = RadixTree();
     build_radix_tree_stage.run(app_params.n_blocks, morton_keys.data(), prefix_n.data(), has_leaf_left, has_leaf_right, left_child.data(), parents.data(), app_params.n);
 
@@ -92,6 +102,7 @@ int main(){
     for (int i = 0; i < 1024; i++){
         printf("scanededge_count[%d]: %d\n", i, edge_count[i]);
     }
+    */
     
     delete[] has_leaf_left;
     delete[] has_leaf_right;

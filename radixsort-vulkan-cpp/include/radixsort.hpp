@@ -2,6 +2,7 @@
 #include "application.hpp"
 #include <glm/glm.hpp>
 #include <iostream>
+#include <chrono>
 
 #define PARTITION_SIZE 7680
 #define BINNING_THREAD_BLOCKS  (n + PARTITION_SIZE - 1) / PARTITION_SIZE
@@ -314,8 +315,12 @@ void RadixSort::run(const int logical_blocks, uint32_t* computeInput, const int 
 	// create fence
 	create_fence();
 
+	const auto start = std::chrono::high_resolution_clock::now();
 	// submit the command buffer, fence and flush
 	submit();
+	const auto end = std::chrono::high_resolution_clock::now();
+    const std::chrono::duration<double, std::milli> elapsed = end - start;
+    std::cout << "time: " << elapsed.count() << "ms" << std::endl;
 
 	void *mapped;
 	vkMapMemory(singleton.device, temp_memory.b_sort_memory, 0, VK_WHOLE_SIZE, 0, &mapped);

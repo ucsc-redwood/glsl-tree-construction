@@ -66,7 +66,6 @@ class Octree : public ApplicationBase{
 	struct{
         VkBuffer oct_node_buffer;
 
-
         VkBuffer node_offsets_buffer;
         VkBuffer node_counts_buffer;
         VkBuffer codes_buffer;

@@ -13,6 +13,7 @@ class Singleton{
 	VkDevice device;
 	uint32_t queueFamilyIndex;
 	VkQueue queue;
+	//VKQueue queue_2;
 
     Singleton(const Singleton&) = delete;
     Singleton(Singleton&&) = delete;
@@ -166,6 +167,7 @@ class Singleton{
 
 		// Get a compute queue
 		vkGetDeviceQueue(device, queueFamilyIndex, 0, &queue);
+		//vkGetDeviceQueue(device, queueFamilyIndex, 1, &queue_2);
 	}
 
 

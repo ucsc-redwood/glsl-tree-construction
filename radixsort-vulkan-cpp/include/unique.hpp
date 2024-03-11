@@ -205,7 +205,7 @@ void Unique::run(const int logical_block, uint32_t* sorted_keys, uint32_t* u_key
 	vkUpdateDescriptorSets(singleton.device, static_cast<uint32_t>(descriptor_writes.size()), descriptor_writes.data(), 0, NULL);
 
 	//create pipeline 
-	VkPipelineShaderStageCreateInfo find_dup_shader_stage = load_shader("find_dups.spv", &find_dup_shader_stage);
+	VkPipelineShaderStageCreateInfo find_dup_shader_stage = load_shader("find_dups.spv", &find_dups_shaderModule);
 	create_pipeline(&find_dup_shader_stage,&pipelineLayout, &find_dup_pipeline);
 	VkPipelineShaderStageCreateInfo prefix_sum_shader_stage = load_shader("prefix_sum.spv", &prefix_sum_shaderModule);
 	create_pipeline(&prefix_sum_shader_stage,&pipelineLayout, &prefix_sum_pipeline);
