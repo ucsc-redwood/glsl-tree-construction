@@ -4,14 +4,14 @@
 #extension GL_KHR_shader_subgroup_arithmetic: enable
 #extension GL_KHR_shader_subgroup_vote: enable
 
-#define input_size 2000000
+//#define input_size 2000000
 
 layout(set = 0, binding = 0) buffer Data{
-  vec4 data[input_size];
+  vec4 data[];
 };
 
 layout(set = 0, binding = 1) buffer MortonKeys{
-  uint morton_keys[input_size];
+  uint morton_keys[];
 };
 
 layout (push_constant) uniform Constants {

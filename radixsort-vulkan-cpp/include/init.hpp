@@ -3,9 +3,8 @@
 #include <glm/glm.hpp>
 #include <iostream>
 
-#define BUFFER_ELEMENTS 2000000
 #define PARTITION_SIZE 7680
-#define BINNING_THREAD_BLOCKS  (BUFFER_ELEMENTS + PARTITION_SIZE - 1) / PARTITION_SIZE
+#define BINNING_THREAD_BLOCKS  (n + PARTITION_SIZE - 1) / PARTITION_SIZE
 
 class Init : public ApplicationBase{
     public:

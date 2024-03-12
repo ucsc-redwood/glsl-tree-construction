@@ -6,7 +6,7 @@
 #extension GL_KHR_shader_subgroup_shuffle_relative : enable
 #extension GL_KHR_shader_subgroup_shuffle : enable
 
-#define input_size 2000000
+//#define input_size 2000000
 
 #define RADIX_BIN 256
 #define RADIX_LOG 8
@@ -31,10 +31,10 @@
 #define BIN_SUBGROUPS       16       //The number of subgroup in a BinningPass threadblock previously 16
 #define BIN_KEYS_PER_THREAD 15      //The number of keys per thread in BinningPass threadblock previously 15
 
-#define BIN_PARTITIONS     (input_size / BIN_PART_SIZE)             //The number of partition tiles in a BinningPass
+#define BIN_PARTITIONS     (n / BIN_PART_SIZE)             //The number of partition tiles in a BinningPass
 #define BIN_SUB_PART_START (SUBGROUP_IDX * BIN_SUB_PART_SIZE)     //The starting offset of a subpartition tile
 #define BIN_PART_START     (partitionIndex * BIN_PART_SIZE)     //The starting offset of a partition tile
-#define BIN_THREAD_BLOCKS  (input_size + BIN_PART_SIZE - 1) / BIN_PART_SIZE
+#define BIN_THREAD_BLOCKS  (n + BIN_PART_SIZE - 1) / BIN_PART_SIZE
 
 
 #define FLAG_NOT_READY      0       //Flag value inidicating neither inclusive sum, or aggregate sum of a partition tile is ready
@@ -45,11 +45,11 @@
 
 
 layout(set = 1, binding = 0)  buffer BSortBuffer {
-    uint b_sort[input_size];
+    uint b_sort[];
 };
 
 layout(set = 1, binding = 2)  buffer BAltBuffer {
-    uint b_alt[input_size];
+    uint b_alt[];
 };
 
 layout(set = 1, binding = 1)  buffer BGlobalHist {
@@ -61,12 +61,13 @@ layout(set = 1, binding = 3) coherent buffer BIndex {
 };
 
 layout(set = 1, binding = 4) coherent buffer BPassHist {
-    uvec4 b_passHist[BIN_THREAD_BLOCKS*256];
+    uvec4 b_passHist[];
 };
 
 layout(push_constant) uniform Params{
     uint pass_num;
     uint radix_shift;
+    uint n;
 };
 
 
@@ -281,7 +282,7 @@ void k_DigitBinning(uint zheyuan_block_id, uint logical_blocks){
             uint offset;
             uint warpFlags = 0xFFFFFFFF;
 
-            if ( i < input_size)
+            if ( i < n)
                 key = pass_num % 2 == 0 ? b_sort[i] : b_alt[i];
             
             for (uint k = 0; k < RADIX_LOG; ++k){
@@ -293,7 +294,7 @@ void k_DigitBinning(uint zheyuan_block_id, uint logical_blocks){
 
             for (uint k = 0; k < BIN_SUBGROUPS; ++k){
                 uint prev;
-                if (gl_SubgroupID.x == k && bits == 0 && i < input_size){
+                if (gl_SubgroupID.x == k && bits == 0 && i < n){
                     prev = atomicAdd(s_localHistograms[key >> radix_shift & RADIX_MASK], bitCount(warpFlags));
                 }
                 if (gl_SubgroupID.x == k){
@@ -303,7 +304,7 @@ void k_DigitBinning(uint zheyuan_block_id, uint logical_blocks){
                 barrier();
             }
 
-            if (i < input_size)
+            if (i < n)
                pass_num % 2 == 0 ? b_alt[offset] = key : b_sort[offset] = key;
         }
         
@@ -314,7 +315,7 @@ void k_DigitBinning(uint zheyuan_block_id, uint logical_blocks){
 
 
 void main(){
-    uint logical_blocks = uint(ceil(float(input_size) / float(BIN_PART_SIZE)));
+    uint logical_blocks = uint(ceil(float(n) / float(BIN_PART_SIZE)));
     for (uint zheyuan_block_id = gl_WorkGroupID.x; zheyuan_block_id < logical_blocks; zheyuan_block_id += gl_NumWorkGroups.x){
         k_DigitBinning(zheyuan_block_id, logical_blocks);
     }

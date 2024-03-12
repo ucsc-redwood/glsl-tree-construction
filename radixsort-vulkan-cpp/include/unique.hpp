@@ -134,7 +134,7 @@ void Unique::run(const int logical_block, uint32_t* sorted_keys, uint32_t* u_key
     
 	// create descriptor pool
 	std::vector<VkDescriptorPoolSize> poolSizes = {
-		VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3},
+		VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 8},
 	};
 
 	create_descriptor_pool(poolSizes, 3);
@@ -159,8 +159,8 @@ void Unique::run(const int logical_block, uint32_t* sorted_keys, uint32_t* u_key
 		sorted_keys_layoutBinding, contributions_layoutBinding, u_keys_layoutBinding
 	};
 	// create descriptor 
-	create_descriptor_set_layout(find_dup_set_layout_bindings, &descriptorLayout[0], &descriptorSetLayouts[0]);
-	create_descriptor_set_layout(prefix_sum_set_layout_bindings, &descriptorLayout[1], &descriptorSetLayouts[1]);
+	create_descriptor_set_layout(find_dup_set_layout_bindings, &descriptorLayout[1], &descriptorSetLayouts[1]);
+	create_descriptor_set_layout(prefix_sum_set_layout_bindings, &descriptorLayout[0], &descriptorSetLayouts[0]);
 	create_descriptor_set_layout(move_dup_set_layout_bindings, &descriptorLayout[2], &descriptorSetLayouts[2]);
 
 	// initialize pipeline_layout and attach descriptor set layout to pipeline layout
@@ -175,24 +175,24 @@ void Unique::run(const int logical_block, uint32_t* sorted_keys, uint32_t* u_key
 	// update descriptor sets, first we need to create write descriptor, then specify the destination set, binding number, descriptor type, and number of descriptors(buffers) to bind
 	// find_dup
 	VkDescriptorBufferInfo contributions_bufferDescriptor = { buffer.contributions_buffer, 0, VK_WHOLE_SIZE };
-	VkWriteDescriptorSet contributions_descriptor_write = create_descriptor_write(descriptorSets[0], 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &contributions_bufferDescriptor);
+	VkWriteDescriptorSet contributions_descriptor_write = create_descriptor_write(descriptorSets[1], 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &contributions_bufferDescriptor);
 	VkDescriptorBufferInfo sorted_keys_bufferDescriptor = { buffer.sorted_keys_buffer, 0, VK_WHOLE_SIZE };
-	VkWriteDescriptorSet sorted_keys_descriptor_write = create_descriptor_write(descriptorSets[0], 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &sorted_keys_bufferDescriptor);
+	VkWriteDescriptorSet sorted_keys_descriptor_write = create_descriptor_write(descriptorSets[1], 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &sorted_keys_bufferDescriptor);
 
 	// prefix sum
     VkDescriptorBufferInfo contributions_bufferDescriptor_2 = { buffer.contributions_buffer, 0, VK_WHOLE_SIZE };
-    VkWriteDescriptorSet contributions_descriptor_write_2  = create_descriptor_write(descriptorSets[1], 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &contributions_bufferDescriptor_2);
+    VkWriteDescriptorSet contributions_descriptor_write_2  = create_descriptor_write(descriptorSets[0], 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &contributions_bufferDescriptor_2);
     VkDescriptorBufferInfo reduction_bufferDescriptor = { buffer.reduction_buffer, 0, VK_WHOLE_SIZE };
-    VkWriteDescriptorSet reduction_descriptor_write = create_descriptor_write(descriptorSets[1],1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &reduction_bufferDescriptor);
+    VkWriteDescriptorSet reduction_descriptor_write = create_descriptor_write(descriptorSets[0],1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &reduction_bufferDescriptor);
     VkDescriptorBufferInfo index_bufferDescriptor = { buffer.index_buffer, 0, VK_WHOLE_SIZE };
-    VkWriteDescriptorSet index_descriptor_write = create_descriptor_write(descriptorSets[1],2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &index_bufferDescriptor);
+    VkWriteDescriptorSet index_descriptor_write = create_descriptor_write(descriptorSets[0],2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &index_bufferDescriptor);
 
 	// move dup
-	VkDescriptorBufferInfo contributions_bufferDescriptor_3 = { temp_buffer.contributions_buffer, 0, VK_WHOLE_SIZE };
+	VkDescriptorBufferInfo contributions_bufferDescriptor_3 = { buffer.contributions_buffer, 0, VK_WHOLE_SIZE };
 	VkWriteDescriptorSet contributions_descriptor_write_3 = create_descriptor_write(descriptorSets[2], 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &contributions_bufferDescriptor_3);
-	VkDescriptorBufferInfo sorted_keys_bufferDescriptor_2 = { temp_buffer.sorted_keys_buffer, 0, VK_WHOLE_SIZE };
+	VkDescriptorBufferInfo sorted_keys_bufferDescriptor_2 = { buffer.sorted_keys_buffer, 0, VK_WHOLE_SIZE };
 	VkWriteDescriptorSet sorted_keys_descriptor_write_2 = create_descriptor_write(descriptorSets[2], 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &sorted_keys_bufferDescriptor_2);
-	VkDescriptorBufferInfo u_keys_bufferDescriptor = { temp_buffer.u_keys_buffer, 0, VK_WHOLE_SIZE };
+	VkDescriptorBufferInfo u_keys_bufferDescriptor = { buffer.u_keys_buffer, 0, VK_WHOLE_SIZE };
 	VkWriteDescriptorSet u_keys_descriptor_write = create_descriptor_write(descriptorSets[2], 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &u_keys_bufferDescriptor);
 
 
@@ -244,7 +244,7 @@ void Unique::run(const int logical_block, uint32_t* sorted_keys, uint32_t* u_key
 
     contributions_barrier = create_buffer_barrier(&buffer.u_keys_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
     create_pipeline_barrier(&contributions_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-
+	
 	// for prefix_sum
 	unique_push_constant.n = aligned_size;
 	vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstant), &unique_push_constant);
@@ -269,6 +269,12 @@ void Unique::run(const int logical_block, uint32_t* sorted_keys, uint32_t* u_key
 	vkCmdCopyBuffer(commandBuffer, buffer.u_keys_buffer, temp_buffer.u_keys_buffer, 1, &copyRegion);
 	u_keys_barrier = create_buffer_barrier(&buffer.u_keys_buffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT);
 	create_pipeline_barrier(&u_keys_barrier, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT);
+
+	VkBufferCopy prefix_sum_copyRegion = {};
+	prefix_sum_copyRegion.size = n* sizeof(uint32_t);
+	vkCmdCopyBuffer(commandBuffer, buffer.contributions_buffer, temp_buffer.contributions_buffer, 1, &prefix_sum_copyRegion);
+	contributions_barrier = create_buffer_barrier(&buffer.contributions_buffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT);
+	create_pipeline_barrier(&contributions_barrier, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT);
 
 	vkEndCommandBuffer(commandBuffer);
 

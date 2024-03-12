@@ -3,7 +3,6 @@
 #include <glm/glm.hpp>
 #include <iostream>
 
-#define BUFFER_ELEMENTS 2000000
 
 class RadixTree : public ApplicationBase{
     public:

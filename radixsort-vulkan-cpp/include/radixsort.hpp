@@ -26,6 +26,7 @@ class RadixSort : public ApplicationBase{
 	struct RadixSortPushConstant {
 		uint32_t pass_num = 0;
 		uint32_t radix_shift = 0;
+		uint32_t n = 0;
 	} radix_sort_push_constant;
 	struct{
 		VkBuffer b_sort_buffer;
@@ -126,6 +127,7 @@ void RadixSort::run(const int logical_blocks, uint32_t* computeInput, const int 
 	VkPipeline binning_pipeline;
 
 	const VkDeviceSize bufferSize = n * sizeof(uint32_t);
+
 	/*
 	create_instance();
 	create_device();
@@ -168,6 +170,7 @@ void RadixSort::run(const int logical_blocks, uint32_t* computeInput, const int 
 	//add push constant to the pipeline layout
 	VkPushConstantRange push_constant = init_push_constant(VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RadixSortPushConstant));
 	add_push_constant(&pipelineLayoutCreateInfo, &push_constant, 1);
+
 	vkCreatePipelineLayout(singleton.device, &pipelineLayoutCreateInfo, nullptr, &pipelineLayout);
 	// allocate descriptor sets
 	allocate_descriptor_sets(2, descriptorSetLayouts, descriptorSets);
@@ -226,6 +229,8 @@ void RadixSort::run(const int logical_blocks, uint32_t* computeInput, const int 
 	create_pipeline_barrier(&b_pass_first_histogram_barrier, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
 	// for histogram
+	radix_sort_push_constant.n = n;
+	vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RadixSortPushConstant), &radix_sort_push_constant);
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, histogram_pipeline);
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 2, descriptorSets, 0, 0);
 	vkCmdDispatch(commandBuffer, logical_blocks, 1, 1);

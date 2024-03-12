@@ -3,7 +3,6 @@
 #include <glm/glm.hpp>
 #include <iostream>
 
-#define BUFFER_ELEMENTS 131072
 
 struct OctNode{
     int children[8];

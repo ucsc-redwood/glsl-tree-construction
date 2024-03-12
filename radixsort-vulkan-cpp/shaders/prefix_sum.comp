@@ -141,7 +141,7 @@ void prefix_sum(){
         s_reduction[gl_LocalInvocationID.x] = subgroupInclusiveAdd(s_reduction[gl_LocalInvocationID.x]);
     }
     if (gl_LocalInvocationID.x == WORKGROUP_NUM / LANE_COUNT -1){
-        atomicAdd(workgroup_reduction[partitionIndex], (partitionIndex > 0 ? FLAG_REDUCTION : FLAG_INCLUSIVE) | s_reduction[gl_LocalInvocationID.x] << 2);
+        atomicAdd(workgroup_reduction[partitionIndex], (partitionIndex > 0 ? FLAG_REDUCTION : FLAG_INCLUSIVE) | (s_reduction[gl_LocalInvocationID.x] << 2));
     }
     
     // look back

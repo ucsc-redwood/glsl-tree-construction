@@ -6,7 +6,7 @@
 #extension GL_KHR_shader_subgroup_shuffle_relative : enable
 #extension GL_KHR_shader_subgroup_shuffle : enable
 
-#define input_size 2000000
+//#define input_size 2000000
 
 #define RADIX_BIN 256
 #define RADIX_LOG 8
@@ -30,11 +30,17 @@
 #define G_HIST_VEC_SIZE		16384
 
 layout(set = 0, binding = 0)  buffer BSortBuffer {
-    uint b_sort[input_size];
+    uint b_sort[];
 };
 
 layout(set = 0, binding = 1)  buffer coherent BGlobalHist {
     uint b_globalHist[1024];
+};
+
+layout(push_constant) uniform Constant{
+    uint pass_num;
+    uint radix_shift;
+    uint n;
 };
 
 
@@ -103,7 +109,7 @@ void k_GlobalHistogram(uint zheyuan_block_id, uint logical_blocks){
         }
         
         if (zheyuan_block_id == logical_blocks - 1){
-            for (uint i = gl_LocalInvocationID.x + (zheyuan_block_id * G_HIST_PART_SIZE); i < input_size; i += gl_WorkGroupSize.x){
+            for (uint i = gl_LocalInvocationID.x + (zheyuan_block_id * G_HIST_PART_SIZE); i < n; i += gl_WorkGroupSize.x){
                 uint t = b_sort[i];
                 atomicAdd(s_globalHistFirst[segmentIndex + ((t) & 0xFF)], 1);
                 atomicAdd(s_globalHistSec[segmentIndex + ((t >> 8) & 0xFF)], 1);
@@ -156,7 +162,7 @@ void k_GlobalHistogram(uint zheyuan_block_id, uint logical_blocks){
 
 
 void main() {
-    uint logical_blocks = uint(ceil(float(input_size) / float(G_HIST_PART_SIZE)));
+    uint logical_blocks = uint(ceil(float(n) / float(G_HIST_PART_SIZE)));
     for (uint zheyuan_block_id = gl_WorkGroupID.x; zheyuan_block_id < logical_blocks; zheyuan_block_id += gl_NumWorkGroups.x){
         k_GlobalHistogram(zheyuan_block_id, logical_blocks);
     }

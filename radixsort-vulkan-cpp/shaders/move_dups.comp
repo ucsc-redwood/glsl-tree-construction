@@ -26,7 +26,8 @@ layout(local_size_x = 256) in;
 
 
 
-void moveDups(){
+void moveDups(uint block_id){
+    /*
     uint num_tiles = uint(ceil(float(n) / float(gl_WorkGroupSize.x)));
     for (uint tile_idx = gl_WorkGroupID.x; tile_idx < num_tiles; tile_idx += gl_NumWorkGroups.x){
         uint idx = tile_idx * gl_WorkGroupSize.x + gl_LocalInvocationID.x;
@@ -34,7 +35,15 @@ void moveDups(){
             out_keys[out_idx[idx]] = in_keys[idx];
         }
     }
+    */
+    uint idx = block_id * gl_WorkGroupSize.x + gl_LocalInvocationID.x;
+    if (idx < n) {
+        out_keys[out_idx[idx]] = in_keys[idx];
+    }
 }
 void main(){
-    moveDups();
+ uint logical_blocks = uint(ceil(float(n) / float(gl_WorkGroupSize.x)));
+    for (uint zheyuan_block_id = gl_WorkGroupID.x; zheyuan_block_id < logical_blocks; zheyuan_block_id += gl_NumWorkGroups.x){
+        moveDups(zheyuan_block_id);
+    }
 }

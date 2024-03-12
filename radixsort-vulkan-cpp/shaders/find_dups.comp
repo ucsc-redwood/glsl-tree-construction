@@ -24,7 +24,8 @@ layout(local_size_x = 256) in;
 
 
 
-void findDups(){
+void findDups(uint block_id){
+    /*
     uint num_tiles = uint(ceil(float(n) / float(gl_WorkGroupSize.x)));
         for (uint tile_idx = gl_WorkGroupID.x; tile_idx < num_tiles; tile_idx += gl_NumWorkGroups.x){
         uint idx = tile_idx * gl_NumWorkGroups.x  + gl_LocalInvocationID.x;
@@ -38,8 +39,19 @@ void findDups(){
             contributes[idx] = 0;
         }
     }
-    
+    */
+
+    uint idx = block_id* gl_WorkGroupSize.x + gl_LocalInvocationID.x;
+    if (idx > 0 && idx < n){
+        contributes[idx] = (keys[idx] != keys[idx-1]) ? 1 : 0;
+    }
+
+    if (idx == 0)
+        contributes[idx] = 0;
 }
 void main(){
-    findDups();
+ uint logical_blocks = uint(ceil(float(n) / float(gl_WorkGroupSize.x)));
+    for (uint zheyuan_block_id = gl_WorkGroupID.x; zheyuan_block_id < logical_blocks; zheyuan_block_id += gl_NumWorkGroups.x){
+        findDups(zheyuan_block_id);
+    }
 }

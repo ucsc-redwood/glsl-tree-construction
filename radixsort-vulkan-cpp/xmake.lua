@@ -1,7 +1,7 @@
 set_project("Tree Construction")
 
 -- Vulkan related
-add_requires( "vulkan-memory-allocator", "spirv-cross", "glm")
+add_requires( "spirv-cross", "glm")
 add_requires("vulkansdk", {system = true})
 
 -- Others
