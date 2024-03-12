@@ -256,8 +256,18 @@ void* Singleton::createSharedBuffer(VkBufferUsageFlags usageFlags, VkMemoryPrope
 			}
 			memReqs.memoryTypeBits >>= 1;
 		}
+
+		if(!memTypeFound){
+			std::cout <<"cannot find memory type"<<std::endl;
+		}else{
+			std::cout <<"memory type found"<<std::endl;
+		}
 		assert(memTypeFound);
-		vkAllocateMemory(device, &memAlloc, nullptr, memory);
+		if (vkAllocateMemory(device, &memAlloc, nullptr, memory) != VK_SUCCESS){
+			std::cout <<"cannot allocate memory"<<std::endl;
+		}else{
+			std::cout <<"memory allocated"<<std::endl;
+		}
 
 		void *mapped;
 		vkMapMemory(device, *memory, 0, size, 0, &mapped);

@@ -1,5 +1,6 @@
 #include "app_params.hpp"
 #include "init.hpp"
+/*
 #include "morton.hpp"
 
 #include "unique.hpp"
@@ -8,7 +9,7 @@
 #include "edge_count.hpp"
 #include "prefix_sum.hpp"
 #include "octree.hpp"
-
+*/
 #include <vulkan/vulkan.hpp>
 #include <chrono>
 
@@ -34,7 +35,7 @@ int main(const int argc, const char* argv[]){
     std::vector<glm::vec4> data(BUFFER_ELEMENTS ,glm::vec4(0,0,0,0));
     std::vector<uint8_t> prefix_n(app_params.n, 0);
     std::vector<uint32_t> edge_count(app_params.n, 0);
-    std::vector<OctNode> oct_nodes(app_params.n, OctNode());
+    //std::vector<OctNode> oct_nodes(app_params.n, OctNode());
     int unique;
     int n_brt_nodes;
     std::vector<int> parents(app_params.n, 0);
@@ -47,16 +48,16 @@ int main(const int argc, const char* argv[]){
 
     VkBuffer data_buffer;
     VkDeviceMemory data_memory;
-    auto app = ApplicationBase();
-    app.create_shared_storage_buffer(app_params.n*sizeof(glm::vec4), data.data(), &data_buffer, &data_memory);
-    /*
+    
     // step 0 initilization
     Init init_stage = Init();
     init_stage.run(app_params.n_blocks, data.data(), app_params.n, app_params.min_coord, app_params.getRange(), app_params.seed);
+    /*
     for (int i = 0; i < 1024; ++i){
         std::cout << data[i].x << " " << data[i].y << " " << data[i].z << " " << data[i].w << std::endl;
     }
     */
+    
     /*
     // step 1 compute morton
     Morton morton_stage = Morton();

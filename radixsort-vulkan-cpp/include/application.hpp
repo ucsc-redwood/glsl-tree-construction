@@ -234,7 +234,7 @@ void create_storage_buffer(const VkDeviceSize bufferSize, void* data, VkBuffer* 
 
 
 
-void* create_shared_storage_buffer(const VkDeviceSize bufferSize, void* data, VkBuffer* device_buffer, VkDeviceMemory* device_memory){
+void* create_shared_storage_buffer(const VkDeviceSize bufferSize, VkBuffer* device_buffer, VkDeviceMemory* device_memory){
 		printf("create_shared_storage_buffer\n");
 		// Copy input data to VRAM using a staging buffer
 	
