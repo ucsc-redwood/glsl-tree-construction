@@ -19,10 +19,10 @@ class Pipe : public ApplicationBase {
 
   // Essential data memory
   std::vector<glm::vec4> u_points;
-  std::vector<unsigned int> u_morton_keys;
-  std::vector<unsigned int> u_unique_morton_keys;
-  std::vector<int> u_edge_count;
-  std::vector<int> u_edge_offset;
+  std::vector<uint32_t> u_morton_keys;
+  std::vector<uint32_t> u_unique_morton_keys;
+  std::vector<uint32_t> u_edge_count;
+  std::vector<uint32_t> u_edge_offset;
 
   // Essential
   // should be of size 'n_unique_keys - 1', but we can allocate as 'n' for now
@@ -46,13 +46,13 @@ class Pipe : public ApplicationBase {
 
   // Temp
   struct {
-    std::vector<unsigned int> u_sort_alt;              // n
-    std::vector<unsigned int> u_global_histogram;      // 256 * 4
-    std::vector<unsigned int> u_index;                 // 4
-    std::vector<unsigned int> u_first_pass_histogram;  // 256 * xxx
-    std::vector<unsigned int> u_second_pass_histogram;
-    std::vector<unsigned int> u_third_pass_histogram;
-    std::vector<unsigned int> u_fourth_pass_histogram;
+    std::vector<uint32_t> u_sort_alt;              // n
+    std::vector<uint32_t> u_global_histogram;      // 256 * 4
+    std::vector<uint32_t> u_index;                 // 4
+    std::vector<uint32_t> u_first_pass_histogram;  // 256 * xxx
+    std::vector<uint32_t> u_second_pass_histogram;
+    std::vector<uint32_t> u_third_pass_histogram;
+    std::vector<uint32_t> u_fourth_pass_histogram;
   } sort_tmp;
 
   struct {
@@ -73,6 +73,9 @@ void Pipe::allocate(const int n) {
     u_points.resize(n);
     u_morton_keys.resize(n);
     u_unique_morton_keys.resize(n);
+    create_storage_buffer()
+    
+
 
     brt.u_prefix_n.resize(n);  // should be n_unique, but n will do for now
     MallocManaged(&brt.u_has_leaf_left, n);

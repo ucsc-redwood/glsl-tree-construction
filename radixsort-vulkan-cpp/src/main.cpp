@@ -34,6 +34,7 @@ int main(const int argc, const char* argv[]){
     std::vector<glm::vec4> data(BUFFER_ELEMENTS ,glm::vec4(0,0,0,0));
     std::vector<uint8_t> prefix_n(app_params.n, 0);
     std::vector<uint32_t> edge_count(app_params.n, 0);
+    std::vector<OctNode> oct_nodes(app_params.n, OctNode());
     int unique;
     int n_brt_nodes;
     std::vector<int> parents(app_params.n, 0);
@@ -43,30 +44,31 @@ int main(const int argc, const char* argv[]){
 
     bool* has_leaf_right = new bool[app_params.n];
     std::fill_n(has_leaf_right, app_params.n, false);
-    
+
+    VkBuffer data_buffer;
+    VkDeviceMemory data_memory;
+    auto app = ApplicationBase();
+    app.create_shared_storage_buffer(app_params.n*sizeof(glm::vec4), data.data(), &data_buffer, &data_memory);
+    /*
     // step 0 initilization
     Init init_stage = Init();
     init_stage.run(app_params.n_blocks, data.data(), app_params.n, app_params.min_coord, app_params.getRange(), app_params.seed);
     for (int i = 0; i < 1024; ++i){
         std::cout << data[i].x << " " << data[i].y << " " << data[i].z << " " << data[i].w << std::endl;
     }
-    
+    */
+    /*
     // step 1 compute morton
     Morton morton_stage = Morton();
     morton_stage.run(app_params.n_blocks, data.data(), morton_keys.data(), app_params.n, app_params.min_coord, app_params.getRange());
-    
-    /*
-    for (int i = 0; i < 1024; ++i){
-        std::cout << morton_keys[i] << std::endl;
-    }
-    */
+
     
     
-    /*
+    
     for(int i = 1; i <= BUFFER_ELEMENTS; ++i){
         morton_keys[i-1] = i;
     }
-    */
+    
     
     
     // step 2 radix sort
@@ -91,7 +93,7 @@ int main(const int argc, const char* argv[]){
         printf("u_keys[%d]: %d\n", i, u_keys[i]);
     }
     
-    /*
+    
     // step 4 build radix tree
     auto build_radix_tree_stage = RadixTree();
     build_radix_tree_stage.run(app_params.n_blocks, u_keys.data(), prefix_n.data(), has_leaf_left, has_leaf_right, left_child.data(), parents.data(), unique);
@@ -116,6 +118,23 @@ int main(const int argc, const char* argv[]){
     for (int i = 0; i < 1024; i++){
         printf("scanededge_count[%d]: %d\n", i, edge_count[i]);
     }
+    /*
+    // step 7 build octree
+    auto build_octree_stage = Octree();
+    build_octree_stage.run(app_params.n_blocks,
+    oct_nodes.data(),
+    edge_count.data(),
+    edge_count.data(),
+    u_keys.data(),
+    prefix_n.data(),
+    has_leaf_left,
+    has_leaf_right,
+    parents.data(),
+    left_child.data(),
+    app_params.min_coord,
+    app_params.getRange(),
+    n_brt_nodes
+    );
     */
     
     delete[] has_leaf_left;

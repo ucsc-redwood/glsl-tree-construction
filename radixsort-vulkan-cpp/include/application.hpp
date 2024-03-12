@@ -22,7 +22,7 @@ class ApplicationBase{
 	    VkFence fence;
 	    VkDescriptorPool descriptorPool;
 	    VkPipelineLayout pipelineLayout;
-
+		
         ApplicationBase(): singleton(Singleton::get_singleton()) {
 	        //create_compute_queue();
 	        build_command_pool();
@@ -115,7 +115,7 @@ VkWriteDescriptorSet create_descriptor_write(VkDescriptorSet dstSet, uint32_t ds
 }
 
 VkPipelineShaderStageCreateInfo load_shader(const std::string shader_name, VkShaderModule *shaderModule){
-	const std::string shadersPath = "/home/zheyuan/vulkan-tree-construction/radixsort-vulkan-cpp/shaders/compiled_shaders/";
+	const std::string shadersPath = "./";
 
 	VkPipelineShaderStageCreateInfo shaderStage = {};
 	shaderStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -165,7 +165,9 @@ void create_storage_buffer(const VkDeviceSize bufferSize, void* data, VkBuffer* 
 	
 			singleton.createBuffer(
 				VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+				VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 				host_buffer,
 				host_memory,
 				bufferSize,
@@ -184,7 +186,9 @@ void create_storage_buffer(const VkDeviceSize bufferSize, void* data, VkBuffer* 
 
 			singleton.createBuffer(
 				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+				VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 				device_buffer,
 				device_memory,
 				bufferSize);
@@ -227,10 +231,33 @@ void create_storage_buffer(const VkDeviceSize bufferSize, void* data, VkBuffer* 
 
 }
 
+
+
+
+void* create_shared_storage_buffer(const VkDeviceSize bufferSize, void* data, VkBuffer* device_buffer, VkDeviceMemory* device_memory){
+		printf("create_shared_storage_buffer\n");
+		// Copy input data to VRAM using a staging buffer
+	
+
+			singleton.createSharedBuffer(
+				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+				VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+				device_buffer,
+				device_memory,
+				bufferSize);
+
+	
+
+}
+
 void create_uniform_buffer(const VkDeviceSize bufferSize, void* data, VkBuffer* device_buffer, VkDeviceMemory* device_memory, VkBuffer* host_buffer, VkDeviceMemory* host_memory){
 			singleton.createBuffer(
 				VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+				VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 				host_buffer,
 				host_memory,
 				bufferSize,
@@ -249,7 +276,9 @@ void create_uniform_buffer(const VkDeviceSize bufferSize, void* data, VkBuffer* 
 
 			singleton.createBuffer(
 				VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+				VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 				device_buffer,
 				device_memory,
 				bufferSize);

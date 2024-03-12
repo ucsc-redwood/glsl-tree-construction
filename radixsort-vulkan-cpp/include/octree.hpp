@@ -10,6 +10,16 @@ struct OctNode{
     float cell_size;
     int child_node_mask;
     int child_leaf_mask;
+
+    explicit OctNode(){
+        for (int i = 0; i < 8; ++i){
+            children[i] = -1;
+        }
+        corner = glm::vec4(0,0,0,0);
+        cell_size = 0;
+        child_node_mask = 0;
+        child_leaf_mask = 0;
+    }
 };
 
 class Octree : public ApplicationBase{
@@ -23,8 +33,8 @@ class Octree : public ApplicationBase{
     // --- output parameters
     OctNode* oct_nodes,
     // --- end output parameters, begin input parameters (read-only)
-    int* node_offsets,
-    int* node_counts,
+    uint32_t* node_offsets,
+    uint32_t* node_counts,
     unsigned int* codes,
     uint8_t* rt_prefixN,
     bool* rt_hasLeafLeft,
@@ -176,8 +186,8 @@ void Octree::run(
     // --- output parameters
     OctNode* oct_nodes,
     // --- end output parameters, begin input parameters (read-only)
-    int* node_offsets,
-    int* node_counts,
+    uint32_t* node_offsets,
+    uint32_t* node_counts,
     unsigned int* codes,
     uint8_t* rt_prefixN,
     bool* rt_hasLeafLeft,
@@ -192,8 +202,8 @@ void Octree::run(
 	VkPipeline pipeline;
 
     create_storage_buffer(n_brt_nodes*sizeof(OctNode), oct_nodes, &buffer.oct_node_buffer, &memory.oct_node_memory, &temp_buffer.oct_node_buffer, &temp_memory.oct_node_memory);
-    create_storage_buffer(n_brt_nodes*sizeof(int), node_offsets, &buffer.node_offsets_buffer, &memory.node_offsets_memory, &temp_buffer.node_offsets_buffer, &temp_memory.node_offsets_memory);
-    create_storage_buffer(n_brt_nodes*sizeof(int), node_counts, &buffer.node_counts_buffer, &memory.node_counts_memory, &temp_buffer.node_counts_buffer, &temp_memory.node_counts_memory);
+    create_storage_buffer(n_brt_nodes*sizeof(uint32_t), node_offsets, &buffer.node_offsets_buffer, &memory.node_offsets_memory, &temp_buffer.node_offsets_buffer, &temp_memory.node_offsets_memory);
+    create_storage_buffer(n_brt_nodes*sizeof(uint32_t), node_counts, &buffer.node_counts_buffer, &memory.node_counts_memory, &temp_buffer.node_counts_buffer, &temp_memory.node_counts_memory);
     create_storage_buffer(n_brt_nodes*sizeof(unsigned int), codes, &buffer.codes_buffer, &memory.codes_memory, &temp_buffer.codes_buffer, &temp_memory.codes_memory);
     create_storage_buffer(n_brt_nodes*sizeof(uint8_t), rt_prefixN, &buffer.rt_prefixN_buffer, &memory.rt_prefixN_memory, &temp_buffer.rt_prefixN_buffer, &temp_memory.rt_prefixN_memory);
     create_storage_buffer(n_brt_nodes*sizeof(bool), rt_hasLeafLeft, &buffer.rt_hasLeafLeft_buffer, &memory.rt_hasLeafLeft_memory, &temp_buffer.rt_hasLeafLeft_buffer, &temp_memory.rt_hasLeafLeft_memory);
@@ -337,8 +347,8 @@ void Octree::run(
     VkBufferCopy rt_parents_copyRegion = {};
     VkBufferCopy rt_leftChild_copyRegion = {};
 
-	node_offsets_copyRegion.size = n_brt_nodes* sizeof(int);
-    node_counts_copyRegion.size = n_brt_nodes* sizeof(int);
+	node_offsets_copyRegion.size = n_brt_nodes* sizeof(uint32_t);
+    node_counts_copyRegion.size = n_brt_nodes* sizeof(uint32_t);
     codes_copyRegion.size = n_brt_nodes* sizeof(unsigned int);
     rt_prefixN_copyRegion.size = n_brt_nodes* sizeof(uint8_t);
     rt_hasLeafLeft_copyRegion.size = n_brt_nodes* sizeof(bool);
@@ -390,7 +400,7 @@ void Octree::run(
 	mappedRange.offset = 0;
 	mappedRange.size = VK_WHOLE_SIZE;
 	vkInvalidateMappedMemoryRanges(singleton.device, 1, &mappedRange);
-	VkDeviceSize bufferSize = n_brt_nodes * sizeof(int);
+	VkDeviceSize bufferSize = n_brt_nodes * sizeof(uint32_t);
 	memcpy(node_offsets, mapped, bufferSize);
 	vkUnmapMemory(singleton.device,temp_memory.node_offsets_memory);
 
@@ -399,7 +409,7 @@ void Octree::run(
 	mappedRange.offset = 0;
 	mappedRange.size = VK_WHOLE_SIZE;
 	vkInvalidateMappedMemoryRanges(singleton.device, 1, &mappedRange);
-	bufferSize = n_brt_nodes * sizeof(int);;
+	bufferSize = n_brt_nodes * sizeof(uint32_t);
 	memcpy(node_counts, mapped, bufferSize);
 	vkUnmapMemory(singleton.device,temp_memory.node_counts_memory);
 

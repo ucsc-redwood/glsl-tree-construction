@@ -65,11 +65,11 @@ layout(set=0,binding=6)buffer RtLeftChild{
 };
 
 layout(set=0,binding=7)buffer RtHasLeafLeft{
-    uint8_t rt_hasLeafLeft[];
+    bool rt_hasLeafLeft[];
 };
 
 layout(set=0,binding=8)buffer RtHasLeafRight{
-    uint8_t rt_hasLeafRight[];
+    bool rt_hasLeafRight[];
 };
 
 

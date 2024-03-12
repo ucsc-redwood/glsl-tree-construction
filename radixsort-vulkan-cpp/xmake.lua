@@ -30,6 +30,7 @@ elseif is_plat("linux") then
     end)
 end
 
+
 after_build(function(target)
     platform = os.host()
     arch = os.arch()
