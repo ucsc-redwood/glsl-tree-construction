@@ -1,6 +1,7 @@
 
 #pragma once
-#include <vulkan/vulkan.hpp>
+//#include <vulkan/vulkan.hpp>
+#include "volk.h"
 #include <unordered_map>
 #include <iostream>
 #include "core/VulkanTools.h"
@@ -100,6 +101,7 @@ class Singleton{
 	}
 
     VkResult result = vkCreateInstance(&instanceCreateInfo, nullptr, &instance);
+	volkLoadInstance(instance);
 
     return result;
 	}

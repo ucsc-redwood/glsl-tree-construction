@@ -1,4 +1,5 @@
-#include "vulkan/vulkan.h"
+//#include "vulkan/vulkan.h"
+#include "volk.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string>
@@ -25,10 +26,11 @@ const std::vector<const char*> validationLayers = {
 #endif
 
 #if defined(__ANDROID__)
-#include "VulkanAndroid.h"
+//#include "VulkanAndroid.h"
 #include <android/asset_manager.h>
 #endif
 namespace tools{
+	/*
 #if defined(__ANDROID__)
 		// Android shaders are stored as assets in the apk
 		// So they need to be loaded via the asset manager
@@ -59,6 +61,7 @@ namespace tools{
 			return shaderModule;
 		}
 #else
+*/
 		VkShaderModule loadShader(const char *fileName, VkDevice device)
 		{
 			std::ifstream is(fileName, std::ios::binary | std::ios::in | std::ios::ate);
@@ -91,7 +94,7 @@ namespace tools{
 				return VK_NULL_HANDLE;
 			}
 		}
-#endif
+//#endif
 }
 
 bool checkValidationLayerSupport() {

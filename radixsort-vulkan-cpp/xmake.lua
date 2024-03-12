@@ -1,11 +1,11 @@
 set_project("Tree Construction")
 
 -- Vulkan related
-add_requires( "spirv-cross", "glm")
-add_requires("vulkansdk", {system = true})
+add_requires( "glm")
+add_requires("vulkan-headers")
 
 -- Others
-add_requires("spdlog", "cli11")
+-- add_requires("spdlog", "cli11")
 
 add_rules("mode.debug", "mode.release")
 
@@ -20,14 +20,6 @@ end
 if is_mode("release") then
     set_symbols("hidden")
     set_optimize("fastest")
-end
-
-if is_plat("windows") then
-elseif is_plat("linux") then
-    before_build(function(target)
-        os.exec("python3 compile_shaders.py")
-        -- os.exec("./compile_shaders.sh")
-    end)
 end
 
 after_build(function(target)
@@ -47,7 +39,6 @@ target("app")
 set_default(true)
 set_kind("binary")
 add_includedirs("include")
-add_headerfiles("include/*.hpp", "include/**/*.hpp")
-add_files("src/main.cpp", "src/**/*.cpp")
-add_packages("vulkan-memory-allocator", "spirv-cross", "glm",
-             "vulkansdk", "spdlog", "cli11")
+add_headerfiles("include/*.hpp", "include/**/*.hpp", "include/*.h")
+add_files("src/main.cpp", "src/**/*.cpp", "include/*.c")
+add_packages("vulkan-headers", "glm")

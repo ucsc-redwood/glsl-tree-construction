@@ -115,7 +115,7 @@ VkWriteDescriptorSet create_descriptor_write(VkDescriptorSet dstSet, uint32_t ds
 }
 
 VkPipelineShaderStageCreateInfo load_shader(const std::string shader_name, VkShaderModule *shaderModule){
-	const std::string shadersPath = "/home/zheyuan/vulkan-tree-construction/radixsort-vulkan-cpp/shaders/compiled_shaders/";
+	const std::string shadersPath = "./";
 
 	VkPipelineShaderStageCreateInfo shaderStage = {};
 	shaderStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;

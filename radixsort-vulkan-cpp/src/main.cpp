@@ -1,4 +1,8 @@
+#define VK_NO_PROTOTYPES
+#include "volk.h"
 #include "app_params.hpp"
+
+
 #include "init.hpp"
 #include "morton.hpp"
 
@@ -9,17 +13,27 @@
 #include "prefix_sum.hpp"
 #include "octree.hpp"
 
-#include <vulkan/vulkan.hpp>
 #include <chrono>
+#include <iostream>
+#include <stdexcept>
+#include <vector>
+#include <glm/vec4.hpp>
 
 #define BUFFER_ELEMENTS 131072
 
 int main(const int argc, const char* argv[]){
+  // Initialize volk
+  if (volkInitialize() != VK_SUCCESS) {
+    std::cerr << "Failed to initialize volk!" << std::endl;
+    return EXIT_FAILURE;
+  }
+
     int n_blocks = 1;
 
     if (argc > 1){
         n_blocks = std::stoi(argv[1]);
     }
+    
     AppParams app_params;
     app_params.n = BUFFER_ELEMENTS;
     app_params.min_coord = 0.0f;
@@ -72,7 +86,7 @@ int main(const int argc, const char* argv[]){
     // step 2 radix sort
     auto radixsort_stage = RadixSort();
     radixsort_stage.run(app_params.n_blocks, morton_keys.data(), app_params.n);
-
+    /*
 
 	for (int i = 0; i < 1024; i++){
 		printf("sorted_key[%d]: %d\n", i, morton_keys[i]);
