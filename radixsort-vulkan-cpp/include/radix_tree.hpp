@@ -10,7 +10,20 @@ class RadixTree : public ApplicationBase{
     ~RadixTree() {};
 	void 		submit();
 	void 		cleanup(VkPipeline *pipeline);
-	void 		run(const int logical_blocks, uint32_t* morton_keys, uint8_t* prefix_n, bool* has_leaf_left, bool* has_leaf_right, int* left_child, int* parent, const int n_unique);
+	void 		run(const int logical_blocks,
+	uint32_t* morton_keys,
+	uint8_t* prefix_n,
+	bool* has_leaf_left,
+	bool* has_leaf_right,
+	int* left_child,
+	int* parent,
+	VkBuffer morton_keys_buffer,
+	VkBuffer prefix_n_buffer,
+	VkBuffer has_leaf_left_buffer,
+	VkBuffer has_leaf_right_buffer,
+	VkBuffer left_child_buffer,
+	VkBuffer parent_buffer,
+	const int n_unique);
 
     private:
 	VkShaderModule shaderModule;
@@ -23,42 +36,7 @@ class RadixTree : public ApplicationBase{
 	struct PushConstant {
 		int n;
 	} radix_tree_push_constant;
-    
-	struct{
-		VkBuffer morton_keys_buffer;
-		VkBuffer prefix_n_buffer;
-		VkBuffer has_leaf_left_buffer;
-		VkBuffer has_leaf_right_buffer;
-		VkBuffer left_child_buffer;
-		VkBuffer parent_buffer;
-	} buffer;
-
-	struct{
-		VkBuffer morton_keys_buffer;
-		VkBuffer prefix_n_buffer;
-		VkBuffer has_leaf_left_buffer;
-		VkBuffer has_leaf_right_buffer;
-		VkBuffer left_child_buffer;
-		VkBuffer parent_buffer;
-	} temp_buffer;
-
-	struct{
-		VkDeviceMemory morton_keys_memory;
-		VkDeviceMemory prefix_n_memory;
-		VkDeviceMemory has_leaf_left_memory;
-		VkDeviceMemory has_leaf_right_memory;
-		VkDeviceMemory left_child_memory;
-		VkDeviceMemory parent_memory;
-	} memory;
-
-	struct{
-		VkDeviceMemory morton_keys_memory;
-		VkDeviceMemory prefix_n_memory;
-		VkDeviceMemory has_leaf_left_memory;
-		VkDeviceMemory has_leaf_right_memory;
-		VkDeviceMemory left_child_memory;
-		VkDeviceMemory parent_memory;
-	} temp_memory;
+   
 
 };
 

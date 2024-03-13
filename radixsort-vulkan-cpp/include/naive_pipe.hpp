@@ -3,6 +3,7 @@
 #include "application.hpp"
 #include "init.hpp"
 #include "morton.hpp"
+#include "radixsort.hpp"
 #include <glm/vec4.hpp>
 #include "app_params.hpp"
 class Pipe : public ApplicationBase {
@@ -14,6 +15,7 @@ class Pipe : public ApplicationBase {
   ~Pipe();
   void init(const int num_blocks);
   void morton(const int num_blocks);
+  void radix_sort(const int num_blocks);
 
   protected:
   static constexpr auto educated_guess_nodes = 0.6f;
@@ -94,26 +96,17 @@ class Pipe : public ApplicationBase {
     uint32_t* u_sort_alt;              // n
     uint32_t* u_global_histogram;      // 256 * 4
     uint32_t* u_index;                 // 4
-    uint32_t* u_first_pass_histogram;  // 256 * xxx
-    uint32_t* u_second_pass_histogram;
-    uint32_t* u_third_pass_histogram;
-    uint32_t* u_fourth_pass_histogram;
+    glm::uvec4* u_pass_histogram;  // 256 * xxx
 
     VkBuffer u_sort_alt_buffer;
     VkBuffer u_global_histogram_buffer;
     VkBuffer u_index_buffer;
-    VkBuffer u_first_pass_histogram_buffer;
-    VkBuffer u_second_pass_histogram_buffer;
-    VkBuffer u_third_pass_histogram_buffer;
-    VkBuffer u_fourth_pass_histogram_buffer;
+    VkBuffer u_pass_histogram_buffer;
 
     VkDeviceMemory u_sort_alt_memory;
     VkDeviceMemory u_global_histogram_memory;
     VkDeviceMemory u_index_memory;
-    VkDeviceMemory u_first_pass_histogram_memory;
-    VkDeviceMemory u_second_pass_histogram_memory;
-    VkDeviceMemory u_third_pass_histogram_memory;
-    VkDeviceMemory u_fourth_pass_histogram_memory;
+    VkDeviceMemory u_pass_histogram_memory;
   } sort_tmp;
 
   struct {
@@ -221,21 +214,10 @@ void Pipe::allocate() {
     sort_tmp.u_index = static_cast<uint32_t*>(mapped);
     std::fill_n(sort_tmp.u_index, 4, 0);
 
-    create_shared_empty_storage_buffer(radix * binning_thread_blocks * sizeof(uint32_t), &sort_tmp.u_first_pass_histogram_buffer, &sort_tmp.u_first_pass_histogram_memory, &mapped);
-    sort_tmp.u_first_pass_histogram = static_cast<uint32_t*>(mapped);
-    std::fill_n(sort_tmp.u_first_pass_histogram, radix * binning_thread_blocks, 0);
+    create_shared_empty_storage_buffer(radix * binning_thread_blocks * sizeof(glm::uvec4), &sort_tmp.u_pass_histogram_buffer, &sort_tmp.u_pass_histogram_memory, &mapped);
+    sort_tmp.u_pass_histogram = static_cast<glm::uvec4*>(mapped);
+    std::fill_n(sort_tmp.u_pass_histogram, radix * binning_thread_blocks, glm::uvec4(0, 0, 0, 0));
 
-    create_shared_empty_storage_buffer(radix * binning_thread_blocks * sizeof(uint32_t), &sort_tmp.u_second_pass_histogram_buffer, &sort_tmp.u_second_pass_histogram_memory, &mapped);
-    sort_tmp.u_second_pass_histogram = static_cast<uint32_t*>(mapped);
-    std::fill_n(sort_tmp.u_second_pass_histogram, radix * binning_thread_blocks, 0);
-
-    create_shared_empty_storage_buffer(radix * binning_thread_blocks * sizeof(uint32_t), &sort_tmp.u_third_pass_histogram_buffer, &sort_tmp.u_third_pass_histogram_memory, &mapped);
-    sort_tmp.u_third_pass_histogram = static_cast<uint32_t*>(mapped);
-    std::fill_n(sort_tmp.u_third_pass_histogram, radix * binning_thread_blocks, 0);
-
-    create_shared_empty_storage_buffer(radix * binning_thread_blocks * sizeof(uint32_t), &sort_tmp.u_fourth_pass_histogram_buffer, &sort_tmp.u_fourth_pass_histogram_memory, &mapped);
-    sort_tmp.u_fourth_pass_histogram = static_cast<uint32_t*>(mapped);
-    std::fill_n(sort_tmp.u_fourth_pass_histogram, radix * binning_thread_blocks, 0);
 
     // unique_tmp
     create_shared_empty_storage_buffer(params_.n * sizeof(int), &unique_tmp.contributions_buffer, &unique_tmp.contributions_memory, &mapped);
@@ -330,21 +312,10 @@ Pipe::~Pipe() {
   vkDestroyBuffer(singleton.device, sort_tmp.u_index_buffer, nullptr);
   vkFreeMemory(singleton.device, sort_tmp.u_index_memory, nullptr);
 
-  vkUnmapMemory(singleton.device, sort_tmp.u_first_pass_histogram_memory);
-  vkDestroyBuffer(singleton.device, sort_tmp.u_first_pass_histogram_buffer, nullptr);
-  vkFreeMemory(singleton.device, sort_tmp.u_first_pass_histogram_memory, nullptr);
+  vkUnmapMemory(singleton.device, sort_tmp.u_pass_histogram_memory);
+  vkDestroyBuffer(singleton.device, sort_tmp.u_pass_histogram_buffer, nullptr);
+  vkFreeMemory(singleton.device, sort_tmp.u_pass_histogram_memory, nullptr);
 
-  vkUnmapMemory(singleton.device, sort_tmp.u_second_pass_histogram_memory);
-  vkDestroyBuffer(singleton.device, sort_tmp.u_second_pass_histogram_buffer, nullptr);
-  vkFreeMemory(singleton.device, sort_tmp.u_second_pass_histogram_memory, nullptr);
-
-  vkUnmapMemory(singleton.device, sort_tmp.u_third_pass_histogram_memory);
-  vkDestroyBuffer(singleton.device, sort_tmp.u_third_pass_histogram_buffer, nullptr);
-  vkFreeMemory(singleton.device, sort_tmp.u_third_pass_histogram_memory, nullptr);
-
-  vkUnmapMemory(singleton.device, sort_tmp.u_fourth_pass_histogram_memory);
-  vkDestroyBuffer(singleton.device, sort_tmp.u_fourth_pass_histogram_buffer, nullptr);
-  vkFreeMemory(singleton.device, sort_tmp.u_fourth_pass_histogram_memory, nullptr);
 
   // Temporary storages for Unique
   vkUnmapMemory(singleton.device, unique_tmp.contributions_memory);
@@ -362,7 +333,7 @@ Pipe::~Pipe() {
 
 void Pipe::init(const int num_blocks){
   Init init_stage = Init();
-  init_stage.run(n_blocks, u_points, u_points_buffer, params_.n, params_.min_coord, params_.getRange(), params_.seed);
+  init_stage.run(num_blocks, u_points, u_points_buffer, params_.n, params_.min_coord, params_.getRange(), params_.seed);
   for (int i = 0; i < 1024; ++i){
     std::cout << u_points[i].x << " " << u_points[i].y << " " << u_points[i].z << " " << u_points[i].w << std::endl;
   }
@@ -370,8 +341,27 @@ void Pipe::init(const int num_blocks){
 
 void Pipe::morton(const int num_blocks){
   Morton morton_stage = Morton();
-  morton_stage.run(n_blocks, u_points, u_morton_keys, params_.n, params_.min_coord, params_.getRange());
+  morton_stage.run(num_blocks, u_points, u_morton_keys, u_points_buffer, u_morton_keys_buffer,  params_.n, params_.min_coord, params_.getRange());
   for (int i = 0; i < 1024; i++){
     printf("morton_keys[%d]: %d\n", i, u_morton_keys[i]);
+  }
+}
+
+void Pipe::radix_sort(const int num_blocks){
+  auto radixsort_stage = RadixSort();
+  radixsort_stage.run(num_blocks,
+  u_morton_keys,
+  sort_tmp.u_sort_alt,
+  sort_tmp.u_global_histogram,
+  sort_tmp.u_index,
+  sort_tmp.u_pass_histogram,
+  u_morton_keys_buffer,
+  sort_tmp.u_sort_alt_buffer,
+  sort_tmp.u_global_histogram_buffer,
+  sort_tmp.u_index_buffer,
+  sort_tmp.u_pass_histogram_buffer,
+  params_.n);
+  for (int i = 0; i < 1024; i++){
+    printf("sorted_key[%d]: %d\n", i, u_morton_keys[i]);
   }
 }

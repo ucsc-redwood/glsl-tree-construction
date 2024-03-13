@@ -10,7 +10,14 @@ class EdgeCount : public ApplicationBase{
     ~EdgeCount() {};
 	void 		submit();
 	void 		cleanup(VkPipeline *pipeline);
-	void 		run(const int logical_blocks, uint8_t* prefix_n, int* parent, uint32_t* edge_count, int n_brt_nodes);
+	void 		run(const int logical_blocks,
+	uint8_t* prefix_n,
+	int* parent,
+	uint32_t* edge_count,
+	VkBuffer prefix_n_buffer,
+	VkBuffer parent_buffer,
+	VkBuffer edge_count_buffer,
+	int n_brt_nodes);
 
     private:
 	VkShaderModule shaderModule;
@@ -67,22 +74,6 @@ void EdgeCount::submit(){
 }
 
 void EdgeCount::cleanup(VkPipeline *pipeline){
-		
-
-		vkDestroyBuffer(singleton.device, buffer.prefix_n_buffer, nullptr);
-		vkFreeMemory(singleton.device, memory.prefix_n_memory, nullptr);
-		vkDestroyBuffer(singleton.device, temp_buffer.prefix_n_buffer, nullptr);
-		vkFreeMemory(singleton.device, temp_memory.prefix_n_memory, nullptr);
-
-		vkDestroyBuffer(singleton.device, buffer.parent_buffer, nullptr);
-		vkFreeMemory(singleton.device, memory.parent_memory, nullptr);
-		vkDestroyBuffer(singleton.device, temp_buffer.parent_buffer, nullptr);
-		vkFreeMemory(singleton.device, temp_memory.parent_memory, nullptr);
-
-		vkDestroyBuffer(singleton.device, buffer.edge_count_buffer, nullptr);
-		vkFreeMemory(singleton.device, memory.edge_count_memory, nullptr);
-		vkDestroyBuffer(singleton.device, temp_buffer.edge_count_buffer, nullptr);
-		vkFreeMemory(singleton.device, temp_memory.edge_count_memory, nullptr);
 
 		vkDestroyDescriptorSetLayout(singleton.device, descriptorSetLayouts[0], nullptr);
 		vkDestroyPipeline(singleton.device, *pipeline, nullptr);
@@ -90,14 +81,17 @@ void EdgeCount::cleanup(VkPipeline *pipeline){
 		
 }
 
-void EdgeCount::run(const int logical_blocks, uint8_t* prefix_n, int* parent, uint32_t* edge_count, int n_brt_nodes){
+void EdgeCount::run(const int logical_blocks,
+	uint8_t* prefix_n,
+	int* parent,
+	uint32_t* edge_count,
+	VkBuffer prefix_n_buffer,
+	VkBuffer parent_buffer,
+	VkBuffer edge_count_buffer,
+	int n_brt_nodes){
 	 
 	
 	VkPipeline pipeline;
-
-	create_storage_buffer(n_brt_nodes*sizeof(uint8_t), prefix_n, &buffer.prefix_n_buffer, &memory.prefix_n_memory, &temp_buffer.prefix_n_buffer, &temp_memory.prefix_n_memory);
-	create_storage_buffer(n_brt_nodes*sizeof(int), parent, &buffer.parent_buffer, &memory.parent_memory, &temp_buffer.parent_buffer, &temp_memory.parent_memory);
-	create_storage_buffer(n_brt_nodes*sizeof(uint32_t), edge_count, &buffer.edge_count_buffer, &memory.edge_count_memory, &temp_buffer.edge_count_buffer, &temp_memory.edge_count_memory);
 
 	// create descriptor pool
 	std::vector<VkDescriptorPoolSize> poolSizes = {
@@ -129,11 +123,11 @@ void EdgeCount::run(const int logical_blocks, uint8_t* prefix_n, int* parent, ui
 
 	// update descriptor sets, first we need to create write descriptor, then specify the destination set, binding number, descriptor type, and number of descriptors(buffers) to bind
 
-	VkDescriptorBufferInfo prefix_n_bufferDescriptor = { buffer.prefix_n_buffer, 0, VK_WHOLE_SIZE };
+	VkDescriptorBufferInfo prefix_n_bufferDescriptor = { prefix_n_buffer, 0, VK_WHOLE_SIZE };
 	VkWriteDescriptorSet prefix_n_descriptor_write = create_descriptor_write(descriptorSets[0], 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &prefix_n_bufferDescriptor);
-	VkDescriptorBufferInfo parent_bufferDescriptor = { buffer.parent_buffer, 0, VK_WHOLE_SIZE };
+	VkDescriptorBufferInfo parent_bufferDescriptor = { parent_buffer, 0, VK_WHOLE_SIZE };
 	VkWriteDescriptorSet parent_descriptor_write = create_descriptor_write(descriptorSets[0], 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &parent_bufferDescriptor);
-	VkDescriptorBufferInfo edge_count_bufferDescriptor = { buffer.edge_count_buffer, 0, VK_WHOLE_SIZE };
+	VkDescriptorBufferInfo edge_count_bufferDescriptor = { edge_count_buffer, 0, VK_WHOLE_SIZE };
 	VkWriteDescriptorSet edge_count_descriptor_write = create_descriptor_write(descriptorSets[0], 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &edge_count_bufferDescriptor);
 	
 	
@@ -158,9 +152,9 @@ void EdgeCount::run(const int logical_blocks, uint8_t* prefix_n, int* parent, ui
 	cmdBufInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 	// preparation
 	vkBeginCommandBuffer(commandBuffer, &cmdBufInfo);
-	VkBufferMemoryBarrier prefix_n_barrier = create_buffer_barrier(&buffer.prefix_n_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-	VkBufferMemoryBarrier parent_barrier = create_buffer_barrier(&buffer.parent_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-	VkBufferMemoryBarrier edge_count_barrier = create_buffer_barrier(&buffer.edge_count_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+	VkBufferMemoryBarrier prefix_n_barrier = create_buffer_barrier(&prefix_n_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+	VkBufferMemoryBarrier parent_barrier = create_buffer_barrier(&parent_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+	VkBufferMemoryBarrier edge_count_barrier = create_buffer_barrier(&edge_count_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
 
 
 	create_pipeline_barrier(&prefix_n_barrier, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
@@ -173,20 +167,13 @@ void EdgeCount::run(const int logical_blocks, uint8_t* prefix_n, int* parent, ui
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 1, descriptorSets, 0, 0);
 	vkCmdDispatch(commandBuffer, logical_blocks, 1, 1);
 	
-	prefix_n_barrier = create_buffer_barrier(&buffer.prefix_n_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
-	parent_barrier = create_buffer_barrier(&buffer.parent_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
-	edge_count_barrier = create_buffer_barrier(&buffer.edge_count_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
+	prefix_n_barrier = create_buffer_barrier(&prefix_n_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
+	parent_barrier = create_buffer_barrier(&parent_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
+	edge_count_barrier = create_buffer_barrier(&edge_count_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
 
 	create_pipeline_barrier(&prefix_n_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 	create_pipeline_barrier(&parent_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 	create_pipeline_barrier(&edge_count_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-
-
-	VkBufferCopy edge_count_copyRegion = {};
-	edge_count_copyRegion.size = n_brt_nodes* sizeof(uint32_t);
-	vkCmdCopyBuffer(commandBuffer, buffer.edge_count_buffer, temp_buffer.edge_count_buffer, 1, &edge_count_copyRegion);
-	edge_count_barrier = create_buffer_barrier(&buffer.edge_count_buffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT);
-	create_pipeline_barrier(&edge_count_barrier, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT);
 
 	vkEndCommandBuffer(commandBuffer);
 
@@ -195,20 +182,6 @@ void EdgeCount::run(const int logical_blocks, uint8_t* prefix_n, int* parent, ui
 
 	// submit the command buffer, fence and flush
 	submit();
-
-	// Make device writes visible to the host
-	void *mapped;
-	vkMapMemory(singleton.device,temp_memory.edge_count_memory, 0, VK_WHOLE_SIZE, 0, &mapped);
-	VkMappedMemoryRange mappedRange{};
-	mappedRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-	mappedRange.memory = temp_memory.edge_count_memory;
-	mappedRange.offset = 0;
-	mappedRange.size = VK_WHOLE_SIZE;
-	vkInvalidateMappedMemoryRanges(singleton.device, 1, &mappedRange);
-	VkDeviceSize bufferSize = n_brt_nodes * sizeof(uint32_t);
-	memcpy(edge_count, mapped, bufferSize);
-	vkUnmapMemory(singleton.device,temp_memory.edge_count_memory);
-
 
 	vkQueueWaitIdle(singleton.queue);
 

@@ -9,7 +9,7 @@ class Morton : public ApplicationBase{
     ~Morton() {};
 	void 		submit();
 	void 		cleanup(VkPipeline *pipeline);
-	void 		run( const int logical_blocks, glm::vec4* data, uint32_t* morton_keys, const uint32_t n, const float min_coord, const float range);
+	void 		run( const int logical_blocks, glm::vec4* data, uint32_t* morton_keys, VkBuffer data_buffer, VkBuffer morton_keys_buffer, const uint32_t n, const float min_coord, const float range);
 
     private:
 	VkShaderModule shaderModule;
@@ -28,7 +28,6 @@ class Morton : public ApplicationBase{
 
 
 void Morton::submit(){
-			// todo: change the harded coded for map
 			printf("execute\n");
 			vkResetFences(singleton.device, 1, &fence);
 			const VkPipelineStageFlags waitStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
@@ -50,7 +49,7 @@ void Morton::cleanup(VkPipeline *pipeline){
 		
 }
 
-void Morton::run(const int logical_blocks, glm::vec4* data, uint32_t* morton_keys, const uint32_t n, const float min_coord, const float range){
+void Morton::run(const int logical_blocks, glm::vec4* data, uint32_t* morton_keys, VkBuffer data_buffer, VkBuffer morton_keys_buffer, const uint32_t n, const float min_coord, const float range){
 	 
 	
 	VkPipeline pipeline;
@@ -84,9 +83,9 @@ void Morton::run(const int logical_blocks, glm::vec4* data, uint32_t* morton_key
 	allocate_descriptor_sets(1, descriptorSetLayouts, descriptorSets);
 
 	// update descriptor sets, first we need to create write descriptor, then specify the destination set, binding number, descriptor type, and number of descriptors(buffers) to bind
-	VkDescriptorBufferInfo data_bufferDescriptor = { buffer.data_buffer, 0, VK_WHOLE_SIZE };
+	VkDescriptorBufferInfo data_bufferDescriptor = { data_buffer, 0, VK_WHOLE_SIZE };
 	VkWriteDescriptorSet data_descriptor_write  = create_descriptor_write(descriptorSets[0], 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &data_bufferDescriptor);
-	VkDescriptorBufferInfo morton_keys_bufferDescriptor = { buffer.morton_keys_buffer, 0, VK_WHOLE_SIZE };
+	VkDescriptorBufferInfo morton_keys_bufferDescriptor = { morton_keys_buffer, 0, VK_WHOLE_SIZE };
 	VkWriteDescriptorSet morton_keys_descriptor_write = create_descriptor_write(descriptorSets[0],1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &morton_keys_bufferDescriptor);
 	
 	
@@ -111,8 +110,8 @@ void Morton::run(const int logical_blocks, glm::vec4* data, uint32_t* morton_key
 	cmdBufInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 	// preparation
 	vkBeginCommandBuffer(commandBuffer, &cmdBufInfo);
-	VkBufferMemoryBarrier data_barrier = create_buffer_barrier(&buffer.data_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-	VkBufferMemoryBarrier morton_keys_barrier = create_buffer_barrier(&buffer.morton_keys_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+	VkBufferMemoryBarrier data_barrier = create_buffer_barrier(&data_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+	VkBufferMemoryBarrier morton_keys_barrier = create_buffer_barrier(&morton_keys_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
 
 	create_pipeline_barrier(&data_barrier, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 	create_pipeline_barrier(&morton_keys_barrier, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
@@ -124,8 +123,8 @@ void Morton::run(const int logical_blocks, glm::vec4* data, uint32_t* morton_key
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 1, descriptorSets, 0, 0);
 	vkCmdDispatch(commandBuffer, logical_blocks, 1, 1);
-	
-	morton_keys_barrier = create_buffer_barrier(&buffer.morton_keys_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
+	/*
+	morton_keys_barrier = create_buffer_barrier(&morton_keys_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
 	create_pipeline_barrier(&morton_keys_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
 	VkBufferCopy copyRegion = {};
@@ -133,7 +132,7 @@ void Morton::run(const int logical_blocks, glm::vec4* data, uint32_t* morton_key
 	vkCmdCopyBuffer(commandBuffer, buffer.morton_keys_buffer, temp_buffer.morton_keys_buffer, 1, &copyRegion);
 	morton_keys_barrier = create_buffer_barrier(&buffer.morton_keys_buffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT);
 	create_pipeline_barrier(&morton_keys_barrier, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT);
-
+	*/
 
 	vkEndCommandBuffer(commandBuffer);
 
@@ -143,20 +142,6 @@ void Morton::run(const int logical_blocks, glm::vec4* data, uint32_t* morton_key
 
 	// submit the command buffer, fence and flush
 	submit();
-
-	// Make device writes visible to the host
-	void *mapped;
-	vkMapMemory(singleton.device,temp_memory.morton_keys_memory, 0, VK_WHOLE_SIZE, 0, &mapped);
-	VkMappedMemoryRange mappedRange{};
-	mappedRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-	mappedRange.memory = temp_memory.morton_keys_memory;
-	mappedRange.offset = 0;
-	mappedRange.size = VK_WHOLE_SIZE;
-	vkInvalidateMappedMemoryRanges(singleton.device, 1, &mappedRange);
-			
-	const VkDeviceSize bufferSize = n * sizeof(uint32_t);
-	memcpy(morton_keys, mapped, bufferSize);
-	vkUnmapMemory(singleton.device,temp_memory.morton_keys_memory);
 
 	vkQueueWaitIdle(singleton.queue);
 

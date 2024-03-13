@@ -11,7 +11,14 @@ class Unique : public ApplicationBase{
     ~Unique() {};
     void        execute();
 	void 		 cleanup(VkPipeline *find_dup_pipeline, VkPipeline *prefix_sum_pipeline, VkPipeline *move_dup_pipeline);
-	void run(const int logical_block, uint32_t* sorted_keys, uint32_t* u_keys, uint32_t* contributions, const int n);
+	void run(const int logical_block,
+	uint32_t* sorted_keys,
+	uint32_t* u_keys,
+	uint32_t* contributions, 
+	VkBuffer sorted_keys_buffer,
+	VkBuffer u_keys_buffer,
+	VkBuffer contributions_buffer,
+	const int n);
 
     private:
 	VkShaderModule find_dups_shaderModule;
@@ -24,38 +31,6 @@ class Unique : public ApplicationBase{
 	struct PushConstant {
 		int n;
 	} unique_push_constant;
-	struct{
-		VkBuffer sorted_keys_buffer;
-		VkBuffer contributions_buffer;
-		VkBuffer u_keys_buffer;
-		VkBuffer index_buffer;
-		VkBuffer reduction_buffer;
-	} buffer;
-
-	struct{
-		VkBuffer sorted_keys_buffer;
-		VkBuffer contributions_buffer;
-		VkBuffer u_keys_buffer;
-		VkBuffer index_buffer;
-		VkBuffer reduction_buffer;
-	} temp_buffer;
-
-	struct{
-		VkDeviceMemory sorted_keys_memory;
-		VkDeviceMemory contributions_memory;
-		VkDeviceMemory u_keys_memory;
-		VkDeviceMemory index_memory;
-		VkDeviceMemory reduction_memory;
-	} memory;
-
-	struct{
-		VkDeviceMemory sorted_keys_memory;
-		VkDeviceMemory contributions_memory;
-		VkDeviceMemory u_keys_memory;
-		VkDeviceMemory index_memory;
-		VkDeviceMemory reduction_memory;
-	} temp_memory;
-
 };
 
 
@@ -75,33 +50,6 @@ void Unique::execute(){
 }
 
 void Unique::cleanup(VkPipeline *find_dup_pipeline, VkPipeline *prefix_sum_pipeline, VkPipeline *move_dup_pipeline){
-        vkDestroyBuffer(singleton.device, buffer.u_keys_buffer, nullptr);
-        vkFreeMemory(singleton.device, memory.u_keys_memory, nullptr);
-        vkDestroyBuffer(singleton.device, temp_buffer.u_keys_buffer, nullptr);
-        vkFreeMemory(singleton.device, temp_memory.u_keys_memory, nullptr);
-
-        vkDestroyBuffer(singleton.device, buffer.reduction_buffer, nullptr);
-        vkFreeMemory(singleton.device, memory.reduction_memory, nullptr);
-        vkDestroyBuffer(singleton.device, temp_buffer.reduction_buffer, nullptr);
-        vkFreeMemory(singleton.device, temp_memory.reduction_memory, nullptr);
-
-        vkDestroyBuffer(singleton.device, buffer.index_buffer, nullptr);
-        vkFreeMemory(singleton.device, memory.index_memory, nullptr);
-        vkDestroyBuffer(singleton.device, temp_buffer.index_buffer, nullptr);
-        vkFreeMemory(singleton.device, temp_memory.index_memory, nullptr);
-
-		vkDestroyBuffer(singleton.device, buffer.sorted_keys_buffer, nullptr);
-		vkFreeMemory(singleton.device, memory.sorted_keys_memory, nullptr);
-		vkDestroyBuffer(singleton.device, temp_buffer.sorted_keys_buffer, nullptr);
-		vkFreeMemory(singleton.device, temp_memory.sorted_keys_memory, nullptr);
-
-		vkDestroyBuffer(singleton.device, buffer.contributions_buffer, nullptr);
-		vkFreeMemory(singleton.device, memory.contributions_memory, nullptr);
-		vkDestroyBuffer(singleton.device, temp_buffer.contributions_buffer, nullptr);
-		vkFreeMemory(singleton.device, temp_memory.contributions_memory, nullptr);
-
-
-
 
 		vkDestroyDescriptorSetLayout(singleton.device, descriptorSetLayouts[0], nullptr);
 		vkDestroyDescriptorSetLayout(singleton.device, descriptorSetLayouts[1], nullptr);
@@ -115,7 +63,14 @@ void Unique::cleanup(VkPipeline *find_dup_pipeline, VkPipeline *prefix_sum_pipel
 		
 }
 
-void Unique::run(const int logical_block, uint32_t* sorted_keys, uint32_t* u_keys, uint32_t* contributions, const int n){
+void Unique::run(const int logical_block,
+	uint32_t* sorted_keys,
+	uint32_t* u_keys,
+	uint32_t* contributions, 
+	VkBuffer sorted_keys_buffer,
+	VkBuffer u_keys_buffer,
+	VkBuffer contributions_buffer,
+	const int n){
 
     VkPipeline find_dup_pipeline;
 	VkPipeline prefix_sum_pipeline;
@@ -126,11 +81,6 @@ void Unique::run(const int logical_block, uint32_t* sorted_keys, uint32_t* u_key
     const uint32_t num_blocks = (aligned_size + PARTITION_SIZE - 1) / PARTITION_SIZE;
 	std::vector<uint32_t> reduction(num_blocks, 0);
 
-    create_storage_buffer(n*sizeof(uint32_t), sorted_keys, &buffer.sorted_keys_buffer, &memory.sorted_keys_memory, &temp_buffer.sorted_keys_buffer, &temp_memory.sorted_keys_memory);
-    create_storage_buffer(n*sizeof(uint32_t), contributions, &buffer.contributions_buffer, &memory.contributions_memory, &temp_buffer.contributions_buffer, &temp_memory.contributions_memory);
-	create_storage_buffer(n*sizeof(uint32_t), u_keys, &buffer.u_keys_buffer, &memory.u_keys_memory, &temp_buffer.u_keys_buffer, &temp_memory.u_keys_memory);
-    create_storage_buffer(sizeof(uint32_t), index, &buffer.index_buffer, &memory.index_memory, &temp_buffer.index_buffer, &temp_memory.index_memory);
-    create_storage_buffer(num_blocks*sizeof(uint32_t), reduction.data(), &buffer.reduction_buffer, &memory.reduction_memory, &temp_buffer.reduction_buffer, &temp_memory.reduction_memory);
     
 	// create descriptor pool
 	std::vector<VkDescriptorPoolSize> poolSizes = {
@@ -261,21 +211,6 @@ void Unique::run(const int logical_block, uint32_t* sorted_keys, uint32_t* u_key
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, find_dup_pipeline);
 	vkCmdDispatch(commandBuffer, logical_block, 1, 1);
 
-	u_keys_barrier = create_buffer_barrier(&buffer.u_keys_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
-	create_pipeline_barrier(&u_keys_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-
-	VkBufferCopy copyRegion = {};
-	copyRegion.size = n* sizeof(uint32_t);
-	vkCmdCopyBuffer(commandBuffer, buffer.u_keys_buffer, temp_buffer.u_keys_buffer, 1, &copyRegion);
-	u_keys_barrier = create_buffer_barrier(&buffer.u_keys_buffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT);
-	create_pipeline_barrier(&u_keys_barrier, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT);
-
-	VkBufferCopy prefix_sum_copyRegion = {};
-	prefix_sum_copyRegion.size = n* sizeof(uint32_t);
-	vkCmdCopyBuffer(commandBuffer, buffer.contributions_buffer, temp_buffer.contributions_buffer, 1, &prefix_sum_copyRegion);
-	contributions_barrier = create_buffer_barrier(&buffer.contributions_buffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT);
-	create_pipeline_barrier(&contributions_barrier, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT);
-
 	vkEndCommandBuffer(commandBuffer);
 
 
@@ -284,27 +219,6 @@ void Unique::run(const int logical_block, uint32_t* sorted_keys, uint32_t* u_key
 
 	// submit the command buffer, fence and flush
 	execute();
-
-	// Make device writes visible to the host
-	void *mapped;
-	vkMapMemory(singleton.device, temp_memory.u_keys_memory, 0, VK_WHOLE_SIZE, 0, &mapped);
-	VkMappedMemoryRange mappedRange{};
-	mappedRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-	mappedRange.memory = temp_memory.u_keys_memory;
-	mappedRange.offset = 0;
-	mappedRange.size = VK_WHOLE_SIZE;
-	vkInvalidateMappedMemoryRanges(singleton.device, 1, &mappedRange);
-			
-	const VkDeviceSize bufferSize = n * sizeof(uint32_t);
-	memcpy(u_keys, mapped, bufferSize);
-	vkUnmapMemory(singleton.device, temp_memory.u_keys_memory);
-
-	vkMapMemory(singleton.device, temp_memory.contributions_memory, 0, VK_WHOLE_SIZE, 0, &mapped);
-	mappedRange.memory = temp_memory.contributions_memory;
-	vkInvalidateMappedMemoryRanges(singleton.device, 1, &mappedRange);
-	memcpy(contributions, mapped, bufferSize);
-	vkUnmapMemory(singleton.device, temp_memory.contributions_memory);
-
 
 	vkQueueWaitIdle(singleton.queue);
 

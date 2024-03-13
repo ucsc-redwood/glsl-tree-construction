@@ -1,5 +1,5 @@
 #include "app_params.hpp"
-#include "init.hpp"
+//#include "init.hpp"
 #include "naive_pipe.hpp"
 /*
 #include "morton.hpp"
@@ -54,7 +54,11 @@ int main(const int argc, const char* argv[]){
     Pipe pipe = Pipe(app_params);
     pipe.allocate();
     
-    pipe.init();
+    pipe.init(n_blocks);
+    
+    pipe.morton(n_blocks);
+
+    pipe.radix_sort(n_blocks);
     /*
     // step 0 initilization
     Init init_stage = Init();
