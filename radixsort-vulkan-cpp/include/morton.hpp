@@ -24,27 +24,6 @@ class Morton : public ApplicationBase{
 		float min_coord;
 		float range;
 	} morton_push_constant;
-    
-	struct{
-		VkBuffer data_buffer;
-		VkBuffer morton_keys_buffer;
-	} buffer;
-
-	struct{
-		VkBuffer data_buffer;
-		VkBuffer morton_keys_buffer;
-	} temp_buffer;
-
-	struct{
-		VkDeviceMemory data_memory;
-		VkDeviceMemory morton_keys_memory;
-	} memory;
-
-	struct{
-		VkDeviceMemory data_memory;
-		VkDeviceMemory morton_keys_memory;
-	} temp_memory;
-
 };
 
 
@@ -65,17 +44,6 @@ void Morton::submit(){
 
 void Morton::cleanup(VkPipeline *pipeline){
 		
-		vkDestroyBuffer(singleton.device, buffer.data_buffer, nullptr);
-		vkFreeMemory(singleton.device, memory.data_memory, nullptr);
-		vkDestroyBuffer(singleton.device, buffer.morton_keys_buffer, nullptr);
-		vkFreeMemory(singleton.device, memory.morton_keys_memory, nullptr);
-		vkDestroyBuffer(singleton.device, temp_buffer.data_buffer, nullptr);
-		vkFreeMemory(singleton.device, temp_memory.data_memory, nullptr);
-		vkDestroyBuffer(singleton.device, temp_buffer.morton_keys_buffer, nullptr);
-		vkFreeMemory(singleton.device, temp_memory.morton_keys_memory, nullptr);
-
-
-
 		vkDestroyDescriptorSetLayout(singleton.device, descriptorSetLayouts[0], nullptr);
 		vkDestroyPipeline(singleton.device, *pipeline, nullptr);
 		vkDestroyShaderModule(singleton.device, shaderModule, nullptr);
@@ -88,8 +56,6 @@ void Morton::run(const int logical_blocks, glm::vec4* data, uint32_t* morton_key
 	VkPipeline pipeline;
 
 
-	create_storage_buffer(n*sizeof(uint32_t), morton_keys, &buffer.morton_keys_buffer, &memory.morton_keys_memory, &temp_buffer.morton_keys_buffer, &temp_memory.morton_keys_memory);
-	create_storage_buffer(n*sizeof(glm::vec4), data, &buffer.data_buffer, &memory.data_memory, &temp_buffer.data_buffer, &temp_memory.data_memory);
 	// create descriptor pool
 	std::vector<VkDescriptorPoolSize> poolSizes = {
 		VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2},

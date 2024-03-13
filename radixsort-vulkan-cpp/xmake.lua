@@ -1,7 +1,7 @@
 set_project("Tree Construction")
 
 -- Vulkan related
-add_requires( "spirv-cross", "glm")
+add_requires( "vulkan-memory-allocator", "spirv-cross", "glm")
 add_requires("vulkansdk", {system = true})
 
 -- Others
@@ -10,7 +10,7 @@ add_requires("spdlog", "cli11")
 add_rules("mode.debug", "mode.release")
 
 set_languages("c++20")
-set_warnings("all")
+set_warnings("allextra")
 
 if is_mode("debug") then
     set_symbols("debug")

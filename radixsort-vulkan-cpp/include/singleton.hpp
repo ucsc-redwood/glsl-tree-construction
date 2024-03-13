@@ -30,7 +30,7 @@ class Singleton{
 		return *singleton;
 	};
 	VkResult createBuffer(VkBufferUsageFlags usageFlags, VkMemoryPropertyFlags memoryPropertyFlags, VkBuffer *buffer, VkDeviceMemory *memory, VkDeviceSize size, void *data = nullptr);
-	void* createSharedBuffer(VkBufferUsageFlags usageFlags, VkMemoryPropertyFlags memoryPropertyFlags, VkBuffer *buffer, VkDeviceMemory *memory, VkDeviceSize size,  void *data = nullptr);
+	void createSharedBuffer(VkBufferUsageFlags usageFlags, VkMemoryPropertyFlags memoryPropertyFlags, VkBuffer *buffer, VkDeviceMemory *memory, VkDeviceSize size,  void *data = nullptr);
 	protected:
 		inline static Singleton* singleton;
 		std::unordered_map<const char *, bool> device_extensions;
@@ -230,7 +230,7 @@ VkResult Singleton::createBuffer(VkBufferUsageFlags usageFlags, VkMemoryProperty
 };
 
 
-void* Singleton::createSharedBuffer(VkBufferUsageFlags usageFlags, VkMemoryPropertyFlags memoryPropertyFlags, VkBuffer *buffer, VkDeviceMemory *memory, VkDeviceSize size, void *data){
+void Singleton::createSharedBuffer(VkBufferUsageFlags usageFlags, VkMemoryPropertyFlags memoryPropertyFlags, VkBuffer *buffer, VkDeviceMemory *memory, VkDeviceSize size, void *data){
 		// Create the buffer handle
 		VkBufferCreateInfo bufferCreateInfo{};
 		bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;

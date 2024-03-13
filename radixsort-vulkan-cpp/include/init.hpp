@@ -12,7 +12,7 @@ class Init : public ApplicationBase{
     ~Init() {};
 	void 		submit();
 	void 		cleanup(VkPipeline *pipeline);
-	void 		run(const int blocks, glm::vec4* data, const int n, const int min_val, const float range, const float seed);
+	void 		run(const int blocks, glm::vec4* data, VkBuffer data_buffer, const int n, const int min_val, const float range, const float seed);
 
     private:
 	VkShaderModule shaderModule;
@@ -28,22 +28,6 @@ class Init : public ApplicationBase{
         int range;
         int seed;
 	} init_val_push_constant;
-    
-	struct{
-		VkBuffer data_buffer;
-	} buffer;
-	struct{
-		VkBuffer data_buffer;
-	} temp_buffer;
-
-	struct{
-		VkDeviceMemory data_memory;
-	} memory;
-
-	struct{
-		VkDeviceMemory data_memory;
-	} temp_memory;
-
 };
 
 
@@ -63,28 +47,39 @@ void Init::submit(){
 }
 
 void Init::cleanup(VkPipeline *pipeline){
+		/*
 		vkUnmapMemory(singleton.device, memory.data_memory);
-
 		vkDestroyBuffer(singleton.device, buffer.data_buffer, nullptr);
 		vkFreeMemory(singleton.device, memory.data_memory, nullptr);
-		vkDestroyBuffer(singleton.device, temp_buffer.data_buffer, nullptr);
-		vkFreeMemory(singleton.device, temp_memory.data_memory, nullptr);
+		*/
 		vkDestroyDescriptorSetLayout(singleton.device, descriptorSetLayouts[0], nullptr);
 		vkDestroyPipeline(singleton.device, *pipeline, nullptr);
 		vkDestroyShaderModule(singleton.device, shaderModule, nullptr);
 		
 }
 
-void Init::run(const int blocks, glm::vec4* data, const int n, const int min_val, const float range, const float seed){
-	 std::cout <<"init"<<std::endl;
-	
+void Init::run(const int blocks, glm::vec4* data, VkBuffer data_buffer, const int n, const int min_val, const float range, const float seed){
+	std::string shaderName = "init.spv";
 	VkPipeline pipeline;
-	void* mapped;
+	/*
+	void* mapped = nullptr;
 	glm::vec4* temp_data;
-	create_shared_storage_buffer(n*sizeof(glm::vec4), &buffer.data_buffer, &memory.data_memory, data, mapped);
+	create_shared_storage_buffer(n*sizeof(glm::vec4), &buffer.data_buffer, &memory.data_memory, data, &mapped);
+	*/
 	//create_storage_buffer(n*sizeof(glm::vec4), data, &buffer.data_buffer, &memory.data_memory, &temp_buffer.data_buffer, &temp_memory.data_memory);
-	std::cout<<"done"<<std::endl;
-	temp_data = reinterpret_cast<glm::vec4*>(mapped);
+	
+	//std::cout<<"address:"<< mapped << std::endl;
+	/*
+	temp_data = static_cast<glm::vec4*>(mapped);
+	//memcpy(temp_data, data, n*sizeof(glm::vec4));
+	//temp_data[0] = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
+	
+	for (int i = 0; i < 1024; ++i){
+		std::cout << temp_data[i].x << " " << temp_data[i].y << " " << temp_data[i].z << " " << temp_data[i].w << std::endl;
+	}
+	*/
+	
+	
 	// create descriptor pool
 	std::vector<VkDescriptorPoolSize> poolSizes = {
 		VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1},
@@ -112,7 +107,7 @@ void Init::run(const int blocks, glm::vec4* data, const int n, const int min_val
 	allocate_descriptor_sets(1, descriptorSetLayouts, descriptorSets);
 
 	// update descriptor sets, first we need to create write descriptor, then specify the destination set, binding number, descriptor type, and number of descriptors(buffers) to bind
-	VkDescriptorBufferInfo data_bufferDescriptor = { buffer.data_buffer, 0, VK_WHOLE_SIZE };
+	VkDescriptorBufferInfo data_bufferDescriptor = { data_buffer, 0, VK_WHOLE_SIZE };
 	VkWriteDescriptorSet data_descriptor_write  = create_descriptor_write(descriptorSets[0], 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &data_bufferDescriptor);
 	
 	
@@ -122,7 +117,7 @@ void Init::run(const int blocks, glm::vec4* data, const int n, const int min_val
 	vkUpdateDescriptorSets(singleton.device, static_cast<uint32_t>(descriptor_writes.size()), descriptor_writes.data(), 0, NULL);
 	
 	// create pipeline
-	VkPipelineShaderStageCreateInfo shader_stage = load_shader("init.spv", &shaderModule);
+	VkPipelineShaderStageCreateInfo shader_stage = load_shader(shaderName, &shaderModule);
 	create_pipeline(&shader_stage,&pipelineLayout, &pipeline);
 
 
@@ -137,7 +132,7 @@ void Init::run(const int blocks, glm::vec4* data, const int n, const int min_val
 	cmdBufInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 	// preparation
 	vkBeginCommandBuffer(commandBuffer, &cmdBufInfo);
-	VkBufferMemoryBarrier data_barrier = create_buffer_barrier(&buffer.data_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+	VkBufferMemoryBarrier data_barrier = create_buffer_barrier(&data_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
 
 	create_pipeline_barrier(&data_barrier, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
@@ -149,9 +144,10 @@ void Init::run(const int blocks, glm::vec4* data, const int n, const int min_val
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 1, descriptorSets, 0, 0);
 	vkCmdDispatch(commandBuffer, blocks, 1, 1);
-	
-	data_barrier = create_buffer_barrier(&buffer.data_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
+	/*
+	data_barrier = create_buffer_barrier(&data_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
 	create_pipeline_barrier(&data_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+	*/
 	/*
 	VkBufferCopy copyRegion = {};
 	copyRegion.size = n* sizeof(glm::vec4);
@@ -168,7 +164,7 @@ void Init::run(const int blocks, glm::vec4* data, const int n, const int min_val
 
 	// submit the command buffer, fence and flush
 	submit();
-
+	
 	// Make device writes visible to the host
 	/*
 	void *mapped;
@@ -186,11 +182,12 @@ void Init::run(const int blocks, glm::vec4* data, const int n, const int min_val
 	vkUnmapMemory(singleton.device,temp_memory.data_memory);
 	*/
 	vkQueueWaitIdle(singleton.queue);
-	
+	/*
 	
 	for (int i = 0; i < 1024; ++i){
         std::cout << data[i].x << " " << data[i].y << " " << data[i].z << " " << data[i].w << std::endl;
     }
+	*/
 	cleanup(&pipeline);
 	//memcpy(test_data, data, sizeof(glm::vec4));
 }

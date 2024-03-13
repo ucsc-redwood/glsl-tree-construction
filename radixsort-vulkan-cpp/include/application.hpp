@@ -1,5 +1,6 @@
 #pragma once
 #include "singleton.hpp"
+#include "vma_usage.hpp"
 
 class ApplicationBase{
     public:
@@ -183,7 +184,7 @@ void create_storage_buffer(const VkDeviceSize bufferSize, void* data, VkBuffer* 
 			mappedRange.size = VK_WHOLE_SIZE;
 			vkFlushMappedMemoryRanges(singleton.device, 1, &mappedRange);
 			vkUnmapMemory(singleton.device, *host_memory);
-
+			
 			singleton.createBuffer(
 				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
@@ -227,19 +228,19 @@ void create_storage_buffer(const VkDeviceSize bufferSize, void* data, VkBuffer* 
 
 			vkDestroyFence(singleton.device, fence, nullptr);
 			vkFreeCommandBuffers(singleton.device, commandPool, 1, &copyCmd);
-	
-
+			
+			vkMapMemory(singleton.device, *device_memory, 0, bufferSize, 0, &mapped);
+			memcpy(mapped, data, bufferSize);
 }
 
 
 
 
-void* create_shared_storage_buffer(const VkDeviceSize bufferSize, VkBuffer* device_buffer, VkDeviceMemory* device_memory, void* data, void* mapped){
+void create_shared_storage_buffer(const VkDeviceSize bufferSize, VkBuffer* device_buffer, VkDeviceMemory* device_memory, void* data, void** mapped){
 		printf("create_shared_storage_buffer\n");
 		// Copy input data to VRAM using a staging buffer
-	
-			/*
-			singleton.createSharedBuffer(
+			
+			singleton.createBuffer(
 				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
 				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
@@ -247,30 +248,55 @@ void* create_shared_storage_buffer(const VkDeviceSize bufferSize, VkBuffer* devi
 				device_buffer,
 				device_memory,
 				bufferSize,
-				data,
-				mapped);
-		*/
+				data);
+			//void* mapped_temp;
+			if (vkMapMemory(singleton.device, *device_memory, 0, bufferSize, 0, mapped) == VK_ERROR_MEMORY_MAP_FAILED ){
+				std::cout<<"memory map failed"<<std::endl;
+			}
 
+
+			vkMapMemory(singleton.device, *device_memory, 0, bufferSize, 0, mapped);
+			//memcpy(*mapped, data, bufferSize);
+			
+}
+
+
+void create_shared_empty_storage_buffer(const VkDeviceSize bufferSize, VkBuffer* device_buffer, VkDeviceMemory* device_memory, void** mapped){
+		printf("create_shared_storage_buffer\n");
+		// Copy input data to VRAM using a staging buffer
+			
 			singleton.createBuffer(
-				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
 				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
 				VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 				device_buffer,
 				device_memory,
-				bufferSize,
-				data);
-			
-			vkMapMemory(singleton.device, *device_memory, 0, VK_WHOLE_SIZE, 0, &mapped);
-			VkMappedMemoryRange mappedRange {};
-			mappedRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-			mappedRange.memory = *device_memory;
-			mappedRange.offset = 0;
-			mappedRange.size = VK_WHOLE_SIZE;
-			vkFlushMappedMemoryRanges(singleton.device, 1, &mappedRange);
-			std::cout<<"flushed"<<std::endl;
-	
+				bufferSize);
+			//void* mapped_temp;
+			if (vkMapMemory(singleton.device, *device_memory, 0, bufferSize, 0, mapped) == VK_ERROR_MEMORY_MAP_FAILED ){
+				std::cout<<"memory map failed"<<std::endl;
+			}
 
+
+			//vkMapMemory(singleton.device, *device_memory, 0, bufferSize, 0, mapped);
+			
+}
+
+void vma_buffer(const VkDeviceSize bufferSize, VkBuffer* device_buffer, VkDeviceMemory* device_memory, void* data, void* mapped){
+VkBufferCreateInfo bufCreateInfo = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
+bufCreateInfo.size = bufferSize;
+bufCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+ 
+VmaAllocationCreateInfo allocCreateInfo = {};
+allocCreateInfo.usage = VMA_MEMORY_USAGE_AUTO ;
+allocCreateInfo.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT;
+ 
+VmaAllocation alloc;
+VmaAllocationInfo allocInfo;
+
+vmaCreateBuffer(core::g_allocator, &bufCreateInfo, &allocCreateInfo, device_buffer, &alloc, &allocInfo);
+	memcpy(allocInfo.pMappedData, data, bufferSize);
 }
 
 void create_uniform_buffer(const VkDeviceSize bufferSize, void* data, VkBuffer* device_buffer, VkDeviceMemory* device_memory, VkBuffer* host_buffer, VkDeviceMemory* host_memory){
@@ -338,6 +364,7 @@ void create_uniform_buffer(const VkDeviceSize bufferSize, void* data, VkBuffer* 
 
 			vkDestroyFence(singleton.device, fence, nullptr);
 			vkFreeCommandBuffers(singleton.device, commandPool, 1, &copyCmd);
+			
 }
 
 

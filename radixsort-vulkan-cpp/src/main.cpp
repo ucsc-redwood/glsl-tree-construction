@@ -1,5 +1,6 @@
 #include "app_params.hpp"
 #include "init.hpp"
+#include "naive_pipe.hpp"
 /*
 #include "morton.hpp"
 
@@ -28,11 +29,12 @@ int main(const int argc, const char* argv[]){
     app_params.seed = 114514;
     app_params.n_threads = 4;
     app_params.n_blocks = n_blocks;
-    
+    /*
     std::vector<uint32_t> morton_keys(BUFFER_ELEMENTS, 0);
     std::vector<uint32_t> u_keys(BUFFER_ELEMENTS, 0);
     std::vector<uint32_t> contribution(BUFFER_ELEMENTS, 0);
     std::vector<glm::vec4> data(BUFFER_ELEMENTS ,glm::vec4(0,0,0,0));
+    data[0] = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
     std::vector<uint8_t> prefix_n(app_params.n, 0);
     std::vector<uint32_t> edge_count(app_params.n, 0);
     //std::vector<OctNode> oct_nodes(app_params.n, OctNode());
@@ -48,10 +50,16 @@ int main(const int argc, const char* argv[]){
 
     VkBuffer data_buffer;
     VkDeviceMemory data_memory;
+    */
+    Pipe pipe = Pipe(app_params);
+    pipe.allocate();
     
+    pipe.init();
+    /*
     // step 0 initilization
     Init init_stage = Init();
     init_stage.run(app_params.n_blocks, data.data(), app_params.n, app_params.min_coord, app_params.getRange(), app_params.seed);
+    */
     /*
     for (int i = 0; i < 1024; ++i){
         std::cout << data[i].x << " " << data[i].y << " " << data[i].z << " " << data[i].w << std::endl;
@@ -137,7 +145,8 @@ int main(const int argc, const char* argv[]){
     n_brt_nodes
     );
     */
-    
+    /*
     delete[] has_leaf_left;
     delete[] has_leaf_right;
+    */
 }
