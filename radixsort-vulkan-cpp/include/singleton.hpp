@@ -30,7 +30,7 @@ class Singleton{
 		return *singleton;
 	};
 	VkResult createBuffer(VkBufferUsageFlags usageFlags, VkMemoryPropertyFlags memoryPropertyFlags, VkBuffer *buffer, VkDeviceMemory *memory, VkDeviceSize size, void *data = nullptr);
-	void* createSharedBuffer(VkBufferUsageFlags usageFlags, VkMemoryPropertyFlags memoryPropertyFlags, VkBuffer *buffer, VkDeviceMemory *memory, VkDeviceSize size);
+	void* createSharedBuffer(VkBufferUsageFlags usageFlags, VkMemoryPropertyFlags memoryPropertyFlags, VkBuffer *buffer, VkDeviceMemory *memory, VkDeviceSize size,  void *data = nullptr);
 	protected:
 		inline static Singleton* singleton;
 		std::unordered_map<const char *, bool> device_extensions;
@@ -212,8 +212,11 @@ VkResult Singleton::createBuffer(VkBufferUsageFlags usageFlags, VkMemoryProperty
 			memReqs.memoryTypeBits >>= 1;
 		}
 		assert(memTypeFound);
-		vkAllocateMemory(device, &memAlloc, nullptr, memory);
-
+		if (vkAllocateMemory(device, &memAlloc, nullptr, memory) != VK_SUCCESS){
+			std::cout <<"cannot allocate memory"<<std::endl;
+		}else{
+			std::cout <<"memory allocated"<<std::endl;
+		}
 		if (data != nullptr) {
 			void *mapped;
 			vkMapMemory(device, *memory, 0, size, 0, &mapped);
@@ -227,7 +230,7 @@ VkResult Singleton::createBuffer(VkBufferUsageFlags usageFlags, VkMemoryProperty
 };
 
 
-void* Singleton::createSharedBuffer(VkBufferUsageFlags usageFlags, VkMemoryPropertyFlags memoryPropertyFlags, VkBuffer *buffer, VkDeviceMemory *memory, VkDeviceSize size){
+void* Singleton::createSharedBuffer(VkBufferUsageFlags usageFlags, VkMemoryPropertyFlags memoryPropertyFlags, VkBuffer *buffer, VkDeviceMemory *memory, VkDeviceSize size, void *data){
 		// Create the buffer handle
 		VkBufferCreateInfo bufferCreateInfo{};
 		bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -268,13 +271,13 @@ void* Singleton::createSharedBuffer(VkBufferUsageFlags usageFlags, VkMemoryPrope
 		}else{
 			std::cout <<"memory allocated"<<std::endl;
 		}
-
-		void *mapped;
-		vkMapMemory(device, *memory, 0, size, 0, &mapped);
-
+		if (data != nullptr) {
+			void *mapped;
+			vkMapMemory(device, *memory, 0, size, 0, &mapped);
+			memcpy(mapped, data, size);
+			vkUnmapMemory(device, *memory);
+		}
 		vkBindBufferMemory(device, *buffer, *memory, 0);
-
-		return mapped;
 };
 
 /*

@@ -234,11 +234,11 @@ void create_storage_buffer(const VkDeviceSize bufferSize, void* data, VkBuffer* 
 
 
 
-void* create_shared_storage_buffer(const VkDeviceSize bufferSize, VkBuffer* device_buffer, VkDeviceMemory* device_memory){
+void* create_shared_storage_buffer(const VkDeviceSize bufferSize, VkBuffer* device_buffer, VkDeviceMemory* device_memory, void* data, void* mapped){
 		printf("create_shared_storage_buffer\n");
 		// Copy input data to VRAM using a staging buffer
 	
-
+			/*
 			singleton.createSharedBuffer(
 				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
@@ -246,8 +246,29 @@ void* create_shared_storage_buffer(const VkDeviceSize bufferSize, VkBuffer* devi
 				VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 				device_buffer,
 				device_memory,
-				bufferSize);
+				bufferSize,
+				data,
+				mapped);
+		*/
 
+			singleton.createBuffer(
+				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+				VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+				device_buffer,
+				device_memory,
+				bufferSize,
+				data);
+			
+			vkMapMemory(singleton.device, *device_memory, 0, VK_WHOLE_SIZE, 0, &mapped);
+			VkMappedMemoryRange mappedRange {};
+			mappedRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+			mappedRange.memory = *device_memory;
+			mappedRange.offset = 0;
+			mappedRange.size = VK_WHOLE_SIZE;
+			vkFlushMappedMemoryRanges(singleton.device, 1, &mappedRange);
+			std::cout<<"flushed"<<std::endl;
 	
 
 }
