@@ -1,7 +1,7 @@
 set_project("Tree Construction")
 
 -- Vulkan related
-add_requires( "vulkan-memory-allocator", "spirv-cross", "glm")
+add_requires("spirv-cross", "glm")
 add_requires("vulkansdk", {system = true})
 
 -- Others
@@ -50,5 +50,5 @@ set_kind("binary")
 add_includedirs("include")
 add_headerfiles("include/*.hpp", "include/**/*.hpp")
 add_files("src/main.cpp", "src/**/*.cpp")
-add_packages("vulkan-memory-allocator", "spirv-cross", "glm",
+add_packages( "spirv-cross", "glm",
              "vulkansdk", "spdlog", "cli11")

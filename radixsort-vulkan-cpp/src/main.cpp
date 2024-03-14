@@ -8,13 +8,15 @@
 #include "radixsort.hpp"
 #include "radix_tree.hpp"
 #include "edge_count.hpp"
+*/
 #include "prefix_sum.hpp"
+/*
 #include "octree.hpp"
 */
 #include <vulkan/vulkan.hpp>
 #include <chrono>
 
-#define BUFFER_ELEMENTS 131072
+#define BUFFER_ELEMENTS  131072
 
 int main(const int argc, const char* argv[]){
     int n_blocks = 1;
@@ -29,14 +31,14 @@ int main(const int argc, const char* argv[]){
     app_params.seed = 114514;
     app_params.n_threads = 4;
     app_params.n_blocks = n_blocks;
-    /*
+    
     std::vector<uint32_t> morton_keys(BUFFER_ELEMENTS, 0);
     std::vector<uint32_t> u_keys(BUFFER_ELEMENTS, 0);
     std::vector<uint32_t> contribution(BUFFER_ELEMENTS, 0);
     std::vector<glm::vec4> data(BUFFER_ELEMENTS ,glm::vec4(0,0,0,0));
-    data[0] = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
     std::vector<uint8_t> prefix_n(app_params.n, 0);
     std::vector<uint32_t> edge_count(app_params.n, 0);
+    /*
     //std::vector<OctNode> oct_nodes(app_params.n, OctNode());
     int unique;
     int n_brt_nodes;
@@ -51,6 +53,7 @@ int main(const int argc, const char* argv[]){
     VkBuffer data_buffer;
     VkDeviceMemory data_memory;
     */
+    
     Pipe pipe = Pipe(app_params);
     pipe.allocate();
     
@@ -59,6 +62,10 @@ int main(const int argc, const char* argv[]){
     pipe.morton(n_blocks);
 
     pipe.radix_sort(n_blocks);
+    
+    pipe.unique(n_blocks);
+    
+ 
     /*
     // step 0 initilization
     Init init_stage = Init();
@@ -77,13 +84,13 @@ int main(const int argc, const char* argv[]){
 
     
     
-    
+    /*
     for(int i = 1; i <= BUFFER_ELEMENTS; ++i){
         morton_keys[i-1] = i;
     }
+    */   
     
-    
-    
+    /*
     // step 2 radix sort
     auto radixsort_stage = RadixSort();
     radixsort_stage.run(app_params.n_blocks, morton_keys.data(), app_params.n);
@@ -122,15 +129,22 @@ int main(const int argc, const char* argv[]){
     for (int i = 0; i < 1024; i++){
         printf("edge_count[%d]: %d\n", i, edge_count[i]);
     }
+    */
+   /*
+    
+    for (int i = 0; i < app_params.n; ++i){
+        edge_count[i] = 2;
+    }
     
     // step 6 prefix sum
     auto prefix_sum_stage = PrefixSum();
     
-    prefix_sum_stage.run(app_params.n_blocks, edge_count.data(), unique);
+    prefix_sum_stage.run(app_params.n_blocks, edge_count.data(), app_params.n);
 
     for (int i = 0; i < 1024; i++){
         printf("scanededge_count[%d]: %d\n", i, edge_count[i]);
     }
+    */
     /*
     // step 7 build octree
     auto build_octree_stage = Octree();

@@ -15,9 +15,13 @@ class Unique : public ApplicationBase{
 	uint32_t* sorted_keys,
 	uint32_t* u_keys,
 	uint32_t* contributions, 
+	volatile uint32_t* reduction,
+	volatile uint32_t* index,
 	VkBuffer sorted_keys_buffer,
 	VkBuffer u_keys_buffer,
 	VkBuffer contributions_buffer,
+	VkBuffer reduction_buffer,
+	VkBuffer index_buffer,
 	const int n);
 
     private:
@@ -67,9 +71,13 @@ void Unique::run(const int logical_block,
 	uint32_t* sorted_keys,
 	uint32_t* u_keys,
 	uint32_t* contributions, 
+	volatile uint32_t* reduction,
+	volatile uint32_t* index,
 	VkBuffer sorted_keys_buffer,
 	VkBuffer u_keys_buffer,
 	VkBuffer contributions_buffer,
+	VkBuffer reduction_buffer,
+	VkBuffer index_buffer,
 	const int n){
 
     VkPipeline find_dup_pipeline;
@@ -77,9 +85,10 @@ void Unique::run(const int logical_block,
 	VkPipeline move_dup_pipeline;
 
 	uint32_t aligned_size = ((n + 4 - 1)/ 4) * 4;
-    uint32_t index[1] = {0};
+	uint32_t vectorized_size = aligned_size/4;
+    //uint32_t index[1] = {0};
     const uint32_t num_blocks = (aligned_size + PARTITION_SIZE - 1) / PARTITION_SIZE;
-	std::vector<uint32_t> reduction(num_blocks, 0);
+	//std::vector<uint32_t> reduction(num_blocks, 0);
 
     
 	// create descriptor pool
@@ -124,25 +133,25 @@ void Unique::run(const int logical_block,
 
 	// update descriptor sets, first we need to create write descriptor, then specify the destination set, binding number, descriptor type, and number of descriptors(buffers) to bind
 	// find_dup
-	VkDescriptorBufferInfo contributions_bufferDescriptor = { buffer.contributions_buffer, 0, VK_WHOLE_SIZE };
+	VkDescriptorBufferInfo contributions_bufferDescriptor = { contributions_buffer, 0, VK_WHOLE_SIZE };
 	VkWriteDescriptorSet contributions_descriptor_write = create_descriptor_write(descriptorSets[1], 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &contributions_bufferDescriptor);
-	VkDescriptorBufferInfo sorted_keys_bufferDescriptor = { buffer.sorted_keys_buffer, 0, VK_WHOLE_SIZE };
+	VkDescriptorBufferInfo sorted_keys_bufferDescriptor = { sorted_keys_buffer, 0, VK_WHOLE_SIZE };
 	VkWriteDescriptorSet sorted_keys_descriptor_write = create_descriptor_write(descriptorSets[1], 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &sorted_keys_bufferDescriptor);
 
 	// prefix sum
-    VkDescriptorBufferInfo contributions_bufferDescriptor_2 = { buffer.contributions_buffer, 0, VK_WHOLE_SIZE };
+    VkDescriptorBufferInfo contributions_bufferDescriptor_2 = { contributions_buffer, 0, VK_WHOLE_SIZE };
     VkWriteDescriptorSet contributions_descriptor_write_2  = create_descriptor_write(descriptorSets[0], 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &contributions_bufferDescriptor_2);
-    VkDescriptorBufferInfo reduction_bufferDescriptor = { buffer.reduction_buffer, 0, VK_WHOLE_SIZE };
+    VkDescriptorBufferInfo reduction_bufferDescriptor = { reduction_buffer, 0, VK_WHOLE_SIZE };
     VkWriteDescriptorSet reduction_descriptor_write = create_descriptor_write(descriptorSets[0],1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &reduction_bufferDescriptor);
-    VkDescriptorBufferInfo index_bufferDescriptor = { buffer.index_buffer, 0, VK_WHOLE_SIZE };
+    VkDescriptorBufferInfo index_bufferDescriptor = { index_buffer, 0, VK_WHOLE_SIZE };
     VkWriteDescriptorSet index_descriptor_write = create_descriptor_write(descriptorSets[0],2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &index_bufferDescriptor);
 
 	// move dup
-	VkDescriptorBufferInfo contributions_bufferDescriptor_3 = { buffer.contributions_buffer, 0, VK_WHOLE_SIZE };
+	VkDescriptorBufferInfo contributions_bufferDescriptor_3 = { contributions_buffer, 0, VK_WHOLE_SIZE };
 	VkWriteDescriptorSet contributions_descriptor_write_3 = create_descriptor_write(descriptorSets[2], 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &contributions_bufferDescriptor_3);
-	VkDescriptorBufferInfo sorted_keys_bufferDescriptor_2 = { buffer.sorted_keys_buffer, 0, VK_WHOLE_SIZE };
+	VkDescriptorBufferInfo sorted_keys_bufferDescriptor_2 = { sorted_keys_buffer, 0, VK_WHOLE_SIZE };
 	VkWriteDescriptorSet sorted_keys_descriptor_write_2 = create_descriptor_write(descriptorSets[2], 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &sorted_keys_bufferDescriptor_2);
-	VkDescriptorBufferInfo u_keys_bufferDescriptor = { buffer.u_keys_buffer, 0, VK_WHOLE_SIZE };
+	VkDescriptorBufferInfo u_keys_bufferDescriptor = { u_keys_buffer, 0, VK_WHOLE_SIZE };
 	VkWriteDescriptorSet u_keys_descriptor_write = create_descriptor_write(descriptorSets[2], 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &u_keys_bufferDescriptor);
 
 
@@ -172,11 +181,11 @@ void Unique::run(const int logical_block,
 	cmdBufInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 	// preparation
 	vkBeginCommandBuffer(commandBuffer, &cmdBufInfo);
-    VkBufferMemoryBarrier sorted_keys_barrier = create_buffer_barrier(&buffer.sorted_keys_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-	VkBufferMemoryBarrier contributions_barrier = create_buffer_barrier(&buffer.contributions_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-	VkBufferMemoryBarrier u_keys_barrier = create_buffer_barrier(&buffer.u_keys_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-	VkBufferMemoryBarrier reduction_barrier = create_buffer_barrier(&buffer.reduction_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-	VkBufferMemoryBarrier index_barrier = create_buffer_barrier(&buffer.index_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+    VkBufferMemoryBarrier sorted_keys_barrier = create_buffer_barrier(&sorted_keys_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+	VkBufferMemoryBarrier contributions_barrier = create_buffer_barrier(&contributions_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+	VkBufferMemoryBarrier u_keys_barrier = create_buffer_barrier(&u_keys_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+	VkBufferMemoryBarrier reduction_barrier = create_buffer_barrier(&reduction_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+	VkBufferMemoryBarrier index_barrier = create_buffer_barrier(&index_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
 
 
 
@@ -186,29 +195,32 @@ void Unique::run(const int logical_block,
 	create_pipeline_barrier(&reduction_barrier, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 	create_pipeline_barrier(&index_barrier, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
-	// for move_dup
+	// for find_dup
 	vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstant), &unique_push_constant);
-	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, move_dup_pipeline);
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, find_dup_pipeline);
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 3, descriptorSets, 0, 0);
 	vkCmdDispatch(commandBuffer, logical_block, 1, 1);
 
-    contributions_barrier = create_buffer_barrier(&buffer.u_keys_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+    contributions_barrier = create_buffer_barrier(&u_keys_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
     create_pipeline_barrier(&contributions_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 	
 	// for prefix_sum
-	unique_push_constant.n = aligned_size;
+	unique_push_constant.n = vectorized_size;
 	vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstant), &unique_push_constant);
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, prefix_sum_pipeline);
 	vkCmdDispatch(commandBuffer, num_blocks, 1, 1);
 
-	contributions_barrier = create_buffer_barrier(&buffer.contributions_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+	contributions_barrier = create_buffer_barrier(&contributions_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
 	create_pipeline_barrier(&contributions_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-	
+	reduction_barrier = create_buffer_barrier(&reduction_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+	create_pipeline_barrier(&reduction_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+	index_barrier = create_buffer_barrier(&index_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+	create_pipeline_barrier(&index_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
-	// for find_dup
+	// for move_dup
 	unique_push_constant.n = n;
 	vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstant), &unique_push_constant);
-	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, find_dup_pipeline);
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, move_dup_pipeline);
 	vkCmdDispatch(commandBuffer, logical_block, 1, 1);
 
 	vkEndCommandBuffer(commandBuffer);

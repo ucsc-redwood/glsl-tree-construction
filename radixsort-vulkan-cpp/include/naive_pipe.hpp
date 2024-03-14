@@ -4,6 +4,10 @@
 #include "init.hpp"
 #include "morton.hpp"
 #include "radixsort.hpp"
+#include "unique.hpp"
+#include "edge_count.hpp"
+#include "prefix_sum.hpp"
+#include "octree.hpp"
 #include <glm/vec4.hpp>
 #include "app_params.hpp"
 class Pipe : public ApplicationBase {
@@ -13,9 +17,13 @@ class Pipe : public ApplicationBase {
   }
   void allocate();
   ~Pipe();
-  void init(const int num_blocks);
+  void init(const int num_blocks );
   void morton(const int num_blocks);
-  void radix_sort(const int num_blocks);
+  void radix_sort(const int num_blocks); 
+  void unique(const int num_blocks);
+  void edge_count(const int num_blocks);
+  void prefix_sum(const int num_blocks);
+  void octree(const int num_blocks);
 
   protected:
   static constexpr auto educated_guess_nodes = 0.6f;
@@ -110,16 +118,30 @@ class Pipe : public ApplicationBase {
   } sort_tmp;
 
   struct {
-    int* contributions;  // n
+    uint32_t* contributions;  // n
+    volatile uint32_t* index;
+    volatile uint32_t* reductions;
+
     VkBuffer contributions_buffer;
+    VkBuffer index_buffer;
+    VkBuffer reductions_buffer;
+
     VkDeviceMemory contributions_memory;
+    VkDeviceMemory index_memory;
+    VkDeviceMemory reductions_memory;
   } unique_tmp;
-  /*
+  
   struct {
-    // use Agent's tile size to allocate
-    std::vector<int> u_auxiliary;  // n_tiles
+    uint32_t* index;
+    uint32_t* reductions;
+
+    VkBuffer index_buffer;
+    VkBuffer reductions_buffer;
+
+    VkDeviceMemory index_memory;
+    VkDeviceMemory reductions_memory;
   } prefix_sum_tmp;
-  */
+  
 };
 
 
@@ -219,10 +241,21 @@ void Pipe::allocate() {
     std::fill_n(sort_tmp.u_pass_histogram, radix * binning_thread_blocks, glm::uvec4(0, 0, 0, 0));
 
 
+   uint32_t aligned_size = ((params_.n + 4 - 1)/ 4) * 4;
+   const uint32_t num_blocks = (aligned_size + PARTITION_SIZE - 1) / PARTITION_SIZE;
     // unique_tmp
-    create_shared_empty_storage_buffer(params_.n * sizeof(int), &unique_tmp.contributions_buffer, &unique_tmp.contributions_memory, &mapped);
-    unique_tmp.contributions = static_cast<int*>(mapped);
+    create_shared_empty_storage_buffer(params_.n * sizeof(uint32_t), &unique_tmp.contributions_buffer, &unique_tmp.contributions_memory, &mapped);
+    unique_tmp.contributions = static_cast<uint32_t*>(mapped);
     std::fill_n(unique_tmp.contributions, params_.n, 0);
+
+    create_shared_empty_storage_buffer(sizeof(uint32_t), &unique_tmp.index_buffer, &unique_tmp.index_memory, &mapped);
+    unique_tmp.index = static_cast<uint32_t*>(mapped);
+    std::fill_n(unique_tmp.index, 1, 0);
+
+    create_shared_empty_storage_buffer(num_blocks * sizeof(uint32_t), &unique_tmp.reductions_buffer, &unique_tmp.reductions_memory, &mapped);
+    unique_tmp.reductions = static_cast<uint32_t*>(mapped);
+    std::fill_n(unique_tmp.reductions, num_blocks, 0);
+    
 
     /*
     // Temporary storages for PrefixSum
@@ -231,6 +264,14 @@ void Pipe::allocate() {
         cub::DivideAndRoundUp(n, prefix_sum_tile_size);
     prefix_sum_tmp.u_auxiliary.resize(prefix_sum_n_tiles);
     */
+
+    create_shared_empty_storage_buffer(sizeof(uint32_t), &prefix_sum_tmp.index_buffer, &prefix_sum_tmp.index_memory, &mapped);
+    prefix_sum_tmp.index = static_cast<uint32_t*>(mapped);
+    std::fill_n(prefix_sum_tmp.index, 1, 0);
+
+    create_shared_empty_storage_buffer(num_blocks * sizeof(uint32_t), &prefix_sum_tmp.reductions_buffer, &prefix_sum_tmp.reductions_memory, &mapped);
+    prefix_sum_tmp.reductions = static_cast<uint32_t*>(mapped);
+    std::fill_n(prefix_sum_tmp.reductions, num_blocks, 0);
 };
 
 Pipe::~Pipe() {
@@ -323,11 +364,14 @@ Pipe::~Pipe() {
   vkFreeMemory(singleton.device, unique_tmp.contributions_memory, nullptr);
 
   // Temporary storages for PrefixSum
-  //constexpr auto prefix_sum_tile_size = gpu::PrefixSumAgent<int>::tile_size;
-  //const auto prefix_sum_n_tiles =
-  //    cub::DivideAndRoundUp(n, prefix_sum_tile_size);
-  //prefix_sum_tmp.u_auxiliary.resize(prefix_sum_n_tiles);
-  
+
+  vkUnmapMemory(singleton.device, prefix_sum_tmp.index_memory);
+  vkDestroyBuffer(singleton.device, prefix_sum_tmp.index_buffer, nullptr);
+  vkFreeMemory(singleton.device, prefix_sum_tmp.index_memory, nullptr);
+
+  vkUnmapMemory(singleton.device, prefix_sum_tmp.reductions_memory);
+  vkDestroyBuffer(singleton.device, prefix_sum_tmp.reductions_buffer, nullptr);
+  vkFreeMemory(singleton.device, prefix_sum_tmp.reductions_memory, nullptr);
   
 }
 
@@ -364,4 +408,47 @@ void Pipe::radix_sort(const int num_blocks){
   for (int i = 0; i < 1024; i++){
     printf("sorted_key[%d]: %d\n", i, u_morton_keys[i]);
   }
+}
+
+void Pipe::unique(const int num_blocks){
+  auto unique_stage = Unique();
+  unique_stage.run(num_blocks,
+  u_morton_keys,
+  u_unique_morton_keys,
+  unique_tmp.contributions,
+  unique_tmp.reductions,
+  unique_tmp.index,
+  u_morton_keys_buffer,
+  u_unique_morton_keys_buffer,
+  unique_tmp.contributions_buffer,
+  unique_tmp.reductions_buffer,
+  unique_tmp.index_buffer,
+  params_.n);
+
+  for (int i = 0; i < 1024; ++i){
+    printf("contributions[%d]: %d\n", i, unique_tmp.contributions[i]);
+  }
+
+  for(int i = 0; i < 1024; i++){
+    printf("unique_morton_keys[%d]: %d\n", i, u_unique_morton_keys[i]);
+  }
+
+}
+
+
+
+void Pipe::edge_count(const int num_blocks){
+  auto edge_count_stage = EdgeCount();
+  edge_count_stage.run(num_blocks,brt.u_prefix_n , brt.u_parent, u_edge_count, brt.u_prefix_n_buffer, brt.u_parent_buffer, u_edge_count_buffer, params_.n);
+}
+
+void Pipe::prefix_sum(const int num_blocks){
+  /*
+  auto prefix_sum_stage = PrefixSum();
+  prefix_sum_stage.run(num_blocks, prefix_sum_tmp.contributions, prefix_sum_tmp.index, prefix_sum_tmp.reductions, prefix_sum_tmp.contributions_buffer, prefix_sum_tmp.index_buffer, prefix_sum_tmp.reductions_buffer, params_.n);
+  */
+}
+
+void Pipe::octree(const int num_blocks){
+
 }

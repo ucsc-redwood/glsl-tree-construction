@@ -5,6 +5,7 @@
 #extension GL_KHR_shader_subgroup_vote:enable
 #extension GL_KHR_shader_subgroup_shuffle_relative:enable
 #extension GL_KHR_shader_subgroup_shuffle:enable
+//#extension GL_EXT_debug_printf:enable
 
 #define PARTITION_SIZE 3072
 #define PART_VEC_SIZE	768
@@ -27,12 +28,12 @@ layout(set=0,binding=0) buffer Data{
     uint scan[];
 };
 
-layout(set=0,binding=1) buffer Reduction{
-    uint workgroup_reduction[];
+layout(set=0,binding=1)  buffer Reduction{
+    volatile uint workgroup_reduction[];
 };
 
 layout(set = 0, binding=2) buffer Index{
-    uint index[];
+    volatile uint index[];
 };
 
 layout(push_constant)uniform Constants{
@@ -108,13 +109,13 @@ void prefix_sum(){
             t2 = t.x;
             t.x += t.w;
             t.w = t2;
-   
-            scan[i*4 + PART_START*4] = t.x;
-            scan[i*4 + PART_START*4 + 1] = t.y;
-            scan[i*4 + PART_START*4 + 2] = t.z;
-            scan[i*4 + PART_START*4 + 3] = t.w;            
-
-            t2 = InclusiveWarpScanCircularShift(scan[i*4 + PART_START*4]);
+            /*
+            scan[i + PART_START] = t.x;
+            scan[i + PART_START + 1] = t.y;
+            scan[i + PART_START + 2] = t.z;
+            scan[i + PART_START + 3] = t.w;            
+            */
+            t2 = InclusiveWarpScanCircularShift(t.x);
             s_lookback[i] = setXAddYZW((gl_SubgroupInvocationID.x > 0 ? t2 : 0) + (k > 0 ? subgroup_reduction : 0), t);
             subgroup_reduction += subgroupBroadcast(t2, 0);
         }
@@ -141,19 +142,15 @@ void prefix_sum(){
             t2 = t.x;
             t.x += t.w;
             t.w = t2;
-            if (i < final_part_size){
-                scan[i*4 + PART_START*4] = t.x;
-                scan[i*4 + PART_START*4 + 1] = t.y;
-                scan[i*4 + PART_START*4 + 2] = t.z;
-                scan[i*4 + PART_START*4 + 3] = t.w;
-            }
-            if (i  < final_part_size){
-                t2 = InclusiveWarpScanCircularShift(scan[i*4 + PART_START*4]);
+            /*
+            scan[i* + PART_START] = t.x;
+            scan[i + PART_START + 1] = t.y;
+                scan[i + PART_START + 2] = t.z;
+                scan[i + PART_START + 3] = t.w;
+            */            
 
-            }
-            if ( i >= final_part_size){
-                t2 = InclusiveWarpScanCircularShift(t.x);
-            }
+
+            t2 = InclusiveWarpScanCircularShift(t.x);
            
             s_lookback[i] = setXAddYZW((gl_SubgroupInvocationID.x > 0 ? t2 : 0) + (k > 0 ? subgroup_reduction : 0), t);
             subgroup_reduction += subgroupBroadcast(t2, 0);
@@ -172,17 +169,31 @@ void prefix_sum(){
     if (gl_LocalInvocationID.x == WORKGROUP_NUM / LANE_COUNT -1){
         atomicAdd(workgroup_reduction[partitionIndex], (partitionIndex > 0 ? FLAG_REDUCTION : FLAG_INCLUSIVE) | (s_reduction[gl_LocalInvocationID.x] << 2));
     }
-    
+    groupMemoryBarrier();
+    barrier();
     // look back
     uint prev_reduction = 0;
-    /*
+    
     if (partitionIndex > 0 && gl_LocalInvocationID.x < LANE_COUNT){
-        int k = int(partitionIndex + LANE_COUNT - gl_SubgroupInvocationID.x);
+        for(int k = int(partitionIndex); k > 0; ){
+            const uint flagPayload = workgroup_reduction[k - 1];// ((k > LANE_COUNT) ? workgroup_reduction[k - 1] : FLAG_INCLUSIVE);
 
-        while(true){
-            const uint flagPayload = k > LANE_COUNT ? workgroup_reduction[k - LANE_COUNT - 1] : FLAG_INCLUSIVE;
+            if ((flagPayload & FLAG_MASK) == FLAG_INCLUSIVE){
+                prev_reduction += flagPayload >> 2;
+                s_broadcast += prev_reduction;
+                atomicAdd(workgroup_reduction[partitionIndex], FLAG_REDUCTION | (prev_reduction << 2));
+                break;
+            }
 
+            if ((flagPayload & FLAG_MASK) == FLAG_REDUCTION){
+                prev_reduction += flagPayload >> 2;
+                k--;
+
+            }
+            /*
             if (subgroupAll((flagPayload & FLAG_MASK) > FLAG_NOT_READY)){
+
+                
                 uint inclusve_ballot = subgroupBallot((flagPayload & FLAG_MASK) == FLAG_INCLUSIVE).x;
                 if(inclusve_ballot > 0){
                     prev_reduction += subgroupReduceSum(gl_SubgroupInvocationID < (findLSB(inclusve_ballot) + 1) ? flagPayload >> 2 : 0);
@@ -196,13 +207,15 @@ void prefix_sum(){
                     prev_reduction += subgroupReduceSum(flagPayload >> 2);
                     k -= LANE_COUNT;
                 }
+                
             }
+            */
         }
     }
-    */
     
-    groupMemoryBarrier();
-    barrier();
+        groupMemoryBarrier();
+        barrier();
+
     
     if (gl_LocalInvocationID.x >= LANE_COUNT){
         prev_reduction += s_broadcast + s_reduction[gl_SubgroupID.x - 1];

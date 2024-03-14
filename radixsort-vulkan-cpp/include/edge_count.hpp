@@ -31,31 +31,6 @@ class EdgeCount : public ApplicationBase{
 		int n_brt_nodes;
 	} edge_count_push_constant;
     
-	struct{
-		VkBuffer prefix_n_buffer;
-		VkBuffer parent_buffer;
-		VkBuffer edge_count_buffer;
-
-	} buffer;
-
-	struct{
-		VkBuffer prefix_n_buffer;
-		VkBuffer parent_buffer;
-		VkBuffer edge_count_buffer;
-	} temp_buffer;
-
-	struct{
-		VkDeviceMemory prefix_n_memory;
-		VkDeviceMemory parent_memory;
-		VkDeviceMemory edge_count_memory;
-	} memory;
-
-	struct{
-		VkDeviceMemory prefix_n_memory;
-		VkDeviceMemory parent_memory;
-		VkDeviceMemory edge_count_memory;
-
-	} temp_memory;
 
 };
 

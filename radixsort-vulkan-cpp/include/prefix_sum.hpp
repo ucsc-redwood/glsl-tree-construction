@@ -95,6 +95,7 @@ void PrefixSum::run(const int logical_block, uint32_t *u_keys, const int n){
     VkPipeline pipeline;
 
 	uint32_t aligned_size = ((n + 4 - 1)/ 4) * 4;
+	uint32_t vectorized_size = aligned_size / 4;
     uint32_t index[1] = {0};
     const uint32_t num_blocks = (aligned_size + PARTITION_SIZE - 1) / PARTITION_SIZE;
 	std::vector<uint32_t> reduction(num_blocks, 0);
@@ -169,7 +170,7 @@ void PrefixSum::run(const int logical_block, uint32_t *u_keys, const int n){
     create_pipeline_barrier(&reduction_barrier, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
     create_pipeline_barrier(&index_barrier, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
-	prefix_sum_push_constant.aligned_size = aligned_size;
+	prefix_sum_push_constant.aligned_size = vectorized_size;
 	vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstant), &prefix_sum_push_constant);
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 1, descriptorSets, 0, 0);
