@@ -369,11 +369,11 @@ void Pipe::radix_sort(const int num_blocks){
   sort_tmp.u_index_buffer,
   sort_tmp.u_pass_histogram_buffer,
   params_.n);
-  /*
-  for (int i = 0; i < 1024; i++){
+  
+  for (int i = params_.n-200; i < params_.n; i++){
     printf("sorted_key[%d]: %d\n", i, u_morton_keys[i]);
   }
-  */
+  
 }
 
 void Pipe::unique(const int num_blocks){
@@ -391,14 +391,30 @@ void Pipe::unique(const int num_blocks){
   unique_tmp.reductions_buffer,
   unique_tmp.index_buffer,
   params_.n);
-  /*
-  for (int i = 0; i < 1024; ++i)
+
+  for (int i = 0; i < 200; ++i)
     printf("contributions[%d]: %d\n", i, unique_tmp.contributions[i]);
   
 
-  for(int i = 0; i < 1024; i++)
+  for(int i = 3072; i < 3272; ++i)
+    printf("contributions[%d]: %d\n", i, unique_tmp.contributions[i]);
+
+  for (int i = 3072*2; i < 3072*3; ++i)
+    printf("contributions[%d]: %d\n", i, unique_tmp.contributions[i]);
+  
+  for (int i = 3072*3; i < 3072*4; ++i)
+    printf("contributions[%d]: %d\n", i, unique_tmp.contributions[i]);
+  
+  for (int i = 3072*4; i < 3072*5; ++i)
+    printf("contributions[%d]: %d\n", i, unique_tmp.contributions[i]);
+
+  for (int i = params_.n-3072; i < params_.n; ++i)
+    printf("contributions[%d]: %d\n", i, unique_tmp.contributions[i]);
+  
+
+  for(int i = params_.n-200; i < params_.n; i++)
     printf("unique_morton_keys[%d]: %d\n", i, u_unique_morton_keys[i]);
-  */
+  
   n_unique_keys = unique_tmp.contributions[params_.n-1];
   printf("n_unique_keys: %d\n", n_unique_keys);
 

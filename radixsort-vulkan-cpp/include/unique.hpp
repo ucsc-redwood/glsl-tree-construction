@@ -195,9 +195,10 @@ void Unique::run(const int logical_block,
 	create_pipeline_barrier(&index_barrier, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
 	// for find_dup
-	vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstant), &unique_push_constant);
+	unique_push_constant.n = n;
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, find_dup_pipeline);
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 3, descriptorSets, 0, 0);
+	vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstant), &unique_push_constant);
 	vkCmdDispatch(commandBuffer, logical_block, 1, 1);
 
     contributions_barrier = create_buffer_barrier(&u_keys_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
@@ -205,8 +206,8 @@ void Unique::run(const int logical_block,
 	
 	// for prefix_sum
 	unique_push_constant.n = vectorized_size;
-	vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstant), &unique_push_constant);
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, prefix_sum_pipeline);
+	vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstant), &unique_push_constant);
 	vkCmdDispatch(commandBuffer, num_blocks, 1, 1);
 
 	contributions_barrier = create_buffer_barrier(&contributions_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
@@ -215,13 +216,13 @@ void Unique::run(const int logical_block,
 	create_pipeline_barrier(&reduction_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 	index_barrier = create_buffer_barrier(&index_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
 	create_pipeline_barrier(&index_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-
+	/*
 	// for move_dup
 	unique_push_constant.n = n;
-	vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstant), &unique_push_constant);
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, move_dup_pipeline);
+	vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstant), &unique_push_constant);
 	vkCmdDispatch(commandBuffer, logical_block, 1, 1);
-
+	 */
 	vkEndCommandBuffer(commandBuffer);
 
 
