@@ -440,11 +440,12 @@ void Pipe::prefix_sum(const int num_blocks){
   auto prefix_sum_stage = PrefixSum();
   prefix_sum_stage.run(num_blocks,
   u_edge_offset,
-  prefix_sum_tmp.index,
   prefix_sum_tmp.reductions,
+  prefix_sum_tmp.index,
   u_edge_offset_buffer,
-  prefix_sum_tmp.index_buffer,
   prefix_sum_tmp.reductions_buffer,
+  prefix_sum_tmp.index_buffer,
+
   params_.n);
   /*
   for (int i = 0; i < 1024; i++)

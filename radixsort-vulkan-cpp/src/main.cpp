@@ -23,19 +23,19 @@ int main(const int argc, const char* argv[]){
     Pipe pipe = Pipe(app_params);
     pipe.allocate();
     
-    //pipe.init(n_blocks);
+    pipe.init(n_blocks);
     
-   // pipe.morton(n_blocks);
+    pipe.morton(n_blocks);
 
-   // pipe.radix_sort(n_blocks);
+    pipe.radix_sort(n_blocks);
     
-    //pipe.unique(n_blocks);
+    pipe.unique(n_blocks);
 
-   // pipe.radix_tree(n_blocks);
+    //pipe.radix_tree(n_blocks);
     
     //pipe.edge_count(n_blocks);
     
-    pipe.prefix_sum(n_blocks);
+    //pipe.prefix_sum(n_blocks);
     
     //pipe.octree(n_blocks);
     
