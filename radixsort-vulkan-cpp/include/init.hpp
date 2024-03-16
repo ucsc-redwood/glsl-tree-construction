@@ -33,7 +33,6 @@ class Init : public ApplicationBase{
 
 void Init::submit(){
 			// todo: change the harded coded for map
-			printf("execute\n");
 			vkResetFences(singleton.device, 1, &fence);
 			const VkPipelineStageFlags waitStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
 			VkSubmitInfo computeSubmitInfo {};

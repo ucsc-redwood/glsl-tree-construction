@@ -190,28 +190,10 @@ void prefix_sum(){
                 k--;
 
             }
-            /*
-            if (subgroupAll((flagPayload & FLAG_MASK) > FLAG_NOT_READY)){
 
-                
-                uint inclusve_ballot = subgroupBallot((flagPayload & FLAG_MASK) == FLAG_INCLUSIVE).x;
-                if(inclusve_ballot > 0){
-                    prev_reduction += subgroupReduceSum(gl_SubgroupInvocationID < (findLSB(inclusve_ballot) + 1) ? flagPayload >> 2 : 0);
-
-                    if (gl_SubgroupInvocationID.x == 0){
-                        s_broadcast = prev_reduction;
-                        atomicAdd(workgroup_reduction[partitionIndex], 1 | (prev_reduction << 2));
-                    }
-                    break;
-                }else{
-                    prev_reduction += subgroupReduceSum(flagPayload >> 2);
-                    k -= LANE_COUNT;
-                }
-                
-            }
-            */
         }
     }
+    
     
         groupMemoryBarrier();
         barrier();

@@ -118,7 +118,6 @@ class Singleton{
 	}
 
    void create_compute_queue(){
-		printf("create_compute_queue\n");
 			// Request a single compute queue
 		const float defaultQueuePriority(0.0f);
 		VkDeviceQueueCreateInfo queueCreateInfo = {};
@@ -214,8 +213,6 @@ VkResult Singleton::createBuffer(VkBufferUsageFlags usageFlags, VkMemoryProperty
 		assert(memTypeFound);
 		if (vkAllocateMemory(device, &memAlloc, nullptr, memory) != VK_SUCCESS){
 			std::cout <<"cannot allocate memory"<<std::endl;
-		}else{
-			std::cout <<"memory allocated"<<std::endl;
 		}
 		if (data != nullptr) {
 			void *mapped;

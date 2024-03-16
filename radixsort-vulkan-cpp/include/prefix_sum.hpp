@@ -11,7 +11,14 @@ class PrefixSum : public ApplicationBase{
     ~PrefixSum() {};
     void        execute();
 	void 		 cleanup(VkPipeline *prefix_sum_pipeline);
-	void run(const int logical_block, uint32_t *u_keys, const int n);
+	void run(const int logical_block,
+	uint32_t *u_keys,
+	volatile uint32_t *reduction,
+	volatile uint32_t *index,
+	VkBuffer u_keys_buffer,
+	VkBuffer reduction_buffer,
+	VkBuffer index_buffer,
+	const int n);
 
     private:
 	VkShaderModule shaderModule;
@@ -23,37 +30,12 @@ class PrefixSum : public ApplicationBase{
 	struct PushConstant {
 		uint32_t aligned_size;
 	} prefix_sum_push_constant;
-	struct{
-		VkBuffer u_keys_buffer;
-        VkBuffer reduction_buffer;
-        VkBuffer index_buffer;
-	} buffer;
-
-	struct{
-		VkBuffer u_keys_buffer;
-        VkBuffer reduction_buffer;
-        VkBuffer index_buffer;
-		
-	} temp_buffer;
-
-	struct{
-        VkDeviceMemory u_keys_memory;
-        VkDeviceMemory reduction_memory;
-        VkDeviceMemory index_memory;
-	} memory;
-
-	struct{
-        VkDeviceMemory u_keys_memory;
-        VkDeviceMemory reduction_memory;
-        VkDeviceMemory index_memory;
-	} temp_memory;
 
 };
 
 
 void PrefixSum::execute(){
 			// todo: change the harded coded for map
-			printf("execute\n");
 			vkResetFences(singleton.device, 1, &fence);
 			const VkPipelineStageFlags waitStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
 			VkSubmitInfo computeSubmitInfo {};
@@ -67,22 +49,6 @@ void PrefixSum::execute(){
 }
 
 void PrefixSum::cleanup(VkPipeline *pipeline){
-        vkDestroyBuffer(singleton.device, buffer.u_keys_buffer, nullptr);
-        vkFreeMemory(singleton.device, memory.u_keys_memory, nullptr);
-        vkDestroyBuffer(singleton.device, temp_buffer.u_keys_buffer, nullptr);
-        vkFreeMemory(singleton.device, temp_memory.u_keys_memory, nullptr);
-
-        vkDestroyBuffer(singleton.device, buffer.reduction_buffer, nullptr);
-        vkFreeMemory(singleton.device, memory.reduction_memory, nullptr);
-        vkDestroyBuffer(singleton.device, temp_buffer.reduction_buffer, nullptr);
-        vkFreeMemory(singleton.device, temp_memory.reduction_memory, nullptr);
-
-        vkDestroyBuffer(singleton.device, buffer.index_buffer, nullptr);
-        vkFreeMemory(singleton.device, memory.index_memory, nullptr);
-        vkDestroyBuffer(singleton.device, temp_buffer.index_buffer, nullptr);
-        vkFreeMemory(singleton.device, temp_memory.index_memory, nullptr);
-
-
 
 		vkDestroyDescriptorSetLayout(singleton.device, descriptorSetLayouts[0], nullptr);
 		vkDestroyPipeline(singleton.device, *pipeline, nullptr);
@@ -90,21 +56,21 @@ void PrefixSum::cleanup(VkPipeline *pipeline){
 		
 }
 
-void PrefixSum::run(const int logical_block, uint32_t *u_keys, const int n){
+void PrefixSum::run(const int logical_block,
+uint32_t *u_keys,
+volatile uint32_t *reduction,
+volatile uint32_t *index,
+VkBuffer u_keys_buffer,
+VkBuffer reduction_buffer,
+VkBuffer index_buffer,
+const int n){
+
+	const uint32_t aligned_size = ((n + 4 - 1)/ 4) * 4;
+	const uint32_t vectorized_size = aligned_size / 4;
+	const uint32_t num_blocks = (aligned_size + PARTITION_SIZE - 1) / PARTITION_SIZE;
 
     VkPipeline pipeline;
 
-	uint32_t aligned_size = ((n + 4 - 1)/ 4) * 4;
-	uint32_t vectorized_size = aligned_size / 4;
-    uint32_t index[1] = {0};
-    const uint32_t num_blocks = (aligned_size + PARTITION_SIZE - 1) / PARTITION_SIZE;
-	std::vector<uint32_t> reduction(num_blocks, 0);
-    //uint32_t reduction[num_blocks] = {0};
-
-    create_storage_buffer(n*sizeof(uint32_t), u_keys, &buffer.u_keys_buffer, &memory.u_keys_memory, &temp_buffer.u_keys_buffer, &temp_memory.u_keys_memory);
-    create_storage_buffer(sizeof(uint32_t), index, &buffer.index_buffer, &memory.index_memory, &temp_buffer.index_buffer, &temp_memory.index_memory);
-    create_storage_buffer(num_blocks*sizeof(uint32_t), reduction.data(), &buffer.reduction_buffer, &memory.reduction_memory, &temp_buffer.reduction_buffer, &temp_memory.reduction_memory);
-    
 	// create descriptor pool
 	std::vector<VkDescriptorPoolSize> poolSizes = {
 		VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1},
@@ -133,11 +99,11 @@ void PrefixSum::run(const int logical_block, uint32_t *u_keys, const int n){
 	allocate_descriptor_sets(1, descriptorSetLayouts, descriptorSets);
 
 	// update descriptor sets, first we need to create write descriptor, then specify the destination set, binding number, descriptor type, and number of descriptors(buffers) to bind
-    VkDescriptorBufferInfo u_keys_bufferDescriptor = { buffer.u_keys_buffer, 0, VK_WHOLE_SIZE };
+    VkDescriptorBufferInfo u_keys_bufferDescriptor = { u_keys_buffer, 0, VK_WHOLE_SIZE };
     VkWriteDescriptorSet u_keys_descriptor_write  = create_descriptor_write(descriptorSets[0], 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &u_keys_bufferDescriptor);
-    VkDescriptorBufferInfo reduction_bufferDescriptor = { buffer.reduction_buffer, 0, VK_WHOLE_SIZE };
+    VkDescriptorBufferInfo reduction_bufferDescriptor = { reduction_buffer, 0, VK_WHOLE_SIZE };
     VkWriteDescriptorSet reduction_descriptor_write = create_descriptor_write(descriptorSets[0],1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &reduction_bufferDescriptor);
-    VkDescriptorBufferInfo index_bufferDescriptor = { buffer.index_buffer, 0, VK_WHOLE_SIZE };
+    VkDescriptorBufferInfo index_bufferDescriptor = { index_buffer, 0, VK_WHOLE_SIZE };
     VkWriteDescriptorSet index_descriptor_write = create_descriptor_write(descriptorSets[0],2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &index_bufferDescriptor);
 
 
@@ -162,9 +128,9 @@ void PrefixSum::run(const int logical_block, uint32_t *u_keys, const int n){
 	cmdBufInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 	// preparation
 	vkBeginCommandBuffer(commandBuffer, &cmdBufInfo);
-    VkBufferMemoryBarrier u_keys_barrier = create_buffer_barrier(&buffer.u_keys_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-    VkBufferMemoryBarrier reduction_barrier = create_buffer_barrier(&buffer.reduction_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-    VkBufferMemoryBarrier index_barrier = create_buffer_barrier(&buffer.index_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+    VkBufferMemoryBarrier u_keys_barrier = create_buffer_barrier(&u_keys_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+    VkBufferMemoryBarrier reduction_barrier = create_buffer_barrier(&reduction_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+    VkBufferMemoryBarrier index_barrier = create_buffer_barrier(&index_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
 
     create_pipeline_barrier(&u_keys_barrier, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
     create_pipeline_barrier(&reduction_barrier, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
@@ -176,14 +142,9 @@ void PrefixSum::run(const int logical_block, uint32_t *u_keys, const int n){
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 1, descriptorSets, 0, 0);
 	vkCmdDispatch(commandBuffer, num_blocks, 1, 1);
 
-    u_keys_barrier = create_buffer_barrier(&buffer.u_keys_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
+    u_keys_barrier = create_buffer_barrier(&u_keys_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
     create_pipeline_barrier(&u_keys_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
-	VkBufferCopy copyRegion = {};
-	copyRegion.size = n* sizeof(uint32_t);
-	vkCmdCopyBuffer(commandBuffer, buffer.u_keys_buffer, temp_buffer.u_keys_buffer, 1, &copyRegion);
-	u_keys_barrier = create_buffer_barrier(&buffer.u_keys_buffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT);
-	create_pipeline_barrier(&u_keys_barrier, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT);
 
 	vkEndCommandBuffer(commandBuffer);
 
@@ -194,19 +155,6 @@ void PrefixSum::run(const int logical_block, uint32_t *u_keys, const int n){
 	// submit the command buffer, fence and flush
 	execute();
 
-	// Make device writes visible to the host
-	void *mapped;
-	vkMapMemory(singleton.device, temp_memory.u_keys_memory, 0, VK_WHOLE_SIZE, 0, &mapped);
-	VkMappedMemoryRange mappedRange{};
-	mappedRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-	mappedRange.memory = temp_memory.u_keys_memory;
-	mappedRange.offset = 0;
-	mappedRange.size = VK_WHOLE_SIZE;
-	vkInvalidateMappedMemoryRanges(singleton.device, 1, &mappedRange);
-			
-	const VkDeviceSize bufferSize = n * sizeof(uint32_t);
-	memcpy(u_keys, mapped, bufferSize);
-	vkUnmapMemory(singleton.device, temp_memory.u_keys_memory);
 
 
 	vkQueueWaitIdle(singleton.queue);

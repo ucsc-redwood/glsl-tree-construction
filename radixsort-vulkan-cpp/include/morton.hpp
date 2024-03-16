@@ -28,7 +28,6 @@ class Morton : public ApplicationBase{
 
 
 void Morton::submit(){
-			printf("execute\n");
 			vkResetFences(singleton.device, 1, &fence);
 			const VkPipelineStageFlags waitStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
 			VkSubmitInfo computeSubmitInfo {};

@@ -13,7 +13,7 @@ class EdgeCount : public ApplicationBase{
 	void 		run(const int logical_blocks,
 	uint8_t* prefix_n,
 	int* parent,
-	uint32_t* edge_count,
+	int* edge_count,
 	VkBuffer prefix_n_buffer,
 	VkBuffer parent_buffer,
 	VkBuffer edge_count_buffer,
@@ -36,7 +36,6 @@ class EdgeCount : public ApplicationBase{
 
 
 void EdgeCount::submit(){
-			printf("execute\n");
 			vkResetFences(singleton.device, 1, &fence);
 			const VkPipelineStageFlags waitStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
 			VkSubmitInfo computeSubmitInfo {};
@@ -59,7 +58,7 @@ void EdgeCount::cleanup(VkPipeline *pipeline){
 void EdgeCount::run(const int logical_blocks,
 	uint8_t* prefix_n,
 	int* parent,
-	uint32_t* edge_count,
+	int* edge_count,
 	VkBuffer prefix_n_buffer,
 	VkBuffer parent_buffer,
 	VkBuffer edge_count_buffer,

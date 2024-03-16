@@ -31,7 +31,6 @@ class ApplicationBase{
 
 
     void build_command_pool() {
-		printf("build_command_pool\n");
 		VkCommandPoolCreateInfo cmdPoolInfo = {};
 		cmdPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
 		cmdPoolInfo.queueFamilyIndex = singleton.queueFamilyIndex;
@@ -134,7 +133,6 @@ void create_pipeline(VkPipelineShaderStageCreateInfo *shaderStage, VkPipelineLay
 	VkPipelineCacheCreateInfo pipelineCacheCreateInfo = {};
 	pipelineCacheCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
 	vkCreatePipelineCache(singleton.device, &pipelineCacheCreateInfo, nullptr, &pipelineCache);
-	printf("create pipeline\n");
 	// Create pipeline
 	VkComputePipelineCreateInfo computePipelineCreateInfo {};
 	computePipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
@@ -147,7 +145,6 @@ void create_pipeline(VkPipelineShaderStageCreateInfo *shaderStage, VkPipelineLay
 }
 
 void create_descriptor_pool(std::vector<VkDescriptorPoolSize> poolSizes, uint32_t maxSets){
-			printf("build_compute_pipeline\n");
 
 			VkDescriptorPoolCreateInfo descriptorPoolInfo{};
 			descriptorPoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -160,7 +157,6 @@ void create_descriptor_pool(std::vector<VkDescriptorPoolSize> poolSizes, uint32_
 
 
 void create_storage_buffer(const VkDeviceSize bufferSize, void* data, VkBuffer* device_buffer, VkDeviceMemory* device_memory, VkBuffer* host_buffer, VkDeviceMemory* host_memory){
-		printf("create_storage_buffer\n");
 		// Copy input data to VRAM using a staging buffer
 	
 			singleton.createBuffer(
@@ -236,7 +232,6 @@ void create_storage_buffer(const VkDeviceSize bufferSize, void* data, VkBuffer* 
 
 
 void create_shared_storage_buffer(const VkDeviceSize bufferSize, VkBuffer* device_buffer, VkDeviceMemory* device_memory, void* data, void** mapped){
-		printf("create_shared_storage_buffer\n");
 		// Copy input data to VRAM using a staging buffer
 			
 			singleton.createBuffer(
@@ -261,7 +256,6 @@ void create_shared_storage_buffer(const VkDeviceSize bufferSize, VkBuffer* devic
 
 
 void create_shared_empty_storage_buffer(const VkDeviceSize bufferSize, VkBuffer* device_buffer, VkDeviceMemory* device_memory, void** mapped){
-		printf("create_shared_storage_buffer\n");
 		// Copy input data to VRAM using a staging buffer
 			
 			singleton.createBuffer(

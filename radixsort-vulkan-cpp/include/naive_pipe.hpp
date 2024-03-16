@@ -5,8 +5,10 @@
 #include "morton.hpp"
 #include "radixsort.hpp"
 #include "unique.hpp"
+#include "radix_tree.hpp"
 #include "edge_count.hpp"
 #include "prefix_sum.hpp"
+#include "octree.hpp"
 #include "octree.hpp"
 #include <glm/vec4.hpp>
 #include "app_params.hpp"
@@ -21,6 +23,7 @@ class Pipe : public ApplicationBase {
   void morton(const int num_blocks);
   void radix_sort(const int num_blocks); 
   void unique(const int num_blocks);
+  void radix_tree(const int num_blocks);
   void edge_count(const int num_blocks);
   void prefix_sum(const int num_blocks);
   void octree(const int num_blocks);
@@ -38,7 +41,7 @@ class Pipe : public ApplicationBase {
   glm::vec4* u_points;
   uint32_t* u_morton_keys;
   uint32_t* u_unique_morton_keys;
-  uint32_t* u_edge_count;
+  int* u_edge_count;
   uint32_t* u_edge_offset;
 
   VkBuffer u_points_buffer;
@@ -80,23 +83,12 @@ class Pipe : public ApplicationBase {
   // Essential
   // should be of size 'n_oct_nodes', we use an educated guess for now
   struct {
-    int (*u_children)[8];
-    glm::vec4* u_corner;
-    float* u_cell_size;
-    int* u_child_node_mask;
-    int* u_child_leaf_mask;
+    OctNode* u_nodes;
 
-    VkBuffer u_children_buffer;
-    VkBuffer u_corner_buffer;
-    VkBuffer u_cell_size_buffer;
-    VkBuffer u_child_node_mask_buffer;
-    VkBuffer u_child_leaf_mask_buffer;
 
-    VkDeviceMemory u_children_memory;
-    VkDeviceMemory u_corner_memory;
-    VkDeviceMemory u_cell_size_memory;
-    VkDeviceMemory u_child_node_mask_memory;
-    VkDeviceMemory u_child_leaf_mask_memory;
+    VkBuffer u_nodes_buffer;
+
+    VkDeviceMemory u_nodes_memory;
   } oct;
 
   // Temp
@@ -164,13 +156,13 @@ void Pipe::allocate() {
     u_unique_morton_keys = static_cast<uint32_t*>(mapped);
     std::fill_n(u_unique_morton_keys, params_.n, 0);
 
-    create_shared_empty_storage_buffer(params_.n * sizeof(uint32_t), &u_edge_count_buffer, &u_edge_count_memory, &mapped);
-    u_edge_count = static_cast<uint32_t*>(mapped);
+    create_shared_empty_storage_buffer(params_.n * sizeof(int), &u_edge_count_buffer, &u_edge_count_memory, &mapped);
+    u_edge_count = static_cast<int*>(mapped);
     std::fill_n(u_edge_count, params_.n, 0);
 
     create_shared_empty_storage_buffer(params_.n * sizeof(uint32_t), &u_edge_offset_buffer, &u_edge_offset_memory, &mapped);
     u_edge_offset = static_cast<uint32_t*>(mapped);
-    std::fill_n(u_edge_offset, params_.n, 0);
+    std::fill_n(u_edge_offset, params_.n, 1);
     
     // brt
     create_shared_empty_storage_buffer(params_.n * sizeof(uint8_t), &brt.u_prefix_n_buffer, &brt.u_prefix_n_memory, &mapped);
@@ -195,28 +187,9 @@ void Pipe::allocate() {
 
 
     // oct
-    create_shared_empty_storage_buffer(params_.n * sizeof(int[8]), &oct.u_children_buffer, &oct.u_children_memory, &mapped);
-    oct.u_children = static_cast<int(*)[8]>(mapped);
-    for(int i = 0; i < params_.n; ++i){
-      std::fill_n(oct.u_children[i], 8, 0);
-
-    }
-
-    create_shared_empty_storage_buffer(params_.n * sizeof(glm::vec4), &oct.u_corner_buffer, &oct.u_corner_memory, &mapped);
-    oct.u_corner = static_cast<glm::vec4*>(mapped);
-    std::fill_n(oct.u_corner, params_.n, glm::vec4(0.0f, 0.0f, 0.0f, 0.0f));
-
-    create_shared_empty_storage_buffer(params_.n * sizeof(float), &oct.u_cell_size_buffer, &oct.u_cell_size_memory, &mapped);
-    oct.u_cell_size = static_cast<float*>(mapped);
-    std::fill_n(oct.u_cell_size, params_.n, 0.0f);
-
-    create_shared_empty_storage_buffer(params_.n * sizeof(int), &oct.u_child_node_mask_buffer, &oct.u_child_node_mask_memory, &mapped);
-    oct.u_child_node_mask = static_cast<int*>(mapped);
-    std::fill_n(oct.u_child_node_mask, params_.n, 0);
-
-    create_shared_empty_storage_buffer(params_.n * sizeof(int), &oct.u_child_leaf_mask_buffer, &oct.u_child_leaf_mask_memory, &mapped);
-    oct.u_child_leaf_mask = static_cast<int*>(mapped);
-    std::fill_n(oct.u_child_leaf_mask, params_.n, 0);
+    create_shared_empty_storage_buffer(params_.n * sizeof(OctNode), &oct.u_nodes_buffer, &oct.u_nodes_memory, &mapped);
+    oct.u_nodes = static_cast<OctNode*>(mapped);
+    std::fill_n(oct.u_nodes, params_.n, OctNode());
 
 
     constexpr auto radix = 256;
@@ -318,25 +291,9 @@ Pipe::~Pipe() {
   vkFreeMemory(singleton.device, brt.u_parent_memory, nullptr);
 
   // oct
-  vkUnmapMemory(singleton.device, oct.u_children_memory);
-  vkDestroyBuffer(singleton.device, oct.u_children_buffer, nullptr);
-  vkFreeMemory(singleton.device, oct.u_children_memory, nullptr);
-
-  vkUnmapMemory(singleton.device, oct.u_corner_memory);
-  vkDestroyBuffer(singleton.device, oct.u_corner_buffer, nullptr);
-  vkFreeMemory(singleton.device, oct.u_corner_memory, nullptr);
-
-  vkUnmapMemory(singleton.device, oct.u_cell_size_memory);
-  vkDestroyBuffer(singleton.device, oct.u_cell_size_buffer, nullptr);
-  vkFreeMemory(singleton.device, oct.u_cell_size_memory, nullptr);
-
-  vkUnmapMemory(singleton.device, oct.u_child_node_mask_memory);
-  vkDestroyBuffer(singleton.device, oct.u_child_node_mask_buffer, nullptr);
-  vkFreeMemory(singleton.device, oct.u_child_node_mask_memory, nullptr);
-
-  vkUnmapMemory(singleton.device, oct.u_child_leaf_mask_memory);
-  vkDestroyBuffer(singleton.device, oct.u_child_leaf_mask_buffer, nullptr);
-  vkFreeMemory(singleton.device, oct.u_child_leaf_mask_memory, nullptr);
+  vkUnmapMemory(singleton.device, oct.u_nodes_memory);
+  vkDestroyBuffer(singleton.device, oct.u_nodes_buffer, nullptr);
+  vkFreeMemory(singleton.device, oct.u_nodes_memory, nullptr);
 
   // -------------------------
 
@@ -376,22 +333,29 @@ Pipe::~Pipe() {
 }
 
 void Pipe::init(const int num_blocks){
+  std::cout << "start init"<<std::endl;
   Init init_stage = Init();
   init_stage.run(num_blocks, u_points, u_points_buffer, params_.n, params_.min_coord, params_.getRange(), params_.seed);
+  /*
   for (int i = 0; i < 1024; ++i){
     std::cout << u_points[i].x << " " << u_points[i].y << " " << u_points[i].z << " " << u_points[i].w << std::endl;
   }
+  */
 }
 
 void Pipe::morton(const int num_blocks){
+  std::cout << "start morton"<<std::endl;
   Morton morton_stage = Morton();
   morton_stage.run(num_blocks, u_points, u_morton_keys, u_points_buffer, u_morton_keys_buffer,  params_.n, params_.min_coord, params_.getRange());
+  /*
   for (int i = 0; i < 1024; i++){
     printf("morton_keys[%d]: %d\n", i, u_morton_keys[i]);
   }
+  */
 }
 
 void Pipe::radix_sort(const int num_blocks){
+  std::cout << "start radix sort"<<std::endl;
   auto radixsort_stage = RadixSort();
   radixsort_stage.run(num_blocks,
   u_morton_keys,
@@ -405,12 +369,15 @@ void Pipe::radix_sort(const int num_blocks){
   sort_tmp.u_index_buffer,
   sort_tmp.u_pass_histogram_buffer,
   params_.n);
+  /*
   for (int i = 0; i < 1024; i++){
     printf("sorted_key[%d]: %d\n", i, u_morton_keys[i]);
   }
+  */
 }
 
 void Pipe::unique(const int num_blocks){
+  std::cout << "start unique"<<std::endl;
   auto unique_stage = Unique();
   unique_stage.run(num_blocks,
   u_morton_keys,
@@ -424,31 +391,93 @@ void Pipe::unique(const int num_blocks){
   unique_tmp.reductions_buffer,
   unique_tmp.index_buffer,
   params_.n);
-
-  for (int i = 0; i < 1024; ++i){
+  /*
+  for (int i = 0; i < 1024; ++i)
     printf("contributions[%d]: %d\n", i, unique_tmp.contributions[i]);
-  }
+  
 
-  for(int i = 0; i < 1024; i++){
+  for(int i = 0; i < 1024; i++)
     printf("unique_morton_keys[%d]: %d\n", i, u_unique_morton_keys[i]);
-  }
+  */
+  n_unique_keys = unique_tmp.contributions[params_.n-1];
+  printf("n_unique_keys: %d\n", n_unique_keys);
 
+}
+
+void Pipe::radix_tree(const int num_blocks){
+  std::cout << "start radix tree"<<std::endl;
+  auto radix_tree_stage = RadixTree();
+  radix_tree_stage.run(num_blocks,
+  u_unique_morton_keys,
+  brt.u_prefix_n,
+  brt.u_has_leaf_left,
+  brt.u_has_leaf_right,
+  brt.u_left_child,
+  brt.u_parent,
+  u_unique_morton_keys_buffer,
+  brt.u_prefix_n_buffer,
+  brt.u_has_leaf_left_buffer,
+  brt.u_has_leaf_right_buffer,
+  brt.u_left_child_buffer, 
+  brt.u_parent_buffer,
+  n_unique_keys);
 }
 
 
 
 void Pipe::edge_count(const int num_blocks){
+  std::cout <<"start edge count"<<std::endl;
   auto edge_count_stage = EdgeCount();
-  edge_count_stage.run(num_blocks,brt.u_prefix_n , brt.u_parent, u_edge_count, brt.u_prefix_n_buffer, brt.u_parent_buffer, u_edge_count_buffer, params_.n);
+  edge_count_stage.run(num_blocks,brt.u_prefix_n , brt.u_parent, u_edge_count, brt.u_prefix_n_buffer, brt.u_parent_buffer, u_edge_count_buffer, n_unique_keys);
+  for (int i = 0; i < 1024; i++){
+    printf("edge_count[%d]: %d\n", i, u_edge_count[i]);
+  }
 }
 
 void Pipe::prefix_sum(const int num_blocks){
-  /*
+  std::cout << "start prefix sum"<<std::endl;
+  //memcpy(u_edge_offset, u_edge_count,  sizeof(uint32_t) * params_.n);
   auto prefix_sum_stage = PrefixSum();
-  prefix_sum_stage.run(num_blocks, prefix_sum_tmp.contributions, prefix_sum_tmp.index, prefix_sum_tmp.reductions, prefix_sum_tmp.contributions_buffer, prefix_sum_tmp.index_buffer, prefix_sum_tmp.reductions_buffer, params_.n);
+  prefix_sum_stage.run(num_blocks,
+  u_edge_offset,
+  prefix_sum_tmp.index,
+  prefix_sum_tmp.reductions,
+  u_edge_offset_buffer,
+  prefix_sum_tmp.index_buffer,
+  prefix_sum_tmp.reductions_buffer,
+  params_.n);
+  /*
+  for (int i = 0; i < 1024; i++)
+    printf("scanededge_count[%d]: %d\n", i, u_edge_offset[i]);
   */
+  printf("last element: %d\n", u_edge_offset[params_.n-1]);
+  
 }
-
+/*
 void Pipe::octree(const int num_blocks){
+  auto build_octree_stage = Octree();
+  build_octree_stage.run(num_blocks,
+  oct.u_nodes,
+  u_edge_count,
+  u_edge_offset,
+  u_unique_morton_keys,
+  brt.u_prefix_n,
+  brt.u_has_leaf_left,
+  brt.u_has_leaf_right,
+  brt.u_parent,
+  brt.u_left_child,
+  params_.min_coord,
+  params_.getRange(),
+  n_brt_nodes,
+  oct.u_nodes_buffer,
+  u_edge_count_buffer,
+  u_edge_offset_buffer,
+  u_unique_morton_keys_buffer,
+  brt.u_prefix_n_buffer,
+  brt.u_has_leaf_left_buffer,
+  brt.u_has_leaf_right_buffer,
+  brt.u_parent_buffer,
+  brt.u_left_child_buffer);
 
 }
+*/

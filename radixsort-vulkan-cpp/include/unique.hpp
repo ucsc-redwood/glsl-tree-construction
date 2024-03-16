@@ -40,7 +40,6 @@ class Unique : public ApplicationBase{
 
 void Unique::execute(){
 			// todo: change the harded coded for map
-			printf("execute\n");
 			vkResetFences(singleton.device, 1, &fence);
 			const VkPipelineStageFlags waitStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
 			VkSubmitInfo computeSubmitInfo {};

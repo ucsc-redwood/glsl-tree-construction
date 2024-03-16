@@ -1,18 +1,5 @@
 #include "app_params.hpp"
-//#include "init.hpp"
 #include "naive_pipe.hpp"
-/*
-#include "morton.hpp"
-
-#include "unique.hpp"
-#include "radixsort.hpp"
-#include "radix_tree.hpp"
-#include "edge_count.hpp"
-*/
-#include "prefix_sum.hpp"
-/*
-#include "octree.hpp"
-*/
 #include <vulkan/vulkan.hpp>
 #include <chrono>
 
@@ -32,40 +19,26 @@ int main(const int argc, const char* argv[]){
     app_params.n_threads = 4;
     app_params.n_blocks = n_blocks;
     
-    std::vector<uint32_t> morton_keys(BUFFER_ELEMENTS, 0);
-    std::vector<uint32_t> u_keys(BUFFER_ELEMENTS, 0);
-    std::vector<uint32_t> contribution(BUFFER_ELEMENTS, 0);
-    std::vector<glm::vec4> data(BUFFER_ELEMENTS ,glm::vec4(0,0,0,0));
-    std::vector<uint8_t> prefix_n(app_params.n, 0);
-    std::vector<uint32_t> edge_count(app_params.n, 0);
-    /*
-    //std::vector<OctNode> oct_nodes(app_params.n, OctNode());
-    int unique;
-    int n_brt_nodes;
-    std::vector<int> parents(app_params.n, 0);
-    std::vector<int> left_child(app_params.n, 0);
-    bool* has_leaf_left = new bool[app_params.n];
-    std::fill_n(has_leaf_left, app_params.n, false);
-
-    bool* has_leaf_right = new bool[app_params.n];
-    std::fill_n(has_leaf_right, app_params.n, false);
-
-    VkBuffer data_buffer;
-    VkDeviceMemory data_memory;
-    */
-    
+   
     Pipe pipe = Pipe(app_params);
     pipe.allocate();
     
-    pipe.init(n_blocks);
+    //pipe.init(n_blocks);
     
-    pipe.morton(n_blocks);
+   // pipe.morton(n_blocks);
 
-    pipe.radix_sort(n_blocks);
+   // pipe.radix_sort(n_blocks);
     
-    pipe.unique(n_blocks);
+    //pipe.unique(n_blocks);
+
+   // pipe.radix_tree(n_blocks);
     
- 
+    //pipe.edge_count(n_blocks);
+    
+    pipe.prefix_sum(n_blocks);
+    
+    //pipe.octree(n_blocks);
+    
     /*
     // step 0 initilization
     Init init_stage = Init();

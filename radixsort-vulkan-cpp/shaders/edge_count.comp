@@ -15,7 +15,7 @@ layout(set = 0, binding = 1 ) buffer Parent{
 };
 
 layout(set = 0, binding = 2 ) buffer EdgeCount{
-    uint edge_count[];
+    int edge_count[];
 };
 
 layout (push_constant) uniform Constant{
@@ -25,8 +25,8 @@ layout (push_constant) uniform Constant{
 layout(local_size_x = 512) in;
 
 void countEdges(uint i){
-        uint my_depth = prefix_n[i]/3;
-        uint parent_depth = prefix_n[parent[i]]/3;
+        int my_depth = int(prefix_n[i]/3);
+        int parent_depth = int(prefix_n[parent[i]]/3);
         edge_count[i] = my_depth - parent_depth;
 }
 
