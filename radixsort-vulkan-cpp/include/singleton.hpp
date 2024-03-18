@@ -84,6 +84,7 @@ class Singleton{
 
 	VkInstanceCreateInfo instanceCreateInfo = {};
 	if (enableValidationLayers) {
+		std::cout<<"validation layers enabled" <<std::endl;
     	instanceCreateInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
     	instanceCreateInfo.ppEnabledLayerNames = validationLayers.data();
 	} else {
@@ -129,13 +130,13 @@ class Singleton{
 				queueFamilyIndex = i;
 				queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
 				queueCreateInfo.queueFamilyIndex = i;
-				queueCreateInfo.queueCount = 1;
+				queueCreateInfo.queueCount = 4;
 				queueCreateInfo.pQueuePriorities = &defaultQueuePriority;
 				break;
 			}
 		}
 
-		// todo: chane the queue count to 2
+		// todo: chane the queue count to 4
 		// Create logical device
 
 		// First, query the supported Vulkan version and features

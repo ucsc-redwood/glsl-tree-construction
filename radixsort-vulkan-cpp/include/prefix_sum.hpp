@@ -75,7 +75,7 @@ const int n){
 
 	// create descriptor pool
 	std::vector<VkDescriptorPoolSize> poolSizes = {
-		VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1},
+		VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3},
 	};
 
 	create_descriptor_pool(poolSizes, 1);
