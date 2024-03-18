@@ -5,6 +5,8 @@
 #extension GL_KHR_shader_subgroup_vote:enable
 #extension GL_KHR_shader_subgroup_shuffle_relative:enable
 #extension GL_KHR_shader_subgroup_shuffle:enable
+#extension  GL_EXT_shader_explicit_arithmetic_types_int64 : enable
+#extension GL_EXT_shader_subgroup_extended_types_int64 : enable
 //#extension GL_EXT_debug_printf:enable
 
 #define PARTITION_SIZE 3072
@@ -144,7 +146,7 @@ void prefix_sum(){
             t.x += t.w;
             t.w = t2; 
 
-            // do warp level prefix sum on 4*32 elements
+            // do warp level prefix sum on 4*64 elements
             t2 = InclusiveWarpScanCircularShift(t.x);
            
             s_lookback[i] = setXAddYZW((gl_SubgroupInvocationID.x > 0 ? t2 : 0) + (k > 0 ? subgroup_reduction : 0), t);

@@ -371,6 +371,9 @@ void Pipe::radix_sort(const int num_blocks, const int queue_idx){
   sort_tmp.u_pass_histogram_buffer,
   params_.n);
   
+  for (int i = 0; i < 1024; i++){
+    printf("sorted_key[%d]: %d\n", i, u_morton_keys[i]);
+  }
   for (int i = params_.n-200; i < params_.n; i++){
     printf("sorted_key[%d]: %d\n", i, u_morton_keys[i]);
   }

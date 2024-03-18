@@ -66,6 +66,7 @@ VkBuffer u_keys_buffer,
 VkBuffer reduction_buffer,
 VkBuffer index_buffer,
 const int n){
+	std::cout<<" running prefix sum"<<std::endl;
 
 	const uint32_t aligned_size = ((n + 4 - 1)/ 4) * 4;
 	const uint32_t vectorized_size = aligned_size / 4;
@@ -75,7 +76,7 @@ const int n){
 
 	// create descriptor pool
 	std::vector<VkDescriptorPoolSize> poolSizes = {
-		VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1},
+		VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3},
 	};
 
 	create_descriptor_pool(poolSizes, 1);
@@ -99,6 +100,7 @@ const int n){
 	vkCreatePipelineLayout(singleton.device, &pipelineLayoutCreateInfo, nullptr, &pipelineLayout);
 	// allocate descriptor sets
 	allocate_descriptor_sets(1, descriptorSetLayouts, descriptorSets);
+	std::cout << "allocate descriptor sets"<<std::endl;
 
 	// update descriptor sets, first we need to create write descriptor, then specify the destination set, binding number, descriptor type, and number of descriptors(buffers) to bind
     VkDescriptorBufferInfo u_keys_bufferDescriptor = { u_keys_buffer, 0, VK_WHOLE_SIZE };
@@ -107,18 +109,18 @@ const int n){
     VkWriteDescriptorSet reduction_descriptor_write = create_descriptor_write(descriptorSets[0],1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &reduction_bufferDescriptor);
     VkDescriptorBufferInfo index_bufferDescriptor = { index_buffer, 0, VK_WHOLE_SIZE };
     VkWriteDescriptorSet index_descriptor_write = create_descriptor_write(descriptorSets[0],2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &index_bufferDescriptor);
+	std::cout <<"create descriptor writes"<<std::endl;
 
-
-	
 
 	std::vector<VkWriteDescriptorSet> descriptor_writes = {
         u_keys_descriptor_write, reduction_descriptor_write, index_descriptor_write
     };
 	vkUpdateDescriptorSets(singleton.device, static_cast<uint32_t>(descriptor_writes.size()), descriptor_writes.data(), 0, NULL);
-
+	std::cout<<"update descriptor sets"<<std::endl;
 	//create pipeline 
 	VkPipelineShaderStageCreateInfo shader_stage = load_shader("prefix_sum.spv", &shaderModule);
 	create_pipeline(&shader_stage,&pipelineLayout, &pipeline);
+	std::cout << "cload shader"<<std::endl;
 
 	// allocate the command buffer, specify the number of commands within a command buffer.
 	allocate_command_buffer(1);
@@ -128,6 +130,7 @@ const int n){
 
 	VkCommandBufferBeginInfo cmdBufInfo {};
 	cmdBufInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	std::cout <<"begin command buffer"<<std::endl;
 	// preparation
 	vkBeginCommandBuffer(commandBuffer, &cmdBufInfo);
     VkBufferMemoryBarrier u_keys_barrier = create_buffer_barrier(&u_keys_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
