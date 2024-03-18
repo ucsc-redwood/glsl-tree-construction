@@ -9,9 +9,10 @@ class PrefixSum : public ApplicationBase{
     public:
     PrefixSum() : ApplicationBase() {};
     ~PrefixSum() {};
-    void        execute();
+    void        submit(const int queue_idx);
 	void 		 cleanup(VkPipeline *prefix_sum_pipeline);
 	void run(const int logical_block,
+	const int queue_idx,
 	uint32_t *u_keys,
 	volatile uint32_t *reduction,
 	volatile uint32_t *index,
@@ -34,7 +35,7 @@ class PrefixSum : public ApplicationBase{
 };
 
 
-void PrefixSum::execute(){
+void PrefixSum::submit(const int queue_idx){
 			// todo: change the harded coded for map
 			vkResetFences(singleton.device, 1, &fence);
 			const VkPipelineStageFlags waitStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
@@ -43,7 +44,7 @@ void PrefixSum::execute(){
 			computeSubmitInfo.pWaitDstStageMask = &waitStageMask;
 			computeSubmitInfo.commandBufferCount = 1;
 			computeSubmitInfo.pCommandBuffers = &commandBuffer;
-			vkQueueSubmit(singleton.queue, 1, &computeSubmitInfo, fence);
+			vkQueueSubmit(singleton.queues[queue_idx], 1, &computeSubmitInfo, fence);
 			vkWaitForFences(singleton.device, 1, &fence, VK_TRUE, UINT64_MAX);
 
 }
@@ -57,6 +58,7 @@ void PrefixSum::cleanup(VkPipeline *pipeline){
 }
 
 void PrefixSum::run(const int logical_block,
+const int queue_idx,
 uint32_t *u_keys,
 volatile uint32_t *reduction,
 volatile uint32_t *index,
@@ -153,11 +155,11 @@ const int n){
 	create_fence();
 
 	// submit the command buffer, fence and flush
-	execute();
+	submit(queue_idx);
 
 
 
-	vkQueueWaitIdle(singleton.queue);
+	vkQueueWaitIdle(singleton.queues[queue_idx]);
 
 
 	cleanup(&pipeline);

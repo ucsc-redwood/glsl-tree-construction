@@ -7,9 +7,9 @@ class Morton : public ApplicationBase{
     public:
     Morton() : ApplicationBase() {};
     ~Morton() {};
-	void 		submit();
+	void 		submit(const int queue_idx);
 	void 		cleanup(VkPipeline *pipeline);
-	void 		run( const int logical_blocks, glm::vec4* data, uint32_t* morton_keys, VkBuffer data_buffer, VkBuffer morton_keys_buffer, const uint32_t n, const float min_coord, const float range);
+	void 		run( const int logical_blocks, const int queue_idx, glm::vec4* data, uint32_t* morton_keys, VkBuffer data_buffer, VkBuffer morton_keys_buffer, const uint32_t n, const float min_coord, const float range);
 
     private:
 	VkShaderModule shaderModule;
@@ -27,7 +27,7 @@ class Morton : public ApplicationBase{
 };
 
 
-void Morton::submit(){
+void Morton::submit(const int queue_idx){
 			vkResetFences(singleton.device, 1, &fence);
 			const VkPipelineStageFlags waitStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
 			VkSubmitInfo computeSubmitInfo {};
@@ -35,7 +35,7 @@ void Morton::submit(){
 			computeSubmitInfo.pWaitDstStageMask = &waitStageMask;
 			computeSubmitInfo.commandBufferCount = 1;
 			computeSubmitInfo.pCommandBuffers = &commandBuffer;
-			vkQueueSubmit(singleton.queue, 1, &computeSubmitInfo, fence);
+			vkQueueSubmit(singleton.queues[queue_idx], 1, &computeSubmitInfo, fence);
 			vkWaitForFences(singleton.device, 1, &fence, VK_TRUE, UINT64_MAX);
 
 }
@@ -48,7 +48,7 @@ void Morton::cleanup(VkPipeline *pipeline){
 		
 }
 
-void Morton::run(const int logical_blocks, glm::vec4* data, uint32_t* morton_keys, VkBuffer data_buffer, VkBuffer morton_keys_buffer, const uint32_t n, const float min_coord, const float range){
+void Morton::run(const int logical_blocks, const int queue_idx, glm::vec4* data, uint32_t* morton_keys, VkBuffer data_buffer, VkBuffer morton_keys_buffer, const uint32_t n, const float min_coord, const float range){
 	 
 	
 	VkPipeline pipeline;
@@ -140,9 +140,9 @@ void Morton::run(const int logical_blocks, glm::vec4* data, uint32_t* morton_key
 	create_fence();
 
 	// submit the command buffer, fence and flush
-	submit();
+	submit(queue_idx);
 
-	vkQueueWaitIdle(singleton.queue);
+	vkQueueWaitIdle(singleton.queues[queue_idx]);
 
 	cleanup(&pipeline);
 }

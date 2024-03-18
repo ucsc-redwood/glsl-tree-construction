@@ -218,7 +218,7 @@ void create_storage_buffer(const VkDeviceSize bufferSize, void* data, VkBuffer* 
 			vkCreateFence(singleton.device, &fenceInfo, nullptr, &fence);
 
 			// Submit to the queue
-			vkQueueSubmit(singleton.queue, 1, &submitInfo, fence);
+			vkQueueSubmit(singleton.queues[0], 1, &submitInfo, fence);
 			vkWaitForFences(singleton.device, 1, &fence, VK_TRUE, UINT64_MAX);
 
 			vkDestroyFence(singleton.device, fence, nullptr);

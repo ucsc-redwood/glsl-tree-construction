@@ -26,15 +26,16 @@ class Octree : public ApplicationBase{
     public:
     Octree() : ApplicationBase() {};
     ~Octree() {};
-	void 		submit();
+	void 		submit(const int queue_idx);
 	void 		cleanup(VkPipeline *pipeline);
 	void 		run(
-    const int logical_blocks, 
+    const int logical_blocks,
+    const int queue_idx,
     // --- output parameters
     OctNode* oct_nodes,
     // --- end output parameters, begin input parameters (read-only)
     uint32_t* node_offsets,
-    uint32_t* node_counts,
+    int* node_counts,
     unsigned int* codes,
     uint8_t* rt_prefixN,
     bool* rt_hasLeafLeft,
@@ -73,7 +74,7 @@ class Octree : public ApplicationBase{
 };
 
 
-void Octree::submit(){
+void Octree::submit(const int queue_idx){
 			vkResetFences(singleton.device, 1, &fence);
 			const VkPipelineStageFlags waitStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
 			VkSubmitInfo computeSubmitInfo {};
@@ -81,7 +82,7 @@ void Octree::submit(){
 			computeSubmitInfo.pWaitDstStageMask = &waitStageMask;
 			computeSubmitInfo.commandBufferCount = 1;
 			computeSubmitInfo.pCommandBuffers = &commandBuffer;
-			vkQueueSubmit(singleton.queue, 1, &computeSubmitInfo, fence);
+			vkQueueSubmit(singleton.queues[queue_idx], 1, &computeSubmitInfo, fence);
 			vkWaitForFences(singleton.device, 1, &fence, VK_TRUE, UINT64_MAX);
 }
 
@@ -94,12 +95,13 @@ void Octree::cleanup(VkPipeline *pipeline){
 }
 
 void Octree::run(
-    const int logical_blocks, 
+    const int logical_blocks,
+    const int queue_idx,
     // --- output parameters
     OctNode* oct_nodes,
     // --- end output parameters, begin input parameters (read-only)
     uint32_t* node_offsets,
-    uint32_t* node_counts,
+    int* node_counts,
     unsigned int* codes,
     uint8_t* rt_prefixN,
     bool* rt_hasLeafLeft,
@@ -255,10 +257,10 @@ void Octree::run(
 	create_fence();
 
 	// submit the command buffer, fence and flush
-	submit();
+	submit(queue_idx);
 
 
-	vkQueueWaitIdle(singleton.queue);
+	vkQueueWaitIdle(singleton.queues[queue_idx]);
 
 	cleanup(&pipeline);
 }

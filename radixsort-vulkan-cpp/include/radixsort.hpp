@@ -11,10 +11,11 @@ class RadixSort : public ApplicationBase{
     public:
     RadixSort() : ApplicationBase() {};
     ~RadixSort() {};
-	void submit();
+	void submit(const int queue_idx);
 	void 		 cleanup(VkPipeline *histogram_pipeline, VkPipeline *binning_pipeline);
 	void run(
-	const int logical_blocks, 
+	const int logical_blocks,
+	const int queue_idx,
 	uint32_t* b_sort, 
 	uint32_t* b_alt,
 	uint32_t* g_histogram,
@@ -44,7 +45,7 @@ class RadixSort : public ApplicationBase{
 };
 
 
-void RadixSort::submit(){
+void RadixSort::submit(const int queue_idx){
 			vkResetFences(singleton.device, 1, &fence);
 			const VkPipelineStageFlags waitStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
 			VkSubmitInfo computeSubmitInfo {};
@@ -52,7 +53,7 @@ void RadixSort::submit(){
 			computeSubmitInfo.pWaitDstStageMask = &waitStageMask;
 			computeSubmitInfo.commandBufferCount = 1;
 			computeSubmitInfo.pCommandBuffers = &commandBuffer;
-			vkQueueSubmit(singleton.queue, 1, &computeSubmitInfo, fence);
+			vkQueueSubmit(singleton.queues[queue_idx], 1, &computeSubmitInfo, fence);
 			vkWaitForFences(singleton.device, 1, &fence, VK_TRUE, UINT64_MAX);
 }
 
@@ -68,6 +69,7 @@ void RadixSort::cleanup(VkPipeline *histogram_pipeline, VkPipeline *binning_pipe
 }
 
 void RadixSort::run(const int logical_blocks, 
+	const int queue_idx,
 	uint32_t* b_sort, 
 	uint32_t* b_alt,
 	uint32_t* g_histogram,
@@ -259,12 +261,12 @@ void RadixSort::run(const int logical_blocks,
 
 	const auto start = std::chrono::high_resolution_clock::now();
 	// submit the command buffer, fence and flush
-	submit();
+	submit(queue_idx);
 	const auto end = std::chrono::high_resolution_clock::now();
     const std::chrono::duration<double, std::milli> elapsed = end - start;
     std::cout << "time: " << elapsed.count() << "ms" << std::endl;
 
-	vkQueueWaitIdle(singleton.queue);
+	vkQueueWaitIdle(singleton.queues[queue_idx]);
 
 	// Make device writes visible to the host
 

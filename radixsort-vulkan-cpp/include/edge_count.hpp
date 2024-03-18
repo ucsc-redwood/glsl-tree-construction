@@ -8,9 +8,10 @@ class EdgeCount : public ApplicationBase{
     public:
     EdgeCount() : ApplicationBase() {};
     ~EdgeCount() {};
-	void 		submit();
+	void 		submit(const int queue_idx);
 	void 		cleanup(VkPipeline *pipeline);
 	void 		run(const int logical_blocks,
+	const int queue_idx,
 	uint8_t* prefix_n,
 	int* parent,
 	int* edge_count,
@@ -35,7 +36,7 @@ class EdgeCount : public ApplicationBase{
 };
 
 
-void EdgeCount::submit(){
+void EdgeCount::submit(const int queue_idx){
 			vkResetFences(singleton.device, 1, &fence);
 			const VkPipelineStageFlags waitStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
 			VkSubmitInfo computeSubmitInfo {};
@@ -43,7 +44,7 @@ void EdgeCount::submit(){
 			computeSubmitInfo.pWaitDstStageMask = &waitStageMask;
 			computeSubmitInfo.commandBufferCount = 1;
 			computeSubmitInfo.pCommandBuffers = &commandBuffer;
-			vkQueueSubmit(singleton.queue, 1, &computeSubmitInfo, fence);
+			vkQueueSubmit(singleton.queues[queue_idx], 1, &computeSubmitInfo, fence);
 			vkWaitForFences(singleton.device, 1, &fence, VK_TRUE, UINT64_MAX);
 }
 
@@ -56,6 +57,7 @@ void EdgeCount::cleanup(VkPipeline *pipeline){
 }
 
 void EdgeCount::run(const int logical_blocks,
+	const int queue_idx,
 	uint8_t* prefix_n,
 	int* parent,
 	int* edge_count,
@@ -155,9 +157,9 @@ void EdgeCount::run(const int logical_blocks,
 	create_fence();
 
 	// submit the command buffer, fence and flush
-	submit();
+	submit(queue_idx);
 
-	vkQueueWaitIdle(singleton.queue);
+	vkQueueWaitIdle(singleton.queues[queue_idx]);
 
 	cleanup(&pipeline);
 }

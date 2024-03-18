@@ -8,9 +8,10 @@ class RadixTree : public ApplicationBase{
     public:
     RadixTree() : ApplicationBase() {};
     ~RadixTree() {};
-	void 		submit();
+	void 		submit(const int queue_idx);
 	void 		cleanup(VkPipeline *pipeline);
 	void 		run(const int logical_blocks,
+	const int queue_idx,
 	uint32_t* morton_keys,
 	uint8_t* prefix_n,
 	bool* has_leaf_left,
@@ -41,7 +42,7 @@ class RadixTree : public ApplicationBase{
 };
 
 
-void RadixTree::submit(){
+void RadixTree::submit(const int queue_idx){
 			vkResetFences(singleton.device, 1, &fence);
 			const VkPipelineStageFlags waitStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
 			VkSubmitInfo computeSubmitInfo {};
@@ -49,7 +50,7 @@ void RadixTree::submit(){
 			computeSubmitInfo.pWaitDstStageMask = &waitStageMask;
 			computeSubmitInfo.commandBufferCount = 1;
 			computeSubmitInfo.pCommandBuffers = &commandBuffer;
-			vkQueueSubmit(singleton.queue, 1, &computeSubmitInfo, fence);
+			vkQueueSubmit(singleton.queues[queue_idx], 1, &computeSubmitInfo, fence);
 			vkWaitForFences(singleton.device, 1, &fence, VK_TRUE, UINT64_MAX);
 }
 
@@ -63,6 +64,7 @@ void RadixTree::cleanup(VkPipeline *pipeline){
 }
 
 void RadixTree::run(const int logical_blocks,
+const int queue_idx,
 uint32_t* morton_keys,
 uint8_t* prefix_n,
 bool* has_leaf_left,
@@ -187,10 +189,10 @@ VkBuffer parent_buffer,
 	create_fence();
 
 	// submit the command buffer, fence and flush
-	submit();
+	submit(queue_idx);
 
 
-	vkQueueWaitIdle(singleton.queue);
+	vkQueueWaitIdle(singleton.queues[queue_idx]);
 
 	cleanup(&pipeline);
 }

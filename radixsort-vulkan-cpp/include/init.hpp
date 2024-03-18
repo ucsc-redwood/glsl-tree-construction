@@ -10,9 +10,9 @@ class Init : public ApplicationBase{
     public:
     Init() : ApplicationBase() {};
     ~Init() {};
-	void 		submit();
+	void 		submit(const int queue_idx);
 	void 		cleanup(VkPipeline *pipeline);
-	void 		run(const int blocks, glm::vec4* data, VkBuffer data_buffer, const int n, const int min_val, const float range, const float seed);
+	void 		run(const int blocks, const int queue_idx,  glm::vec4* data, VkBuffer data_buffer, const int n, const int min_val, const float range, const float seed);
 
     private:
 	VkShaderModule shaderModule;
@@ -31,7 +31,7 @@ class Init : public ApplicationBase{
 };
 
 
-void Init::submit(){
+void Init::submit(const int queue_idx){
 			// todo: change the harded coded for map
 			vkResetFences(singleton.device, 1, &fence);
 			const VkPipelineStageFlags waitStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
@@ -40,7 +40,7 @@ void Init::submit(){
 			computeSubmitInfo.pWaitDstStageMask = &waitStageMask;
 			computeSubmitInfo.commandBufferCount = 1;
 			computeSubmitInfo.pCommandBuffers = &commandBuffer;
-			vkQueueSubmit(singleton.queue, 1, &computeSubmitInfo, fence);
+			vkQueueSubmit(singleton.queues[queue_idx], 1, &computeSubmitInfo, fence);
 			vkWaitForFences(singleton.device, 1, &fence, VK_TRUE, UINT64_MAX);
 
 }
@@ -57,7 +57,7 @@ void Init::cleanup(VkPipeline *pipeline){
 		
 }
 
-void Init::run(const int blocks, glm::vec4* data, VkBuffer data_buffer, const int n, const int min_val, const float range, const float seed){
+void Init::run(const int blocks, const int queue_idx, glm::vec4* data, VkBuffer data_buffer, const int n, const int min_val, const float range, const float seed){
 	std::string shaderName = "init.spv";
 	VkPipeline pipeline;
 	/*
@@ -162,7 +162,7 @@ void Init::run(const int blocks, glm::vec4* data, VkBuffer data_buffer, const in
 	create_fence();
 
 	// submit the command buffer, fence and flush
-	submit();
+	submit(queue_idx);
 	
 	// Make device writes visible to the host
 	/*
@@ -180,7 +180,7 @@ void Init::run(const int blocks, glm::vec4* data, VkBuffer data_buffer, const in
 	memcpy(data, mapped, bufferSize);
 	vkUnmapMemory(singleton.device,temp_memory.data_memory);
 	*/
-	vkQueueWaitIdle(singleton.queue);
+	vkQueueWaitIdle(singleton.queues[queue_idx]);
 	/*
 	
 	for (int i = 0; i < 1024; ++i){

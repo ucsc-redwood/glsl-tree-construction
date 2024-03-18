@@ -12,8 +12,7 @@ class Singleton{
 	VkPhysicalDevice physicalDevice;
 	VkDevice device;
 	uint32_t queueFamilyIndex;
-	VkQueue queue;
-	//VKQueue queue_2;
+	VkQueue queues[4];
 
     Singleton(const Singleton&) = delete;
     Singleton(Singleton&&) = delete;
@@ -166,8 +165,10 @@ class Singleton{
 		vkCreateDevice(physicalDevice, &deviceCreateInfo, nullptr, &device);
 
 		// Get a compute queue
-		vkGetDeviceQueue(device, queueFamilyIndex, 0, &queue);
-		//vkGetDeviceQueue(device, queueFamilyIndex, 1, &queue_2);
+		vkGetDeviceQueue(device, queueFamilyIndex, 0, &queues[0]);
+		vkGetDeviceQueue(device, queueFamilyIndex, 1, &queues[1]);
+		vkGetDeviceQueue(device, queueFamilyIndex, 2, &queues[2]);
+		vkGetDeviceQueue(device, queueFamilyIndex, 3, &queues[3]);
 	}
 
 

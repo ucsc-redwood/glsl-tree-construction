@@ -127,9 +127,11 @@ void prefix_sum(){
     if (partitionIndex == gl_NumWorkGroups.x - 1){
         uint subgroup_reduction = 0;
         const uint final_part_size = aligned_size - PART_START;
+        // warp level scan pattern to avoid bank conflict
         for(uint i = gl_SubgroupInvocationID.x + SUBGROUP_PART_START, k = 0; k < SUBGROUP_PARTITIONS; i += LANE_COUNT, ++k){
             uvec4 t = i < final_part_size ? uvec4(scan[i*4 + PART_START*4], scan[i*4 + PART_START*4 + 1], scan[i*4 + PART_START*4 + 2], scan[i*4 + PART_START*4 + 3]) : uvec4(0, 0, 0, 0);
 
+            // do prefix sum on the vector(4) of elements
             uint t2 = t.x;
             t.x += t.y;
             t.y = t2;
@@ -142,7 +144,7 @@ void prefix_sum(){
             t.x += t.w;
             t.w = t2; 
 
-
+            // do warp level prefix sum on 4*32 elements
             t2 = InclusiveWarpScanCircularShift(t.x);
            
             s_lookback[i] = setXAddYZW((gl_SubgroupInvocationID.x > 0 ? t2 : 0) + (k > 0 ? subgroup_reduction : 0), t);

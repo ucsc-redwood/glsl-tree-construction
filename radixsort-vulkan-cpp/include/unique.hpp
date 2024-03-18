@@ -9,9 +9,10 @@ class Unique : public ApplicationBase{
     public:
     Unique() : ApplicationBase() {};
     ~Unique() {};
-    void        execute();
+    void        submit(const int queue_idx);
 	void 		 cleanup(VkPipeline *find_dup_pipeline, VkPipeline *prefix_sum_pipeline, VkPipeline *move_dup_pipeline);
 	void run(const int logical_block,
+	const int queue_idx,
 	uint32_t* sorted_keys,
 	uint32_t* u_keys,
 	uint32_t* contributions, 
@@ -38,7 +39,7 @@ class Unique : public ApplicationBase{
 };
 
 
-void Unique::execute(){
+void Unique::submit(const int queue_idx){
 			// todo: change the harded coded for map
 			vkResetFences(singleton.device, 1, &fence);
 			const VkPipelineStageFlags waitStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
@@ -47,7 +48,7 @@ void Unique::execute(){
 			computeSubmitInfo.pWaitDstStageMask = &waitStageMask;
 			computeSubmitInfo.commandBufferCount = 1;
 			computeSubmitInfo.pCommandBuffers = &commandBuffer;
-			vkQueueSubmit(singleton.queue, 1, &computeSubmitInfo, fence);
+			vkQueueSubmit(singleton.queues[queue_idx], 1, &computeSubmitInfo, fence);
 			vkWaitForFences(singleton.device, 1, &fence, VK_TRUE, UINT64_MAX);
 
 }
@@ -67,6 +68,7 @@ void Unique::cleanup(VkPipeline *find_dup_pipeline, VkPipeline *prefix_sum_pipel
 }
 
 void Unique::run(const int logical_block,
+	const int queue_idx,
 	uint32_t* sorted_keys,
 	uint32_t* u_keys,
 	uint32_t* contributions, 
@@ -216,13 +218,13 @@ void Unique::run(const int logical_block,
 	create_pipeline_barrier(&reduction_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 	index_barrier = create_buffer_barrier(&index_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
 	create_pipeline_barrier(&index_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-	/*
+	
 	// for move_dup
 	unique_push_constant.n = n;
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, move_dup_pipeline);
 	vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstant), &unique_push_constant);
 	vkCmdDispatch(commandBuffer, logical_block, 1, 1);
-	 */
+	 
 	vkEndCommandBuffer(commandBuffer);
 
 
@@ -230,9 +232,9 @@ void Unique::run(const int logical_block,
 	create_fence();
 
 	// submit the command buffer, fence and flush
-	execute();
+	submit(queue_idx);
 
-	vkQueueWaitIdle(singleton.queue);
+	vkQueueWaitIdle(singleton.queues[queue_idx]);
 
 
 	cleanup(&find_dup_pipeline, &prefix_sum_pipeline, &move_dup_pipeline);
