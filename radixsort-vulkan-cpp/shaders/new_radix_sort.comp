@@ -325,6 +325,8 @@ void k_DigitBinning(uint zheyuan_block_id, uint logical_blocks){
 void main(){
     uint logical_blocks = uint(ceil(float(n) / float(BIN_PART_SIZE)));
     for (uint zheyuan_block_id = gl_WorkGroupID.x; zheyuan_block_id < logical_blocks; zheyuan_block_id += gl_NumWorkGroups.x){
-        k_DigitBinning(zheyuan_block_id, logical_blocks);
+        if (zheyuan_block_id < logical_blocks){
+            k_DigitBinning(zheyuan_block_id, logical_blocks);
+        }
     }
 }

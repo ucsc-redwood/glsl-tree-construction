@@ -194,7 +194,7 @@ void Pipe::allocate() {
 
     constexpr auto radix = 256;
     constexpr auto passes = 4;
-    const auto binning_thread_blocks = (params_.n + 7680 -1)/ 7680;
+    const auto max_binning_thread_blocks = ((2<<25) + 7680 -1)/ 7680;
 
     // sort_tmp
     create_shared_empty_storage_buffer(params_.n * sizeof(uint32_t), &sort_tmp.u_sort_alt_buffer, &sort_tmp.u_sort_alt_memory, &mapped);
@@ -209,9 +209,9 @@ void Pipe::allocate() {
     sort_tmp.u_index = static_cast<uint32_t*>(mapped);
     std::fill_n(sort_tmp.u_index, 4, 0);
 
-    create_shared_empty_storage_buffer(radix * binning_thread_blocks * sizeof(glm::uvec4), &sort_tmp.u_pass_histogram_buffer, &sort_tmp.u_pass_histogram_memory, &mapped);
+    create_shared_empty_storage_buffer(radix * max_binning_thread_blocks * sizeof(glm::uvec4), &sort_tmp.u_pass_histogram_buffer, &sort_tmp.u_pass_histogram_memory, &mapped);
     sort_tmp.u_pass_histogram = static_cast<glm::uvec4*>(mapped);
-    std::fill_n(sort_tmp.u_pass_histogram, radix * binning_thread_blocks, glm::uvec4(0, 0, 0, 0));
+    std::fill_n(sort_tmp.u_pass_histogram, radix * max_binning_thread_blocks, glm::uvec4(0, 0, 0, 0));
 
 
    uint32_t aligned_size = ((params_.n + 4 - 1)/ 4) * 4;
