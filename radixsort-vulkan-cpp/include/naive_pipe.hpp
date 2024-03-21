@@ -476,6 +476,7 @@ void Pipe::prefix_sum(const int num_blocks, const int queue_idx){
 }
 
 void Pipe::octree(const int num_blocks, const int queue_idx){
+  std::cout<<"start octree"<<std::endl;
   n_brt_nodes = n_unique_keys - 1;
   auto build_octree_stage = Octree();
   build_octree_stage.run(num_blocks,

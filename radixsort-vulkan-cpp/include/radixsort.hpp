@@ -195,7 +195,7 @@ void RadixSort::run(const int logical_blocks,
 		radix_sort_push_constant.pass_num = 0;
 	radix_sort_push_constant.radix_shift = 0;
 	vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RadixSortPushConstant), &radix_sort_push_constant);
-	vkCmdDispatch(commandBuffer, BINNING_THREAD_BLOCKS, 1, 1);
+	vkCmdDispatch(commandBuffer, logical_blocks, 1, 1);
 
 	b_sort_barrier = create_buffer_barrier(&b_sort_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
 	b_alt_barrier = create_buffer_barrier(&b_alt_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
@@ -213,7 +213,7 @@ void RadixSort::run(const int logical_blocks,
 	radix_sort_push_constant.pass_num = 1;
 	radix_sort_push_constant.radix_shift = 8;
 	vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RadixSortPushConstant), &radix_sort_push_constant);
-	vkCmdDispatch(commandBuffer, BINNING_THREAD_BLOCKS, 1, 1);
+	vkCmdDispatch(commandBuffer, logical_blocks, 1, 1);
 	b_sort_barrier = create_buffer_barrier(&b_sort_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
 	b_alt_barrier = create_buffer_barrier(&b_alt_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
 	g_histogram_barrier = create_buffer_barrier(&g_histogram_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
@@ -229,7 +229,7 @@ void RadixSort::run(const int logical_blocks,
 	radix_sort_push_constant.pass_num = 2;
 	radix_sort_push_constant.radix_shift = 16;
 	vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RadixSortPushConstant), &radix_sort_push_constant);
-	vkCmdDispatch(commandBuffer, BINNING_THREAD_BLOCKS, 1, 1);
+	vkCmdDispatch(commandBuffer, logical_blocks, 1, 1);
 	b_sort_barrier = create_buffer_barrier(&b_sort_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
 	b_alt_barrier = create_buffer_barrier(&b_alt_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
 	g_histogram_barrier = create_buffer_barrier(&g_histogram_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
@@ -245,7 +245,7 @@ void RadixSort::run(const int logical_blocks,
 	radix_sort_push_constant.pass_num = 3;
 	radix_sort_push_constant.radix_shift = 24;
 	vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RadixSortPushConstant), &radix_sort_push_constant);
-	vkCmdDispatch(commandBuffer, BINNING_THREAD_BLOCKS, 1, 1);
+	vkCmdDispatch(commandBuffer, logical_blocks, 1, 1);
 	b_sort_barrier = create_buffer_barrier(&b_sort_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
 	b_alt_barrier = create_buffer_barrier(&b_alt_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
 	g_histogram_barrier = create_buffer_barrier(&g_histogram_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);

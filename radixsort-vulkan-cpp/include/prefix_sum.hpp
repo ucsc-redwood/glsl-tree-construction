@@ -163,7 +163,7 @@ const int n){
 
 
 	vkQueueWaitIdle(singleton.queues[queue_idx]);
-
+	std::cout <<"end command buffer"<<std::endl;
 
 	cleanup(&pipeline);
 }
