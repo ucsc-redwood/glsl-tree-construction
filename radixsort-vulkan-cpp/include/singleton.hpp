@@ -104,7 +104,7 @@ class Singleton{
 	}
 
     VkResult result = vkCreateInstance(&instanceCreateInfo, nullptr, &instance);
-
+	volkLoadInstance(instance);
     return result;
 	}
 
@@ -133,7 +133,7 @@ class Singleton{
 				queueFamilyIndex = i;
 				queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
 				queueCreateInfo.queueFamilyIndex = i;
-				queueCreateInfo.queueCount = 4;
+				queueCreateInfo.queueCount = 1;
 				queueCreateInfo.pQueuePriorities = &defaultQueuePriority;
 				break;
 			}
@@ -148,6 +148,15 @@ class Singleton{
 		VkPhysicalDeviceVulkan12Features vulkan12Features = {};
 		vulkan12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
 		vulkan12Features.storageBuffer8BitAccess = VK_TRUE; // Enable 8-bit storage buffers
+
+		VkPhysicalDeviceProperties2 deviceProperties2 = {};
+		deviceProperties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+		VkPhysicalDeviceSubgroupProperties subgroupProperties = {};
+		subgroupProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES;
+		deviceProperties2.pNext = &subgroupProperties;
+		vkGetPhysicalDeviceProperties2(physicalDevice, &deviceProperties2);
+		uint32_t defaultSubgroupSize = subgroupProperties.subgroupSize;
+		std::cout << " default subgroup size: " << defaultSubgroupSize<< std::endl;
 
 		// Chain the structures
 		physicalDeviceFeatures2.pNext = &vulkan12Features;
@@ -169,9 +178,10 @@ class Singleton{
 
 		// Get a compute queue
 		vkGetDeviceQueue(device, queueFamilyIndex, 0, &queues[0]);
-		vkGetDeviceQueue(device, queueFamilyIndex, 1, &queues[1]);
-		vkGetDeviceQueue(device, queueFamilyIndex, 2, &queues[2]);
-		vkGetDeviceQueue(device, queueFamilyIndex, 3, &queues[3]);
+		//vkGetDeviceQueue(device, queueFamilyIndex, 1, &queues[1]);
+		//vkGetDeviceQueue(device, queueFamilyIndex, 2, &queues[2]);
+		//vkGetDeviceQueue(device, queueFamilyIndex, 3, &queues[3]);
+		std::cout<<"done"<<std::endl;
 	}
 
 	void create_query_pool(){
