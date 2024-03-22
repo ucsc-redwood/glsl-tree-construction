@@ -259,16 +259,10 @@ void RadixSort::run(const int logical_blocks,
 	// create fence
 	create_fence();
 
-	const auto start = std::chrono::high_resolution_clock::now();
 	// submit the command buffer, fence and flush
 	submit(queue_idx);
-	const auto end = std::chrono::high_resolution_clock::now();
-    const std::chrono::duration<double, std::milli> elapsed = end - start;
-    std::cout << "time: " << elapsed.count() << "ms" << std::endl;
 
 	vkQueueWaitIdle(singleton.queues[queue_idx]);
-
-	// Make device writes visible to the host
 
 
 	cleanup(&histogram_pipeline, &binning_pipeline);

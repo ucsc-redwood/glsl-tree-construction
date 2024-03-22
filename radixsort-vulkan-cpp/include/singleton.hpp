@@ -13,6 +13,7 @@ class Singleton{
 	VkDevice device;
 	uint32_t queueFamilyIndex;
 	VkQueue queues[4];
+	VkQueryPool query_pool_timestamps;
 
     Singleton(const Singleton&) = delete;
     Singleton(Singleton&&) = delete;
@@ -172,12 +173,22 @@ class Singleton{
 		vkGetDeviceQueue(device, queueFamilyIndex, 3, &queues[3]);
 	}
 
+	void create_query_pool(){
+		VkQueryPoolCreateInfo query_pool_info{};
+		query_pool_info.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+		query_pool_info.queryType = VK_QUERY_TYPE_TIMESTAMP;
+		query_pool_info.queryCount = 2;
+		vkCreateQueryPool(device, &query_pool_info, nullptr, &query_pool_timestamps);
+
+	}
+
 
 
 	Singleton(){
 		create_instance();
 		create_device();
 		create_compute_queue();
+		create_query_pool();
 	}
 
 };

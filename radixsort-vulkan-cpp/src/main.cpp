@@ -3,7 +3,7 @@
 #include <vulkan/vulkan.hpp>
 #include <chrono>
 
-#define BUFFER_ELEMENTS  131072
+#define BUFFER_ELEMENTS  1920*1080
 
 int main(const int argc, const char* argv[]){
     int n_blocks = 1;
