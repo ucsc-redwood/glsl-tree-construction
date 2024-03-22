@@ -14,9 +14,9 @@
 #define RADIX_MASK 255 // Mask of digit bins
 #define RADIX_PASS 4//(sizeof(uint) * 8 + RADIX_BITS - 1) / RADIX_BITS
 
-#define LANE_COUNT 64 // number of threads in a subgroup
-#define LANE_MASK 63
-#define LANE_LOG 6
+#define LANE_COUNT 16 // number of threads in a subgroup
+#define LANE_MASK 15
+#define LANE_LOG 4
 
 #define LANE gl_LocalInvocationID.x // the idx of thread in the subgroup
 #define SUBGROUP_IDX  gl_SubgroupID // the idx of subgroup the thread belongs to might be wrong

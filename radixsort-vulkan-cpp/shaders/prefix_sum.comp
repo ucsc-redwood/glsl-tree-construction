@@ -11,8 +11,8 @@
 
 #define PARTITION_SIZE 3072
 #define PART_VEC_SIZE	768
-#define LANE_COUNT 64
-#define LANE_MASK 63
+#define LANE_COUNT 16
+#define LANE_MASK 15
 
 #define WORKGROUP_NUM 256
 #define SUBGROUP_PARTITIONS 3
