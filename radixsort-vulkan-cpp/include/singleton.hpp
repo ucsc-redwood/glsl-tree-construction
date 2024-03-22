@@ -1,6 +1,7 @@
 
 #pragma once
-#include <vulkan/vulkan.hpp>
+//#include <vulkan/vulkan.hpp>
+#include "volk.h"
 #include <unordered_map>
 #include <iostream>
 #include "core/VulkanTools.h"
@@ -140,7 +141,6 @@ class Singleton{
 
 		// todo: chane the queue count to 4
 		// Create logical device
-
 		// First, query the supported Vulkan version and features
 		VkPhysicalDeviceFeatures2 physicalDeviceFeatures2 = {};
 		physicalDeviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;

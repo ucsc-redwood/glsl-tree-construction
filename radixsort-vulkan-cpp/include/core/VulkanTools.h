@@ -1,4 +1,5 @@
-#include "vulkan/vulkan.h"
+//#include "vulkan/vulkan.h"
+#include "volk.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string>
@@ -24,7 +25,9 @@ const std::vector<const char*> validationLayers = {
     const bool enableValidationLayers = true;
 #endif
 
+
 namespace tools{
+
 
 		VkShaderModule loadShader(const char *fileName, VkDevice device)
 		{

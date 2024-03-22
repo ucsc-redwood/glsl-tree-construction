@@ -1,11 +1,16 @@
 #include "app_params.hpp"
 #include "naive_pipe.hpp"
-#include <vulkan/vulkan.hpp>
+//#include <vulkan/vulkan.hpp>
+#include "volk.h"
 #include <chrono>
 
 #define BUFFER_ELEMENTS  1920*1080
 
 int main(const int argc, const char* argv[]){
+  if (volkInitialize() != VK_SUCCESS) {
+    std::cerr << "Failed to initialize volk!" << std::endl;
+    return EXIT_FAILURE;
+  }
     int n_blocks = 1;
 
     if (argc > 1){
