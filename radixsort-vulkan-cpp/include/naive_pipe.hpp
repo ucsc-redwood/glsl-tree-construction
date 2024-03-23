@@ -29,7 +29,6 @@ public:
   void edge_count(const int num_blocks, const int queue_idx);
   void prefix_sum(const int num_blocks, const int queue_idx);
   void octree(const int num_blocks, const int queue_idx);
-
   double time();
 
 protected:
@@ -99,7 +98,7 @@ protected:
   struct
   {
     uint32_t *u_sort_alt;         // n
-    uint32_t *u_global_histogram; // 256 * 4
+    uint32_t *u_global_histogram; //
     uint32_t *u_index;            // 4
     glm::uvec4 *u_pass_histogram; // 256 * xxx
 
@@ -375,6 +374,7 @@ void Pipe::radix_sort(const int num_blocks, const int queue_idx)
                       sort_tmp.u_index_buffer,
                       sort_tmp.u_pass_histogram_buffer,
                       params_.n);
+  run_time = radixsort_stage.time();
   /*
   for (int i = 0; i < 200; ++i)
     std::cout << "sorted_key[" << i << "]: " << u_morton_keys[i] << std::endl;

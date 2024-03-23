@@ -25,6 +25,7 @@ class RadixTree : public ApplicationBase{
 	VkBuffer left_child_buffer,
 	VkBuffer parent_buffer,
 	const int n_unique);
+	
 
     private:
 	VkShaderModule shaderModule;
