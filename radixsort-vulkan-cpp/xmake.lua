@@ -43,7 +43,7 @@ after_build(function(target)
     os.cp("shaders/compiled_shaders/**.spv", build_path)
     print("Copied compiled shaders to " .. build_path)
 end)
-
+includes("benchmarks")
 target("app")
 set_default(true)
 set_kind("binary")
