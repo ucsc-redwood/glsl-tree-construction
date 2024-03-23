@@ -15,11 +15,12 @@ public:
 
 private:
 	VkShaderModule shaderModule;
-	double run_time;
 
 	VkDescriptorSetLayout descriptorSetLayouts[1] = {VkDescriptorSetLayout{}};
 	VkDescriptorSet descriptorSets[1] = {VkDescriptorSet{}};
 	VkDescriptorSetLayoutCreateInfo descriptorLayout[1] = {VkDescriptorSetLayoutCreateInfo{}};
+
+	double run_time;
 
 	struct PushConstant
 	{
