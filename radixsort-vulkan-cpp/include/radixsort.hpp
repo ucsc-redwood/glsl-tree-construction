@@ -270,8 +270,9 @@ void RadixSort::run(const int logical_blocks,
 
 	uint64_t elapsedTimeNs = timestamps[1] - timestamps[0];
 	double elapsedTimeMs = elapsedTimeNs / 1000000.0;
-	// std::cout << "Elapsed time: " << elapsedTimeMs << "ms" << std::endl;
-	run_time = elapsedTimeMs;
+	double elapsedTimeSec = elapsedTimeNs / 100000000.0;
+	std::cout << "Elapsed time radix sort: " << elapsedTimeMs << "ms" << std::endl;
+	run_time = elapsedTimeSec;
 
 	cleanup(&histogram_pipeline, &binning_pipeline);
 }

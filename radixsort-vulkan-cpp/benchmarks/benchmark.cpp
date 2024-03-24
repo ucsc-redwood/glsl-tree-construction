@@ -15,7 +15,9 @@ class PipeBenchmark : public Pipe
 {
 
 public:
-    PipeBenchmark(AppParams app_params) : Pipe(app_params) {}
+    PipeBenchmark(AppParams app_params) : Pipe(app_params) {
+        
+    }
 
     void BM_GPU_Morton(bm::State &st)
     {

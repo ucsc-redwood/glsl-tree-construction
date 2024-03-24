@@ -350,6 +350,7 @@ void Pipe::morton(const int num_blocks, const int queue_idx)
   Morton morton_stage = Morton();
   morton_stage.run(num_blocks, queue_idx, u_points, u_morton_keys, u_points_buffer, u_morton_keys_buffer, params_.n, params_.min_coord, params_.getRange());
   run_time = morton_stage.time();
+  
   /*
   for (int i = 0; i < 1024; i++){
     printf("morton_keys[%d]: %d\n", i, u_morton_keys[i]);
@@ -455,10 +456,10 @@ void Pipe::edge_count(const int num_blocks, const int queue_idx)
   std::cout << "start edge count" << std::endl;
   auto edge_count_stage = EdgeCount();
   edge_count_stage.run(num_blocks, queue_idx, brt.u_prefix_n, brt.u_parent, u_edge_count, brt.u_prefix_n_buffer, brt.u_parent_buffer, u_edge_count_buffer, n_unique_keys);
-  for (int i = 0; i < 1024; i++)
-  {
-    printf("edge_count[%d]: %d\n", i, u_edge_count[i]);
-  }
+  // for (int i = 0; i < 1024; i++)
+  // {
+  //   printf("edge_count[%d]: %d\n", i, u_edge_count[i]);
+  // }
 }
 
 void Pipe::prefix_sum(const int num_blocks, const int queue_idx)
