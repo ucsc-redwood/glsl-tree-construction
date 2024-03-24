@@ -50,22 +50,24 @@ public:
             radix_sort(n_blocks, 0);
             st.SetIterationTime(time());
         }
-        // if (n_blocks != MAX_BLOCKS)
-        // {
-        //     u_morton_keys = copy_of_u_morton_keys;
-        // }
+        if (n_blocks != MAX_BLOCKS)
+        {
+            u_morton_keys = copy_of_u_morton_keys;
+        }
     }
 
     void BM_GPU_Unique(bm::State &st)
     {
         int n_blocks = st.range(0);
+        uint32_t aligned_size = ((params_.n + 4 - 1) / 4) * 4;
+        const uint32_t num_blocks = (aligned_size + PARTITION_SIZE - 1) / PARTITION_SIZE;
 
         uint32_t *copy_of_u_morton_keys = new uint32_t[params_.n];
         std::copy(u_morton_keys, u_morton_keys + params_.n, copy_of_u_morton_keys);
 
         std::fill_n(u_unique_morton_keys, params_.n, 0);
         std::fill_n(unique_tmp.contributions, params_.n, 0);
-        std::fill_n(unique_tmp.reductions, n_blocks, 0);
+        std::fill_n(unique_tmp.reductions, num_blocks, 0);
         std::fill_n(unique_tmp.index, 1, 0);
 
         for (auto _ : st)
@@ -73,6 +75,7 @@ public:
             unique(n_blocks, 0);
             st.SetIterationTime(time());
         }
+
         if (n_blocks != MAX_BLOCKS)
         {
             u_morton_keys = copy_of_u_morton_keys;
