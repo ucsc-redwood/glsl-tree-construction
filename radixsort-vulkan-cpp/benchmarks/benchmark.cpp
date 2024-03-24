@@ -19,7 +19,7 @@ public:
 
     void BM_GPU_Morton(bm::State &st)
     {
-        int n_blocks = 128;
+        int n_blocks = st.range(0);
         std::fill_n(u_points, params_.n, glm::vec4(0.0f, 0.0f, 0.0f, 0.0f));
         std::fill_n(u_morton_keys, params_.n, 0);
 
@@ -32,7 +32,7 @@ public:
 
     void BM_GPU_Sort(bm::State &st)
     {
-        int n_blocks = 128;
+        int n_blocks = st.range(0);
         constexpr auto radix = 256;
         constexpr auto passes = 4;
         const auto binning_thread_blocks = (params_.n + 7680 - 1) / 7680;
@@ -87,21 +87,24 @@ static void RegisterBenchmarks(PipeBenchmark &BenchmarkInstance)
         ->UseManualTime()
         ->Unit(benchmark::kMillisecond)
         ->RangeMultiplier(2)
-        ->Range(1, 1)
+        ->Iterations(1)
+        ->Range(1, MAX_BLOCKS)
         ->ArgName("GridSize");
 
     benchmark::RegisterBenchmark("BM_GPU_Sort", [&BenchmarkInstance](benchmark::State &st)
                                  { BenchmarkInstance.BM_GPU_Sort(st); })
         ->UseManualTime()
         ->Unit(benchmark::kMillisecond)
+        ->Iterations(1)
         ->RangeMultiplier(2)
-        ->Range(1, 1)
+        ->Range(1, MAX_BLOCKS)
         ->ArgName("GridSize");
 
     benchmark::RegisterBenchmark("BM_GPU_Unique", [&BenchmarkInstance](benchmark::State &st)
                                  { BenchmarkInstance.BM_GPU_Unique(st); })
         ->UseManualTime()
         ->Unit(benchmark::kMillisecond)
+        ->Iterations(1)
         ->RangeMultiplier(2)
         ->Range(1, MAX_BLOCKS)
         ->ArgName("GridSize");

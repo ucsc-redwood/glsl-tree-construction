@@ -360,7 +360,7 @@ void Pipe::morton(const int num_blocks, const int queue_idx)
 
 void Pipe::radix_sort(const int num_blocks, const int queue_idx)
 {
-  std::cout << "start radix sort" << std::endl;
+  // std::cout << "start radix sort" << std::endl;
   auto radixsort_stage = RadixSort();
   radixsort_stage.run(num_blocks,
                       queue_idx,
@@ -388,7 +388,7 @@ void Pipe::radix_sort(const int num_blocks, const int queue_idx)
 
 void Pipe::unique(const int num_blocks, const int queue_idx)
 {
-  std::cout << "start unique" << std::endl;
+  // std::cout << "start unique" << std::endl;
   auto unique_stage = Unique();
   unique_stage.run(num_blocks,
                    queue_idx,
@@ -403,6 +403,8 @@ void Pipe::unique(const int num_blocks, const int queue_idx)
                    unique_tmp.reductions_buffer,
                    unique_tmp.index_buffer,
                    params_.n);
+
+  run_time = unique_stage.time();
   /*
   for (int i = 0; i < 200; ++i)
     printf("contributions[%d]: %d\n", i, unique_tmp.contributions[i]);
