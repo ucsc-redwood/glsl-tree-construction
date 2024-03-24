@@ -350,7 +350,7 @@ void Pipe::morton(const int num_blocks, const int queue_idx)
   Morton morton_stage = Morton();
   morton_stage.run(num_blocks, queue_idx, u_points, u_morton_keys, u_points_buffer, u_morton_keys_buffer, params_.n, params_.min_coord, params_.getRange());
   run_time = morton_stage.time();
-  
+
   /*
   for (int i = 0; i < 1024; i++){
     printf("morton_keys[%d]: %d\n", i, u_morton_keys[i]);
@@ -360,7 +360,7 @@ void Pipe::morton(const int num_blocks, const int queue_idx)
 
 void Pipe::radix_sort(const int num_blocks, const int queue_idx)
 {
-  // std::cout << "start radix sort" << std::endl;
+  std::cout << "start radix sort" << std::endl;
   auto radixsort_stage = RadixSort();
   radixsort_stage.run(num_blocks,
                       queue_idx,
@@ -388,7 +388,7 @@ void Pipe::radix_sort(const int num_blocks, const int queue_idx)
 
 void Pipe::unique(const int num_blocks, const int queue_idx)
 {
-  // std::cout << "start unique" << std::endl;
+  std::cout << "start unique" << std::endl;
   auto unique_stage = Unique();
   unique_stage.run(num_blocks,
                    queue_idx,

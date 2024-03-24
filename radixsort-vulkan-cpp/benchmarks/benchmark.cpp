@@ -15,17 +15,14 @@ class PipeBenchmark : public Pipe
 {
 
 public:
-    PipeBenchmark(AppParams app_params) : Pipe(app_params) {
-        
-    }
+    PipeBenchmark(AppParams app_params) : Pipe(app_params) {}
 
     void BM_GPU_Morton(bm::State &st)
     {
-        int n_blocks = st.range(0);
+        int n_blocks = 128;
         std::fill_n(u_points, params_.n, glm::vec4(0.0f, 0.0f, 0.0f, 0.0f));
         std::fill_n(u_morton_keys, params_.n, 0);
 
-        // Run the benchmark with n_blocks
         for (auto _ : st)
         {
             morton(n_blocks, 0);
@@ -35,7 +32,7 @@ public:
 
     void BM_GPU_Sort(bm::State &st)
     {
-        int n_blocks = st.range(0);
+        int n_blocks = 128;
         constexpr auto radix = 256;
         constexpr auto passes = 4;
         const auto binning_thread_blocks = (params_.n + 7680 - 1) / 7680;
@@ -53,10 +50,10 @@ public:
             radix_sort(n_blocks, 0);
             st.SetIterationTime(time());
         }
-        if (n_blocks != MAX_BLOCKS)
-        {
-            u_morton_keys = copy_of_u_morton_keys;
-        }
+        // if (n_blocks != MAX_BLOCKS)
+        // {
+        //     u_morton_keys = copy_of_u_morton_keys;
+        // }
     }
 
     void BM_GPU_Unique(bm::State &st)
@@ -65,10 +62,12 @@ public:
 
         uint32_t *copy_of_u_morton_keys = new uint32_t[params_.n];
         std::copy(u_morton_keys, u_morton_keys + params_.n, copy_of_u_morton_keys);
-        // u_unique_morton_keys,
-        //  unique_tmp.contributions,
-        //  unique_tmp.reductions,
-        //   unique_tmp.index,
+
+        std::fill_n(u_unique_morton_keys, params_.n, 0);
+        std::fill_n(unique_tmp.contributions, params_.n, 0);
+        std::fill_n(unique_tmp.reductions, n_blocks, 0);
+        std::fill_n(unique_tmp.index, 1, 0);
+
         for (auto _ : st)
         {
             unique(n_blocks, 0);
@@ -88,7 +87,7 @@ static void RegisterBenchmarks(PipeBenchmark &BenchmarkInstance)
         ->UseManualTime()
         ->Unit(benchmark::kMillisecond)
         ->RangeMultiplier(2)
-        ->Range(1, MAX_BLOCKS)
+        ->Range(1, 1)
         ->ArgName("GridSize");
 
     benchmark::RegisterBenchmark("BM_GPU_Sort", [&BenchmarkInstance](benchmark::State &st)
@@ -96,17 +95,16 @@ static void RegisterBenchmarks(PipeBenchmark &BenchmarkInstance)
         ->UseManualTime()
         ->Unit(benchmark::kMillisecond)
         ->RangeMultiplier(2)
-        ->Range(1, MAX_BLOCKS)
+        ->Range(1, 1)
         ->ArgName("GridSize");
 
     benchmark::RegisterBenchmark("BM_GPU_Unique", [&BenchmarkInstance](benchmark::State &st)
                                  { BenchmarkInstance.BM_GPU_Unique(st); })
         ->UseManualTime()
         ->Unit(benchmark::kMillisecond)
-        ->Iterations(1);
-    // ->RangeMultiplier(2)
-    // ->Range(1, MAX_BLOCKS)
-    // ->ArgName("GridSize");
+        ->RangeMultiplier(2)
+        ->Range(1, MAX_BLOCKS)
+        ->ArgName("GridSize");
 }
 
 int main(int argc, char **argv)

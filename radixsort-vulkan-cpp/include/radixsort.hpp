@@ -163,7 +163,8 @@ void RadixSort::run(const int logical_blocks,
 	cmdBufInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 	// preparation
 	vkBeginCommandBuffer(commandBuffer, &cmdBufInfo);
-	vkCmdResetQueryPool(commandBuffer, singleton.query_pool_timestamps, 0, 2); // added for time
+	vkCmdResetQueryPool(commandBuffer, singleton.query_pool_timestamps, 0, 2);
+	vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, singleton.query_pool_timestamps, 0);
 	VkBufferMemoryBarrier b_sort_barrier = create_buffer_barrier(&b_sort_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
 	VkBufferMemoryBarrier g_histogram_barrier = create_buffer_barrier(&g_histogram_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
 	VkBufferMemoryBarrier b_alt_barrier = create_buffer_barrier(&b_alt_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
@@ -241,9 +242,7 @@ void RadixSort::run(const int logical_blocks,
 	radix_sort_push_constant.pass_num = 3;
 	radix_sort_push_constant.radix_shift = 24;
 	vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RadixSortPushConstant), &radix_sort_push_constant);
-	vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, singleton.query_pool_timestamps, 0); // added for time
 	vkCmdDispatch(commandBuffer, logical_blocks, 1, 1);
-	vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, singleton.query_pool_timestamps, 1); // added for time
 	b_sort_barrier = create_buffer_barrier(&b_sort_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
 	b_alt_barrier = create_buffer_barrier(&b_alt_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
 	g_histogram_barrier = create_buffer_barrier(&g_histogram_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
@@ -254,7 +253,7 @@ void RadixSort::run(const int logical_blocks,
 	create_pipeline_barrier(&g_histogram_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 	create_pipeline_barrier(&b_index_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 	create_pipeline_barrier(&b_pass_first_histogram_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-
+	vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, singleton.query_pool_timestamps, 1);
 	vkEndCommandBuffer(commandBuffer);
 
 	// create fence
@@ -269,9 +268,9 @@ void RadixSort::run(const int logical_blocks,
 	vkGetQueryPoolResults(singleton.device, singleton.query_pool_timestamps, 0, 2, sizeof(timestamps), timestamps, sizeof(uint64_t), VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
 
 	uint64_t elapsedTimeNs = timestamps[1] - timestamps[0];
-	double elapsedTimeMs = elapsedTimeNs / 1000000.0;
+	//double elapsedTimeMs = elapsedTimeNs / 1000000.0;
 	double elapsedTimeSec = elapsedTimeNs / 100000000.0;
-	std::cout << "Elapsed time radix sort: " << elapsedTimeMs << "ms" << std::endl;
+	// std::cout << "Elapsed time radix sort: " << elapsedTimeMs << "ms" << std::endl;
 	run_time = elapsedTimeSec;
 
 	cleanup(&histogram_pipeline, &binning_pipeline);

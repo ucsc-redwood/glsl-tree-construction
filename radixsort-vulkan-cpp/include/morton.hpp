@@ -137,8 +137,8 @@ void Morton::run(const int logical_blocks, const int queue_idx, glm::vec4 *data,
 
 	uint64_t elapsedTimeNs = timestamps[1] - timestamps[0];
 	double elapsedTimeMs = elapsedTimeNs / 1000000.0;
-	double elapsedTimeSec = elapsedTimeMs / 1000;
-	std::cout << "Elapsed time morton: " << elapsedTimeMs << "ms" << std::endl;
+	double elapsedTimeSec = elapsedTimeNs / 100000000.0;
+	// std::cout << "Elapsed time morton: " << elapsedTimeMs << "ms" << std::endl;
 	run_time = elapsedTimeSec;
 
 	cleanup(&pipeline);
