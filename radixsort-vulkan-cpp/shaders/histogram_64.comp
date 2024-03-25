@@ -1,0 +1,134 @@
+#version 450
+#extension GL_KHR_shader_subgroup_basic: enable
+#extension GL_KHR_shader_subgroup_ballot: enable
+#extension GL_KHR_shader_subgroup_arithmetic: enable
+#extension GL_KHR_shader_subgroup_vote: enable
+#extension GL_KHR_shader_subgroup_shuffle_relative : enable
+#extension GL_KHR_shader_subgroup_shuffle : enable
+
+//#define input_size 2000000
+#define PART_SIZE 3840
+
+#define RADIX_BIN 256
+#define RADIX_LOG 8
+#define RADIX_MASK 255 // Mask of digit bins
+
+#define SEC_RADIX_START     256     //Offset for retrieving values from global buffer
+#define THIRD_RADIX_START   512     //Offset for retrieving values from global buffer
+#define FOURTH_RADIX_START  768     //Offset for retrieving values from global buffer
+
+#define LANE_COUNT 64 // number of threads in a subgroup
+#define LANE_MASK 63
+#define LANE_LOG 6
+
+#define LANE gl_LocalInvocationID.x // the idx of thread in the subgroup
+#define SUBGROUP_IDX  gl_SubgroupID // the idx of subgroup the thread belongs to might be wrong
+#define SUBGROUP_THREAD_IDX gl_GlobalInvocationID.x //(LANE + (SUBGROUP_IDX << LANE_LOG)) // the subgroup relative thread idx                                 
+
+
+//For the upfront global histogram kernel
+#define G_HIST_PART_SIZE	65536
+#define G_HIST_VEC_SIZE		16384
+
+layout(set = 0, binding = 0)  buffer BSortBuffer {
+    uint b_sort[];
+};
+
+layout(set = 0, binding = 1)  buffer coherent BGlobalHist {
+    uint b_globalHist[1024];
+};
+
+layout(push_constant) uniform Constant{
+    uint pass_num;
+    uint radix_shift;
+    uint n;
+    uint e_workgroups;
+};
+
+
+
+
+layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
+
+shared uint s_globalHistFirst[RADIX_BIN * 2];
+shared uint s_globalHistSec[RADIX_BIN * 2];
+shared uint s_globalHistThird[RADIX_BIN * 2];
+shared uint s_globalHistFourth[RADIX_BIN * 2];
+
+
+
+uint InclusiveWarpScanCircularShift(uint val){
+    for (uint i = 1; i <= (LANE_COUNT>>1); i <<= 1){
+        const uint t = subgroupShuffleUp(val, i);
+        if (gl_SubgroupInvocationID >= i)
+            val += t;
+    }
+    return subgroupShuffle(val, gl_SubgroupInvocationID + LANE_MASK & LANE_MASK);
+}
+
+
+
+void k_GlobalHistogram(){
+    for (uint i = gl_LocalInvocationID.x; i < RADIX_BIN * 2; i += gl_WorkGroupSize.x){
+        s_globalHistFirst[i] = 0;
+        s_globalHistSec[i] = 0;
+        s_globalHistThird[i] = 0;
+        s_globalHistFourth[i] = 0;
+    }
+    groupMemoryBarrier();
+    barrier();
+
+    // warp level histogram
+    {
+        const uint segmentIndex = gl_LocalInvocationID.x / 64 * RADIX_BIN;
+        const uint partition_end = (gl_WorkGroupID.x == e_workgroups -1) ? n : (gl_WorkGroupID.x + 1) * PART_SIZE;
+        uint t;
+            for (uint i = gl_LocalInvocationID.x + gl_WorkGroupID.x * PART_SIZE; i < partition_end; i += gl_WorkGroupSize.x){
+                const uint t = b_sort[i];
+
+                atomicAdd(s_globalHistFirst[segmentIndex + ((t) & RADIX_MASK)], 1);
+                atomicAdd(s_globalHistSec[segmentIndex + ((t >> 8) & RADIX_MASK)], 1);
+                atomicAdd(s_globalHistThird[segmentIndex + ((t >> 16) & RADIX_MASK)], 1);
+                atomicAdd(s_globalHistFourth[segmentIndex + ((t >> 24) & RADIX_MASK)], 1);
+                /*
+                atomicAdd(s_globalHistFirst[segmentIndex + ((t.y) & RADIX_MASK)], 1);
+                atomicAdd(s_globalHistSec[segmentIndex + ((t.y >> 8) & RADIX_MASK)], 1);
+                atomicAdd(s_globalHistThird[segmentIndex + ((t.y >> 16) & RADIX_MASK)], 1);
+                atomicAdd(s_globalHistFourth[segmentIndex + ((t.y >> 24) & RADIX_MASK)], 1);
+                
+                atomicAdd(s_globalHistFirst[segmentIndex + ((t.z) & RADIX_MASK)], 1);
+                atomicAdd(s_globalHistSec[segmentIndex + ((t.z >> 8) & RADIX_MASK)], 1);
+                atomicAdd(s_globalHistThird[segmentIndex + ((t.z >> 16) & RADIX_MASK)], 1);
+                atomicAdd(s_globalHistFourth[segmentIndex + ((t.z >> 24) & RADIX_MASK)], 1);
+                
+                atomicAdd(s_globalHistFirst[segmentIndex + ((t.w) & RADIX_MASK)], 1);
+                atomicAdd(s_globalHistSec[segmentIndex + ((t.w >> 8) & RADIX_MASK)], 1);
+                atomicAdd(s_globalHistThird[segmentIndex + ((t.w >> 16) & RADIX_MASK)], 1);
+                atomicAdd(s_globalHistFourth[segmentIndex + ((t.w >> 24) & RADIX_MASK)], 1);
+                */
+                
+            }
+
+    }
+
+    groupMemoryBarrier();
+    barrier();
+
+    // reduce counts and add to device memory
+    for (uint i = gl_LocalInvocationID.x; i < RADIX_BIN; i += gl_WorkGroupSize.x){
+        atomicAdd(b_globalHist[i], s_globalHistFirst[i] + s_globalHistFirst[i + RADIX_BIN]);
+        atomicAdd(b_globalHist[i + SEC_RADIX_START], s_globalHistSec[i] + s_globalHistSec[i + RADIX_BIN]);
+        atomicAdd(b_globalHist[i + THIRD_RADIX_START], s_globalHistThird[i] + s_globalHistThird[i + RADIX_BIN]);
+        atomicAdd(b_globalHist[i + FOURTH_RADIX_START], s_globalHistFourth[i] + s_globalHistFourth[i + RADIX_BIN]);
+    }
+
+}
+
+
+void main() {
+    //uint logical_blocks = uint(ceil(float(n) / float(PART_SIZE)));
+    //for (uint zheyuan_block_id = gl_WorkGroupID.x; zheyuan_block_id < logical_blocks; zheyuan_block_id += gl_NumWorkGroups.x){
+        k_GlobalHistogram();
+    //}
+    //k_GlobalHistogram();
+}

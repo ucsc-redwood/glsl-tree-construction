@@ -127,11 +127,11 @@ void k_DigitBinning(uint zheyuan_block_id, uint logical_blocks){
     barrier();
 
     const uint partitionIndex = s_subgroupHistograms[BIN_PART_SIZE - 1];
-    /*
+
     // load global histogram into shared memory
     if (gl_LocalInvocationID.x < RADIX_BIN)
         s_localHistograms[gl_LocalInvocationID.x] = b_globalHist[gl_LocalInvocationID.x + (radix_shift << 5)];
-    */
+    
     
     // handle size that is not prect multiple of parition size
     if (partitionIndex < logical_blocks -1){
@@ -177,20 +177,20 @@ void k_DigitBinning(uint zheyuan_block_id, uint logical_blocks){
                 s_subgroupHistograms[i] = reduction - s_subgroupHistograms[i];
             }
             //uint val = ((partitionIndex > 0) ? FLAG_AGGREGATE : FLAG_INCLUSIVE) | reduction << 2;
-            atomicAdd(b_passHist[gl_LocalInvocationID.x + (partitionIndex + 1) * RADIX_BIN][pass_num], FLAG_AGGREGATE | (reduction << 2));
+            atomicAdd(b_passHist[gl_LocalInvocationID.x* logical_blocks + partitionIndex][pass_num],((partitionIndex > 0) ? FLAG_AGGREGATE : FLAG_INCLUSIVE) | (reduction << 2));
             // exclusive prefix sum across reduction
-            s_localHistograms[gl_LocalInvocationID.x] = InclusiveWarpScanCircularShift(reduction);
+            s_subgroupHistograms[gl_LocalInvocationID.x] = InclusiveWarpScanCircularShift(reduction);
         }
         groupMemoryBarrier();
         barrier();
 
         if (gl_LocalInvocationID.x < (RADIX_BIN >> LANE_LOG))
-            s_localHistograms[gl_LocalInvocationID.x << LANE_LOG] = subgroupExclusiveAdd(s_localHistograms[gl_LocalInvocationID.x << LANE_LOG]);//ActiveExclusiveWarpScan(s_subgroupHistograms[gl_LocalInvocationID.x << LANE_LOG]);
+            s_subgroupHistograms[gl_LocalInvocationID.x << LANE_LOG] = subgroupExclusiveAdd(s_subgroupHistograms[gl_LocalInvocationID.x << LANE_LOG]);//ActiveExclusiveWarpScan(s_subgroupHistograms[gl_LocalInvocationID.x << LANE_LOG]);
         groupMemoryBarrier();
         barrier();
 
         if ((gl_LocalInvocationID.x  < RADIX_BIN) && (gl_SubgroupInvocationID) > 0)
-            s_localHistograms[gl_LocalInvocationID.x] += subgroupBroadcast(s_localHistograms[gl_LocalInvocationID.x -1], 1); // or subgroupShuffle(s_subgroupHistograms[gl_LocalInvocationID.x], 1)
+            s_subgroupHistograms[gl_LocalInvocationID.x] += subgroupBroadcast(s_subgroupHistograms[gl_LocalInvocationID.x -1], 1); // or subgroupShuffle(s_subgroupHistograms[gl_LocalInvocationID.x], 1)
         groupMemoryBarrier();
         barrier();
 
@@ -198,31 +198,25 @@ void k_DigitBinning(uint zheyuan_block_id, uint logical_blocks){
         if (gl_SubgroupID > 0){
             for (uint i = 0; i < BIN_KEYS_PER_THREAD; ++i){
                 const uint t2 = keys[i] >> radix_shift & RADIX_MASK;
-                _offsets[i] += s_subgroupHistograms[(gl_SubgroupID << RADIX_LOG) + t2] + s_localHistograms[t2]; 
+                _offsets[i] += s_subgroupHistograms[(gl_SubgroupID << RADIX_LOG) + t2] + s_subgroupHistograms[t2]; 
             }
         }else{
             for (uint i = 0; i < BIN_KEYS_PER_THREAD; ++i)  {
-                _offsets[i] += s_localHistograms[keys[i] >> radix_shift & RADIX_MASK];
+                _offsets[i] += s_subgroupHistograms[keys[i] >> radix_shift & RADIX_MASK];
             }
         }
 
-        // scatter keys into shared memory
-        for(uint i = 0; i < BIN_KEYS_PER_THREAD; i++){
-            s_subgroupHistograms[_offsets[i]] = keys[i];
-        }
-
         // split the warps into single thread cooperative groups and lookback
-        /*
         if (gl_LocalInvocationID.x < RADIX_BIN){
-
+            if (partitionIndex > 0){
                 uint reduction = 0;
-                for( int k = int(partitionIndex); k >= 0; ){
-                    const uint flagPayload = b_passHist[gl_LocalInvocationID.x  + k*RADIX_BIN][pass_num];
+                for( int k = int(partitionIndex); k > 0; ){
+                    const uint flagPayload = b_passHist[gl_LocalInvocationID.x * logical_blocks + k - 1][pass_num];
                     
                     if ((flagPayload & FLAG_MASK) == FLAG_INCLUSIVE){
                         reduction += flagPayload >> 2;
-                        atomicAdd(b_passHist[gl_LocalInvocationID.x + (partitionIndex + 1) * RADIX_BIN][pass_num], 1 | (reduction << 2));
-                        s_localHistograms[gl_LocalInvocationID.x] += reduction - s_localHistograms[gl_LocalInvocationID.x];
+                        atomicAdd(b_passHist[gl_LocalInvocationID.x * logical_blocks + partitionIndex][pass_num], 1 | (reduction << 2));
+                        s_localHistograms[gl_LocalInvocationID.x] += reduction - s_subgroupHistograms[gl_LocalInvocationID.x];
                         break;
                     }
 
@@ -231,25 +225,99 @@ void k_DigitBinning(uint zheyuan_block_id, uint logical_blocks){
                         k--;
                     }
                 }
-            
+                
+            }else{
+                s_localHistograms[gl_LocalInvocationID.x] -= s_subgroupHistograms[gl_LocalInvocationID.x];
+            }
         }
         
-        */
         groupMemoryBarrier();
         barrier();
 
-        //scatter keys into device memory
-        if (partitionIndex < logical_blocks - 1){
-            for (uint i = gl_LocalInvocationID.x; i < BIN_PART_SIZE; i += gl_WorkGroupSize.x){
-                pass_num % 2 == 0 ? b_alt[s_localHistograms[s_subgroupHistograms[i] >> radix_shift & RADIX_MASK] + i] = s_subgroupHistograms[i] : b_sort[s_localHistograms[s_subgroupHistograms[i] >> radix_shift & RADIX_MASK] + i] = s_subgroupHistograms[i];
-            }
+        //scatter keys into shared memory
+        for (uint i = 0; i < BIN_KEYS_PER_THREAD; ++i){
+            s_subgroupHistograms[_offsets[i]] = keys[i];
         }
         groupMemoryBarrier();
         barrier();
+
+        // scatter keys into device memory
+        for (uint i = gl_LocalInvocationID.x; i < BIN_PART_SIZE; i += gl_WorkGroupSize.x){
+           pass_num % 2 == 0 ? b_alt[s_localHistograms[s_subgroupHistograms[i] >> radix_shift & RADIX_MASK] + i] = s_subgroupHistograms[i] : b_sort[s_localHistograms[s_subgroupHistograms[i] >> radix_shift & RADIX_MASK] + i] = s_subgroupHistograms[i];
+        }
         
     }
     
 
+    
+    // process final partition
+    if (partitionIndex == logical_blocks - 1){
+        groupMemoryBarrier();
+        barrier();
+
+        if (partitionIndex > 0){
+            // lookback
+            if(gl_LocalInvocationID.x < RADIX_BIN){
+                uint reduction = 0;    
+                for (int k = int(partitionIndex); k > 0;){
+                    const uint flagPayload = b_passHist[gl_LocalInvocationID.x * logical_blocks + k - 1][pass_num];
+
+                    if ((flagPayload & FLAG_MASK) == FLAG_INCLUSIVE){
+                        reduction += flagPayload >> 2;
+                        s_localHistograms[gl_LocalInvocationID.x] += reduction;
+                        break;
+                    }
+
+                    if ((flagPayload & FLAG_MASK) == FLAG_AGGREGATE){
+                        reduction += flagPayload >> 2;
+                        k--;
+                    }
+                }     
+            
+            }
+            groupMemoryBarrier();
+            barrier();
+        }
+    
+        
+        const uint partEnd = BIN_PART_START + BIN_PART_SIZE;
+        for (uint i = gl_LocalInvocationID.x + BIN_PART_START; i < partEnd; i += gl_WorkGroupSize.x){
+            uint key;
+            uint offset;
+            uint warpFlags_x = 0xFFFFFFFF;
+            uint warpFlags_y = 0xFFFFFFFF;
+
+            if ( i < n)
+                key = pass_num % 2 == 0 ? b_sort[i] : b_alt[i];
+            
+            for (uint k = 0; k < RADIX_LOG; ++k){
+                const bool t = (key >> k + radix_shift & 1) > 0;
+                uvec4 ballot = subgroupBallot(t);
+                warpFlags_x &= (t ? 0 : 0xFFFFFFFF) ^ ballot.x;
+                warpFlags_y &= (t ? 0 : 0xFFFFFFFF) ^ ballot.y;
+            }
+
+            uvec4 warpFlags = uvec4(warpFlags_x,warpFlags_y,0,0);
+            const uint bits = subgroupBallotExclusiveBitCount(uvec4(warpFlags_x,warpFlags_y,0,0));
+
+            for (uint k = 0; k < BIN_SUBGROUPS; ++k){
+                uint prev;
+                if (gl_SubgroupID.x == k && bits == 0 && i < n){
+                    prev = atomicAdd(s_localHistograms[key >> radix_shift & RADIX_MASK],  bitCount(warpFlags_x) + bitCount(warpFlags_y));
+                }
+                if (gl_SubgroupID.x == k){
+                    offset = subgroupShuffle(prev, subgroupBallotFindLSB(warpFlags)) + bits;
+                }
+                groupMemoryBarrier();
+                barrier();
+            }
+
+            if (i < n)
+               pass_num % 2 == 0 ? b_alt[offset] = key : b_sort[offset] = key;
+        }
+        
+    }
+    
     
 }
 
@@ -257,7 +325,8 @@ void k_DigitBinning(uint zheyuan_block_id, uint logical_blocks){
 void main(){
     uint logical_blocks = uint(ceil(float(n) / float(BIN_PART_SIZE)));
     for (uint zheyuan_block_id = gl_WorkGroupID.x; zheyuan_block_id < logical_blocks; zheyuan_block_id += gl_NumWorkGroups.x){
-        k_DigitBinning(zheyuan_block_id, logical_blocks);
+        if (zheyuan_block_id < logical_blocks){
+            k_DigitBinning(zheyuan_block_id, logical_blocks);
+        }
     }
-    
 }

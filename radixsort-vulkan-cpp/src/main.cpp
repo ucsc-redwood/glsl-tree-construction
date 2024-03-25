@@ -27,7 +27,8 @@ int main(const int argc, const char* argv[]){
     
     pipe.morton(n_blocks, 0);
 
-    pipe.radix_sort(n_blocks, 0);
+    //pipe.radix_sort(n_blocks, 0);
+    pipe.radix_sort_alt(n_blocks, 0);
     
     pipe.unique(n_blocks, 0);
 

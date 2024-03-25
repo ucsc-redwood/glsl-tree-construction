@@ -4,6 +4,7 @@
 #include "init.hpp"
 #include "morton.hpp"
 #include "radixsort.hpp"
+#include "radix_sort_64.hpp"
 #include "unique.hpp"
 #include "radix_tree.hpp"
 #include "edge_count.hpp"
@@ -22,6 +23,7 @@ class Pipe : public ApplicationBase {
   void init(const int num_blocks, const int queue_idx);
   void morton(const int num_blocks, const int queue_idx);
   void radix_sort(const int num_blocks, const int queue_idx); 
+  void radix_sort_alt(const int num_blocks, const int queue_idx);
   void unique(const int num_blocks, const int queue_idx);
   void radix_tree(const int num_blocks, const int queue_idx);
   void edge_count(const int num_blocks, const int queue_idx);
@@ -97,16 +99,19 @@ class Pipe : public ApplicationBase {
     uint32_t* u_global_histogram;      // 256 * 4
     uint32_t* u_index;                 // 4
     glm::uvec4* u_pass_histogram;  // 256 * xxx
+    uint32_t* u_pass_histogram_64;
 
     VkBuffer u_sort_alt_buffer;
     VkBuffer u_global_histogram_buffer;
     VkBuffer u_index_buffer;
     VkBuffer u_pass_histogram_buffer;
+    VkBuffer u_pass_histogram_64_buffer;
 
     VkDeviceMemory u_sort_alt_memory;
     VkDeviceMemory u_global_histogram_memory;
     VkDeviceMemory u_index_memory;
     VkDeviceMemory u_pass_histogram_memory;
+    VkDeviceMemory u_pass_histogram_64_memory;
   } sort_tmp;
 
   struct {
@@ -213,6 +218,9 @@ void Pipe::allocate() {
     sort_tmp.u_pass_histogram = static_cast<glm::uvec4*>(mapped);
     std::fill_n(sort_tmp.u_pass_histogram, radix * max_binning_thread_blocks, glm::uvec4(0, 0, 0, 0));
 
+    create_shared_empty_storage_buffer(radix * passes* max_binning_thread_blocks * sizeof(uint32_t), &sort_tmp.u_pass_histogram_64_buffer, &sort_tmp.u_pass_histogram_64_memory, &mapped);
+    sort_tmp.u_pass_histogram_64 = static_cast<uint32_t*>(mapped);
+    std::fill_n(sort_tmp.u_pass_histogram_64, radix  * passes * max_binning_thread_blocks, 0);
 
    uint32_t aligned_size = ((params_.n + 4 - 1)/ 4) * 4;
    const uint32_t num_blocks = (aligned_size + PARTITION_SIZE - 1) / PARTITION_SIZE;
@@ -314,6 +322,10 @@ Pipe::~Pipe() {
   vkDestroyBuffer(singleton.device, sort_tmp.u_pass_histogram_buffer, nullptr);
   vkFreeMemory(singleton.device, sort_tmp.u_pass_histogram_memory, nullptr);
 
+  vkUnmapMemory(singleton.device, sort_tmp.u_pass_histogram_64_memory);
+  vkDestroyBuffer(singleton.device, sort_tmp.u_pass_histogram_64_buffer, nullptr);
+  vkFreeMemory(singleton.device, sort_tmp.u_pass_histogram_64_memory, nullptr);
+
 
   // Temporary storages for Unique
   vkUnmapMemory(singleton.device, unique_tmp.contributions_memory);
@@ -352,6 +364,11 @@ void Pipe::morton(const int num_blocks, const int queue_idx){
     printf("morton_keys[%d]: %d\n", i, u_morton_keys[i]);
   }
   */
+ /*
+ for(int i = 0; i < params_.n; ++i){
+    u_morton_keys[i] = i;
+ }
+ */
 }
 
 void Pipe::radix_sort(const int num_blocks, const int queue_idx){
@@ -378,6 +395,38 @@ void Pipe::radix_sort(const int num_blocks, const int queue_idx){
     printf("sorted_key[%d]: %d\n", i, u_morton_keys[i]);
   }
   
+}
+
+
+void Pipe::radix_sort_alt(const int num_blocks, const int queue_idx){
+  std::cout << "start radix sort alt"<<std::endl;
+  auto radixsort_stage = RadixSort64();
+  radixsort_stage.run(num_blocks,
+  queue_idx,
+  u_morton_keys,
+  sort_tmp.u_sort_alt,
+  sort_tmp.u_global_histogram,
+  sort_tmp.u_index,
+  sort_tmp.u_pass_histogram_64,
+  u_morton_keys_buffer,
+  sort_tmp.u_sort_alt_buffer,
+  sort_tmp.u_global_histogram_buffer,
+  sort_tmp.u_index_buffer,
+  sort_tmp.u_pass_histogram_64_buffer,
+  params_.n);
+  for (int i = 0; i < 1024; ++i){
+    printf("global_histogram[%d]: %d\n", i, sort_tmp.u_global_histogram[i]);
+  }
+  for (int i = 0; i < 1024; i++){
+    printf("pass_histogram[%d]: %d\n", i, sort_tmp.u_pass_histogram_64[i]);
+  }
+  for (int i = 0; i < 1024; i++){
+    printf("sorted_key[%d]: %d\n", i, u_morton_keys[i]);
+  }
+  for (int i = params_.n-200; i < params_.n; i++){
+    printf("sorted_key[%d]: %d\n", i, u_morton_keys[i]);
+  }
+
 }
 
 void Pipe::unique(const int num_blocks, const int queue_idx){
