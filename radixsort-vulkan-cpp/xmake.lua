@@ -22,6 +22,10 @@ if is_mode("release") then
     set_optimize("fastest")
 end
 
+before_build(function(target)
+    os.exec("python3 compile_shaders.py")
+end)
+
 after_build(function(target)
     platform = os.host()
     arch = os.arch()

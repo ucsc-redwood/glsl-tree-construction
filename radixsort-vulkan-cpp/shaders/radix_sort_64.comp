@@ -356,7 +356,7 @@ void k_DigitBinning(uint block_id, uint logical_blocks){
         clear_shared_memory(gl_LocalInvocationID.x);
         assign_partition_tile(gl_LocalInvocationID.x, partition_index);
     }
-    /*
+    
     if (LANE_COUNT <= 16){
         assign_partition_tile(gl_LocalInvocationID.x, partition_index);
         groupMemoryBarrier();
@@ -365,7 +365,7 @@ void k_DigitBinning(uint block_id, uint logical_blocks){
         groupMemoryBarrier();
         barrier();
     }
-    */
+    
     if (partition_index < logical_blocks - 1){
         if (LANE_COUNT >= 16){
             load_keys_ge16(gl_LocalInvocationID.x, partition_index, keys);
