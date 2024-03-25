@@ -389,6 +389,8 @@ void Pipe::radix_sort(const int num_blocks, const int queue_idx){
   sort_tmp.u_pass_histogram_buffer,
   params_.n);
   
+  for (int i = 0; i < 200; ++i)
+    std::cout << "sorted_key[" << i << "]: " << u_morton_keys[i] << std::endl;
   for (int i = 0; i < 1024; i++){
     printf("sorted_key[%d]: %d\n", i, u_morton_keys[i]);
   }
@@ -526,6 +528,7 @@ void Pipe::prefix_sum(const int num_blocks, const int queue_idx){
 }
 
 void Pipe::octree(const int num_blocks, const int queue_idx){
+   std::cout << "start octree"<<std::endl;
   std::cout<<"start octree"<<std::endl;
   n_brt_nodes = n_unique_keys - 1;
   auto build_octree_stage = Octree();
@@ -552,5 +555,6 @@ void Pipe::octree(const int num_blocks, const int queue_idx){
   brt.u_has_leaf_right_buffer,
   brt.u_parent_buffer,
   brt.u_left_child_buffer);
+  std::cout << "done octree"<<std::endl;
 
 }

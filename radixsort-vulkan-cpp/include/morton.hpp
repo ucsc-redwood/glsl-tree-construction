@@ -110,6 +110,7 @@ void Morton::run(const int logical_blocks, const int queue_idx, glm::vec4* data,
 	// preparation
 	vkBeginCommandBuffer(commandBuffer, &cmdBufInfo);
 	vkCmdResetQueryPool(commandBuffer, singleton.query_pool_timestamps, 0, 2);
+	vkCmdResetQueryPool(commandBuffer, singleton.query_pool_timestamps, 0, 2);
 	VkBufferMemoryBarrier data_barrier = create_buffer_barrier(&data_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
 	VkBufferMemoryBarrier morton_keys_barrier = create_buffer_barrier(&morton_keys_buffer, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
 
@@ -125,16 +126,6 @@ void Morton::run(const int logical_blocks, const int queue_idx, glm::vec4* data,
 	vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, singleton.query_pool_timestamps, 0);
 	vkCmdDispatch(commandBuffer, logical_blocks, 1, 1);
 	vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, singleton.query_pool_timestamps, 1);
-	/*
-	morton_keys_barrier = create_buffer_barrier(&morton_keys_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
-	create_pipeline_barrier(&morton_keys_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-
-	VkBufferCopy copyRegion = {};
-	copyRegion.size = n* sizeof(uint32_t);
-	vkCmdCopyBuffer(commandBuffer, buffer.morton_keys_buffer, temp_buffer.morton_keys_buffer, 1, &copyRegion);
-	morton_keys_barrier = create_buffer_barrier(&buffer.morton_keys_buffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT);
-	create_pipeline_barrier(&morton_keys_barrier, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT);
-	*/
 
 	vkEndCommandBuffer(commandBuffer);
 
@@ -147,12 +138,12 @@ void Morton::run(const int logical_blocks, const int queue_idx, glm::vec4* data,
 
 	vkQueueWaitIdle(singleton.queues[queue_idx]);
 
-uint64_t timestamps[2];
-vkGetQueryPoolResults(singleton.device, singleton.query_pool_timestamps, 0, 2, sizeof(timestamps), timestamps, sizeof(uint64_t), VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
+	uint64_t timestamps[2];
+	vkGetQueryPoolResults(singleton.device, singleton.query_pool_timestamps, 0, 2, sizeof(timestamps), timestamps, sizeof(uint64_t), VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
 
-uint64_t elapsedTimeNs = timestamps[1] - timestamps[0];
-double elapsedTimeMs = elapsedTimeNs /1000000.0;
-std::cout << "Elapsed time: " << elapsedTimeMs << "ms" << std::endl;
+	uint64_t elapsedTimeNs = timestamps[1] - timestamps[0];
+	double elapsedTimeMs = elapsedTimeNs /1000000.0;
+	std::cout << "Elapsed time: " << elapsedTimeMs << "ms" << std::endl;
 
 	cleanup(&pipeline);
 }
