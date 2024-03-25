@@ -80,8 +80,8 @@ void write_key(uint index, uint group_shared_index){
     pass_num % 2 == 0 ? b_alt[index] = s_subgroupHistograms[group_shared_index] : b_sort[index] = s_subgroupHistograms[group_shared_index];
 }
 
-uint pass_hist_offset(uint partition_index){
-    return (((radix_shift >> 3) * e_workgroups) + partition_index) << RADIX_LOG;
+uint pass_hist_offset(uint partition_index, const uint logical_blocks){
+    return (((radix_shift >> 3) * logical_blocks) + partition_index) << RADIX_LOG;
 }
 
 uint InclusiveWarpScanCircularShift(uint val){
@@ -265,9 +265,9 @@ void subgroup_hist_exclusive_scan_ge16(uint threadidx, uint reduction){
 
 }
 
-void device_broadcast_reduction_ge16(uint threadidx, uint partition_index, uint reduction){
-    if (partition_index < e_workgroups - 1){
-        atomicAdd(b_passHist[threadidx + pass_hist_offset(partition_index + 1)], FLAG_AGGREGATE | reduction << 2);
+void device_broadcast_reduction_ge16(uint threadidx, uint partition_index, uint reduction, const uint logical_blocks){
+    if (partition_index < logical_blocks - 1){
+        atomicAdd(b_passHist[threadidx + pass_hist_offset(partition_index + 1, logical_blocks)], FLAG_AGGREGATE | reduction << 2);
         
     }
 }
@@ -295,15 +295,15 @@ void scatter_keys_shared(uint offsets[BIN_KEYS_PER_THREAD], uint keys[BIN_KEYS_P
     }
 }
 
-void lookback(uint threadidx, uint partition_index, uint exclusive_reduction){
+void lookback(uint threadidx, uint partition_index, uint exclusive_reduction, const uint logical_blocks){
     if (threadidx < RADIX_BIN){
         uint lookback_reduction = 0;
         for (uint k = partition_index; k >= 0;){
-            const uint flag_payload = b_passHist[threadidx + pass_hist_offset(k)];
+            const uint flag_payload = b_passHist[threadidx + pass_hist_offset(k, logical_blocks)];
             if ((flag_payload & FLAG_MASK) == FLAG_INCLUSIVE){
                 lookback_reduction += flag_payload >> 2;
-                if (partition_index < e_workgroups - 1){
-                    atomicAdd(b_passHist[threadidx + pass_hist_offset(partition_index + 1)], 1 | lookback_reduction << 2);
+                if (partition_index < logical_blocks - 1){
+                    atomicAdd(b_passHist[threadidx + pass_hist_offset(partition_index + 1, logical_blocks)], 1 | lookback_reduction << 2);
                 }
                 s_subgroupHistograms[threadidx + BIN_PART_SIZE] = lookback_reduction - exclusive_reduction;
                 break;
@@ -347,7 +347,7 @@ void scatter_device_partial(uint threadidx, uint partition_index){
     
 }
 
-void k_DigitBinning(){
+void k_DigitBinning(uint block_id, uint logical_blocks){
     uint partition_index;
     uint keys[BIN_KEYS_PER_THREAD];
     uint offsets[BIN_KEYS_PER_THREAD];
@@ -366,7 +366,7 @@ void k_DigitBinning(){
         barrier();
     }
     */
-    if (partition_index < e_workgroups - 1){
+    if (partition_index < logical_blocks - 1){
         if (LANE_COUNT >= 16){
             load_keys_ge16(gl_LocalInvocationID.x, partition_index, keys);
         }
@@ -377,7 +377,7 @@ void k_DigitBinning(){
 
     }
 
-    if (partition_index == e_workgroups - 1){
+    if (partition_index == logical_blocks - 1){
         if (LANE_COUNT >= 16){
             load_keys_partial_ge16(gl_LocalInvocationID.x, partition_index, keys);
         }
@@ -396,7 +396,7 @@ void k_DigitBinning(){
         uint reduction;
         if (gl_LocalInvocationID.x < RADIX_BIN){
             reduction = subgroup_hist_inclusive_scan_circle_shift_ge16(gl_LocalInvocationID.x);
-            device_broadcast_reduction_ge16(gl_LocalInvocationID.x, partition_index, reduction);
+            device_broadcast_reduction_ge16(gl_LocalInvocationID.x, partition_index, reduction, logical_blocks);
             reduction += subgroupExclusiveAdd(reduction);
         }
         groupMemoryBarrier();
@@ -417,16 +417,16 @@ void k_DigitBinning(){
 
     }
     scatter_keys_shared(offsets, keys);
-    lookback(gl_LocalInvocationID.x, partition_index, exclusive_reduction);
+    lookback(gl_LocalInvocationID.x, partition_index, exclusive_reduction, logical_blocks);
     groupMemoryBarrier();
     barrier();
 
-    if (partition_index < e_workgroups - 1){
+    if (partition_index < logical_blocks - 1){
         //scatter_device(gl_LocalInvocationID.x);
         scatter_device_ascending(gl_LocalInvocationID.x);
     }
     
-    if (partition_index == e_workgroups - 1){
+    if (partition_index == logical_blocks - 1){
         scatter_device_partial(gl_LocalInvocationID.x, partition_index);
 
     }
@@ -434,9 +434,9 @@ void k_DigitBinning(){
 
 
 void main(){
-  //  uint logical_blocks = uint(ceil(float(n) / float(BIN_PART_SIZE)));
-   // for (uint zheyuan_block_id = gl_WorkGroupID.x; zheyuan_block_id < logical_blocks; zheyuan_block_id += e_workgroups){
-        k_DigitBinning();
-    //}
+    uint logical_blocks = uint(ceil(float(n) / float(BIN_PART_SIZE)));
+    for (uint zheyuan_block_id = gl_WorkGroupID.x; zheyuan_block_id < logical_blocks; zheyuan_block_id += gl_NumWorkGroups.x){
+        k_DigitBinning(zheyuan_block_id, logical_blocks);
+    }
     
 }

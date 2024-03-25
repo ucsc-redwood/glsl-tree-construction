@@ -68,7 +68,7 @@ uint InclusiveWarpScanCircularShift(uint val){
 
 
 
-void k_GlobalHistogram(){
+void k_GlobalHistogram(uint block_id, uint logical_blocks){
     for (uint i = gl_LocalInvocationID.x; i < RADIX_BIN * 2; i += gl_WorkGroupSize.x){
         s_globalHistFirst[i] = 0;
         s_globalHistSec[i] = 0;
@@ -81,9 +81,9 @@ void k_GlobalHistogram(){
     // warp level histogram
     {
         const uint segmentIndex = gl_LocalInvocationID.x / 64 * RADIX_BIN;
-        const uint partition_end = (gl_WorkGroupID.x == e_workgroups -1) ? n : (gl_WorkGroupID.x + 1) * PART_SIZE;
+        const uint partition_end = (block_id == logical_blocks -1) ? n : (block_id + 1) * PART_SIZE;
         uint t;
-            for (uint i = gl_LocalInvocationID.x + gl_WorkGroupID.x * PART_SIZE; i < partition_end; i += gl_WorkGroupSize.x){
+            for (uint i = gl_LocalInvocationID.x + block_id * PART_SIZE; i < partition_end; i += gl_WorkGroupSize.x){
                 const uint t = b_sort[i];
 
                 atomicAdd(s_globalHistFirst[segmentIndex + ((t) & RADIX_MASK)], 1);
@@ -126,9 +126,9 @@ void k_GlobalHistogram(){
 
 
 void main() {
-    //uint logical_blocks = uint(ceil(float(n) / float(PART_SIZE)));
-    //for (uint zheyuan_block_id = gl_WorkGroupID.x; zheyuan_block_id < logical_blocks; zheyuan_block_id += gl_NumWorkGroups.x){
-        k_GlobalHistogram();
-    //}
+    uint logical_blocks = uint(ceil(float(n) / float(PART_SIZE)));
+    for (uint zheyuan_block_id = gl_WorkGroupID.x; zheyuan_block_id < logical_blocks; zheyuan_block_id += gl_NumWorkGroups.x){
+        k_GlobalHistogram(zheyuan_block_id, logical_blocks);
+    }
     //k_GlobalHistogram();
 }

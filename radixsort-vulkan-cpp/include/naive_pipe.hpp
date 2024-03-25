@@ -366,9 +366,10 @@ void Pipe::morton(const int num_blocks, const int queue_idx){
   */
  /*
  for(int i = 0; i < params_.n; ++i){
-    u_morton_keys[i] = i;
+    u_morton_keys[i] = params_.n - i - 1;
  }
  */
+ 
 }
 
 void Pipe::radix_sort(const int num_blocks, const int queue_idx){
