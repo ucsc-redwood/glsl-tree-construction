@@ -193,14 +193,6 @@ class Singleton{
 
 	}
 
-	void create_query_pool(){
-		VkQueryPoolCreateInfo query_pool_info{};
-		query_pool_info.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
-		query_pool_info.queryType = VK_QUERY_TYPE_TIMESTAMP;
-		query_pool_info.queryCount = 2;
-		vkCreateQueryPool(device, &query_pool_info, nullptr, &query_pool_timestamps);
-
-	}
 
 
 
