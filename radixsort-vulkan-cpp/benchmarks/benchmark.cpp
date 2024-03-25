@@ -20,8 +20,8 @@ public:
     void BM_GPU_Morton(bm::State &st)
     {
         int n_blocks = st.range(0);
-        std::fill_n(u_points, params_.n, glm::vec4(0.0f, 0.0f, 0.0f, 0.0f));
-        std::fill_n(u_morton_keys, params_.n, 0);
+        // std::fill_n(u_points, params_.n, glm::vec4(0.0f, 0.0f, 0.0f, 0.0f));
+        // std::fill_n(u_morton_keys, params_.n, 0);
 
         for (auto _ : st)
         {
@@ -37,22 +37,14 @@ public:
         constexpr auto passes = 4;
         const auto binning_thread_blocks = (params_.n + 7680 - 1) / 7680;
 
-        uint32_t *copy_of_u_morton_keys = new uint32_t[params_.n];
-        std::copy(u_morton_keys, u_morton_keys + params_.n, copy_of_u_morton_keys);
-
-        std::fill_n(sort_tmp.u_sort_alt, params_.n, 0);
-        std::fill_n(sort_tmp.u_global_histogram, radix * passes, 0);
-        std::fill_n(sort_tmp.u_pass_histogram, radix * binning_thread_blocks, glm::uvec4(0, 0, 0, 0));
-        std::fill_n(sort_tmp.u_index, 4, 0);
-
         for (auto _ : st)
         {
             radix_sort(n_blocks, 0);
             st.SetIterationTime(time());
-        }
-        if (n_blocks != MAX_BLOCKS)
-        {
-            u_morton_keys = copy_of_u_morton_keys;
+            std::fill_n(sort_tmp.u_sort_alt, params_.n, 0);
+            std::fill_n(sort_tmp.u_global_histogram, radix * passes, 0);
+            std::fill_n(sort_tmp.u_pass_histogram, radix * binning_thread_blocks, glm::uvec4(0, 0, 0, 0));
+            std::fill_n(sort_tmp.u_index, 4, 0);
         }
     }
 
@@ -61,24 +53,24 @@ public:
         int n_blocks = st.range(0);
         uint32_t aligned_size = ((params_.n + 4 - 1) / 4) * 4;
         const uint32_t num_blocks = (aligned_size + PARTITION_SIZE - 1) / PARTITION_SIZE;
-
-        uint32_t *copy_of_u_morton_keys = new uint32_t[params_.n];
-        std::copy(u_morton_keys, u_morton_keys + params_.n, copy_of_u_morton_keys);
-
-        std::fill_n(u_unique_morton_keys, params_.n, 0);
-        std::fill_n(unique_tmp.contributions, params_.n, 0);
-        std::fill_n(unique_tmp.reductions, num_blocks, 0);
-        std::fill_n(unique_tmp.index, 1, 0);
-
         for (auto _ : st)
         {
             unique(n_blocks, 0);
             st.SetIterationTime(time());
+            std::fill_n(u_unique_morton_keys, params_.n, 0);
+            std::fill_n(unique_tmp.contributions, params_.n, 0);
+            std::fill_n(unique_tmp.reductions, num_blocks, 0);
+            std::fill_n(unique_tmp.index, 1, 0);
         }
+    }
 
-        if (n_blocks != MAX_BLOCKS)
+    void BM_GPU_RadixTree(bm::State &st)
+    {
+        int n_blocks = st.range(0);
+        for (auto _ : st)
         {
-            u_morton_keys = copy_of_u_morton_keys;
+            radix_tree(n_blocks, 0);
+            st.SetIterationTime(time());
         }
     }
 };
@@ -90,7 +82,6 @@ static void RegisterBenchmarks(PipeBenchmark &BenchmarkInstance)
         ->UseManualTime()
         ->Unit(benchmark::kMillisecond)
         ->RangeMultiplier(2)
-        ->Iterations(1)
         ->Range(1, MAX_BLOCKS)
         ->ArgName("GridSize");
 
@@ -98,7 +89,6 @@ static void RegisterBenchmarks(PipeBenchmark &BenchmarkInstance)
                                  { BenchmarkInstance.BM_GPU_Sort(st); })
         ->UseManualTime()
         ->Unit(benchmark::kMillisecond)
-        ->Iterations(1)
         ->RangeMultiplier(2)
         ->Range(1, MAX_BLOCKS)
         ->ArgName("GridSize");
@@ -107,7 +97,15 @@ static void RegisterBenchmarks(PipeBenchmark &BenchmarkInstance)
                                  { BenchmarkInstance.BM_GPU_Unique(st); })
         ->UseManualTime()
         ->Unit(benchmark::kMillisecond)
-        ->Iterations(1)
+        ->RangeMultiplier(2)
+        ->Range(1, MAX_BLOCKS)
+        ->ArgName("GridSize");
+
+    // Added BM_GPU_RadixTree benchmark
+    benchmark::RegisterBenchmark("BM_GPU_RadixTree", [&BenchmarkInstance](benchmark::State &st)
+                                 { BenchmarkInstance.BM_GPU_RadixTree(st); })
+        ->UseManualTime()
+        ->Unit(benchmark::kMillisecond)
         ->RangeMultiplier(2)
         ->Range(1, MAX_BLOCKS)
         ->ArgName("GridSize");

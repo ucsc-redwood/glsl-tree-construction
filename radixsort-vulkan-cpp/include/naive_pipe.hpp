@@ -434,7 +434,7 @@ void Pipe::unique(const int num_blocks, const int queue_idx)
 
 void Pipe::radix_tree(const int num_blocks, const int queue_idx)
 {
-  std::cout << "start radix tree" << std::endl;
+  // std::cout << "start radix tree" << std::endl;
   auto radix_tree_stage = RadixTree();
   radix_tree_stage.run(num_blocks,
                        queue_idx,
@@ -451,6 +451,7 @@ void Pipe::radix_tree(const int num_blocks, const int queue_idx)
                        brt.u_left_child_buffer,
                        brt.u_parent_buffer,
                        n_unique_keys);
+  run_time = radix_tree_stage.time();
 }
 
 void Pipe::edge_count(const int num_blocks, const int queue_idx)
