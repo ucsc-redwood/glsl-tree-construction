@@ -167,7 +167,7 @@ void Unique::run(const int logical_block,
 	//create pipeline 
 	VkPipelineShaderStageCreateInfo find_dup_shader_stage = load_shader("find_dups.spv", &find_dups_shaderModule);
 	create_pipeline(&find_dup_shader_stage,&pipelineLayout, &find_dup_pipeline);
-	VkPipelineShaderStageCreateInfo prefix_sum_shader_stage = load_shader("prefix_sum_64.spv", &prefix_sum_shaderModule);
+	VkPipelineShaderStageCreateInfo prefix_sum_shader_stage = load_shader("prefix_sum.spv", &prefix_sum_shaderModule);
 	create_pipeline(&prefix_sum_shader_stage,&pipelineLayout, &prefix_sum_pipeline);
 	VkPipelineShaderStageCreateInfo move_dup_shader_stage = load_shader("move_dups.spv", &move_dups_shaderModule);
 	create_pipeline(&move_dup_shader_stage,&pipelineLayout, &move_dup_pipeline);
