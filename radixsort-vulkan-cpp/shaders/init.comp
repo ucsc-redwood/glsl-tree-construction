@@ -5,7 +5,6 @@
 #extension GL_KHR_shader_subgroup_vote: enable
 
 
-#define input_size 2000000
 
 #define TAUS_STEP_1 (((z1 & 4294967294U) << 12) ^ (((z1 << 13) ^ z1) >> 19))
 #define TAUS_STEP_2 (((z2 & 4294967288U) << 4) ^ (((z2 << 2) ^ z2) >> 25))

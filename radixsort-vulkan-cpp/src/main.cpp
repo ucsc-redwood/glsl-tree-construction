@@ -31,7 +31,7 @@ int main(const int argc, const char* argv[]){
     pipe.radix_sort_alt(n_blocks, 0);
     
     pipe.unique(n_blocks, 0);
-
+    
     pipe.radix_tree(n_blocks, 0);
     
     pipe.edge_count(n_blocks, 0);

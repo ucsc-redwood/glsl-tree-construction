@@ -68,7 +68,6 @@ void RadixSort64::cleanup(VkPipeline *histogram_pipeline,  VkPipeline * scan_pip
 		vkDestroyDescriptorSetLayout(singleton.device, descriptorSetLayouts[0], nullptr);
 		vkDestroyDescriptorSetLayout(singleton.device, descriptorSetLayouts[1], nullptr);
         vkDestroyDescriptorSetLayout(singleton.device, descriptorSetLayouts[2], nullptr);
-        vkDestroyPipelineLayout(singleton.device, pipelineLayout, nullptr);
 		vkDestroyPipeline(singleton.device, *histogram_pipeline, nullptr);
         vkDestroyPipeline(singleton.device, *scan_pipeline, nullptr);
 		vkDestroyPipeline(singleton.device, *binning_pipeline, nullptr);
