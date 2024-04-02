@@ -1,0 +1,281 @@
+#version 450
+#extension GL_KHR_shader_subgroup_basic:enable
+#extension GL_KHR_shader_subgroup_ballot:enable
+#extension GL_KHR_shader_subgroup_arithmetic:enable
+#extension GL_KHR_shader_subgroup_vote:enable
+#extension GL_KHR_shader_subgroup_shuffle_relative:enable
+#extension GL_KHR_shader_subgroup_shuffle:enable
+#extension  GL_EXT_shader_explicit_arithmetic_types_int64 : enable
+#extension GL_EXT_shader_subgroup_extended_types_int64 : enable
+//#extension GL_EXT_debug_printf:enable
+
+#define PARTITION_SIZE 768
+#define LANE_COUNT 16
+#define LANE_MASK 15
+
+#define WORKGROUP_SIZE 256
+#define SUBGROUP_PARTITIONS 3
+
+#define PART_START (partitionIndex * PARTITION_SIZE)
+
+
+#define FLAG_NOT_READY  0           
+#define FLAG_REDUCTION  1           
+#define FLAG_INCLUSIVE  2           
+#define FLAG_MASK       3 
+
+layout(set=0,binding=0) buffer Data{
+    uint scan[];
+};
+
+layout(set=0,binding=1)  buffer Reduction{
+    volatile uint workgroup_reduction[];
+};
+
+layout(set = 0, binding=2) coherent buffer Index{
+    volatile uint index[];
+};
+
+layout(push_constant)uniform Constants{
+    uint vectorized_size;
+};
+
+layout(local_size_x=256)in;
+
+shared uvec4 s_lookback[PARTITION_SIZE];
+shared uint s_reduction[WORKGROUP_SIZE / LANE_COUNT];
+shared uint s_broadcast;
+
+uint subgroup_part_size(){
+    return SUBGROUP_PARTITIONS * LANE_COUNT;
+}
+
+uint subgroup_part_start(){
+    return gl_SubgroupID * subgroup_part_size();
+}
+
+uint part_start(uint partition_index){
+    return partition_index * PARTITION_SIZE;
+}
+
+uvec4 setXAddYZW(uint val_to_add, uvec4 val){
+    return uvec4(val_to_add, val_to_add + val.y, val_to_add + val.z, val_to_add + val.w);
+}
+
+uvec4 AddToUvec4(uint val_to_add, uvec4 val){
+    return uvec4(val.x + val_to_add, val.y + val_to_add, val.z + val_to_add, val.w + val_to_add);
+}
+
+
+void assign_partition_tile(uint threadidx, inout uint partition_index){
+    if (threadidx == 0)
+        s_broadcast = atomicAdd(index[0], 1);
+    
+    groupMemoryBarrier();
+    barrier();
+    partition_index = s_broadcast;
+}
+
+void scan_exclusive(uint threadidx, uint partition_index){
+    const uint lane_mask = LANE_COUNT -1;
+    const uint circular_shift = (gl_SubgroupInvocationID + lane_mask) & lane_mask;
+    uint subgroup_reduction = 0;
+
+    for (uint i = gl_SubgroupInvocationID + subgroup_part_start(), k = 0; k < SUBGROUP_PARTITIONS; i += LANE_COUNT, ++k){
+        uvec4 t = uvec4(scan[i + part_start(partition_index)], scan[i + part_start(partition_index) + 1], scan[i + part_start(partition_index) + 2], scan[i + part_start(partition_index) + 3]);
+
+        // intra-element reductions
+        uint t2 = t.x;
+        t.x += t.y;
+        t.y = t2;
+
+        t2 = t.x;
+        t.x += t.z;
+        t.z = t2;
+
+        t2 = t.x;
+        t.x += t.w;
+        t.w = t2;
+
+        const uint t3 = subgroupShuffle(t.x + subgroupExclusiveAdd(t.x), circular_shift);
+        s_lookback[i] = setXAddYZW((gl_SubgroupInvocationID > 0 ? t3 : 0) + (k > 0 ? subgroup_reduction : 0), t);
+        subgroup_reduction += subgroupBroadcast(t3, 0);
+    }
+
+    if (gl_SubgroupInvocationID == 0)
+        s_reduction[gl_SubgroupID] = subgroup_reduction;
+}
+
+void scan_exclusive_partial(uint threadidx, uint partition_index){
+    const uint lane_mask = LANE_COUNT -1;
+    const uint circular_shift = (gl_SubgroupInvocationID + lane_mask) & lane_mask;
+    const uint final_part_size = vectorized_size - part_start(partition_index);
+    uint subgroup_reduction = 0;
+
+    for (uint i = gl_SubgroupInvocationID + subgroup_part_start(), k = 0; k < SUBGROUP_PARTITIONS; i += LANE_COUNT, ++k){
+        uvec4 t = i < final_part_size ? uvec4(scan[i + part_start(partition_index)], scan[i + part_start(partition_index) + 1], scan[i + part_start(partition_index) + 2], scan[i + part_start(partition_index) + 3]) : uvec4(0, 0, 0, 0);
+
+        // intra-element reductions
+        uint t2 = t.x;
+        t.x += t.y;
+        t.y = t2;
+
+        t2 = t.x;
+        t.x += t.z;
+        t.z = t2;
+
+        t2 = t.x;
+        t.x += t.w;
+        t.w = t2;
+
+        const uint t3 = subgroupShuffle(t.x + subgroupExclusiveAdd(t.x), circular_shift);
+        s_lookback[i] = setXAddYZW((gl_SubgroupInvocationID > 0 ? t3 : 0) + (k > 0 ? subgroup_reduction : 0), t);
+        subgroup_reduction += subgroupBroadcast(t3, 0);
+    }
+
+    if (gl_SubgroupInvocationID == 0)
+        s_reduction[gl_SubgroupID] = subgroup_reduction;
+}
+
+void local_scan_inclusive_ge16(uint threadidx, uint partition_index){
+    if (threadidx < WORKGROUP_SIZE / LANE_COUNT){
+        s_reduction[threadidx] += subgroupExclusiveAdd(s_reduction[threadidx]);
+    }
+}
+
+void device_broadcast(uint threadidx, uint partition_index){
+    if (threadidx == WORKGROUP_SIZE / LANE_COUNT - 1){
+        atomicAdd(workgroup_reduction[partition_index], (partition_index > 0 ? FLAG_REDUCTION : FLAG_INCLUSIVE) | s_reduction[threadidx] << 2);
+    }
+}
+
+void lookback(uint partition_index){
+    uint prev_reduction = 0;
+    uint k = partition_index + LANE_COUNT - gl_SubgroupInvocationID;
+    const uint subgroup_parts = (LANE_COUNT + 31) / 32;
+
+    // todo: may stuck at other gpu
+    /*
+    while (true){
+        const uint flag_payload = k > LANE_COUNT ? workgroup_reduction[k - LANE_COUNT - 1] : FLAG_INCLUSIVE;
+        if (subgroupAll((flag_payload & FLAG_MASK) > FLAG_NOT_READY)){
+            const uvec4 inclusive_ballot = subgroupBallot((flag_payload & FLAG_MASK) == FLAG_INCLUSIVE);
+
+            if (inclusive_ballot.x > 0 || inclusive_ballot.y > 0 || inclusive_ballot.z > 0 || inclusive_ballot.w > 0){
+                uint inclusive_index = 0;
+                for (uint subgroup_part = 0; subgroup_part < subgroup_parts; ++subgroup_part){
+                    if (bitCount(inclusive_ballot[subgroup_part]) > 0){
+                        inclusive_index += findLSB(inclusive_ballot[subgroup_part]);
+                        break;
+                    }else{
+                        inclusive_index += 32;
+                    }
+                }
+
+                prev_reduction += subgroupAdd(gl_SubgroupInvocationID <= inclusive_index ? (flag_payload >> 2) : 0);
+
+                if (gl_SubgroupInvocationID == 0){
+                    s_broadcast = prev_reduction;
+                    atomicAdd(workgroup_reduction[partition_index], 1 | (prev_reduction << 2));
+                }
+                break;
+            }else{
+                prev_reduction += subgroupAdd(flag_payload >> 2);
+                k -= LANE_COUNT;
+            }
+        }
+    }
+    */
+
+            for(int k = int(partition_index); k > 0; ){
+            const uint flagPayload = workgroup_reduction[k - 1];// ((k > LANE_COUNT) ? workgroup_reduction[k - 1] : FLAG_INCLUSIVE);
+
+            if ((flagPayload & FLAG_MASK) == FLAG_INCLUSIVE){
+                prev_reduction += flagPayload >> 2;
+                if(gl_SubgroupInvocationID.x == 0){
+                    s_broadcast = prev_reduction;
+                    atomicAdd(workgroup_reduction[partition_index], FLAG_REDUCTION | (prev_reduction << 2));
+                }
+                break;
+            }
+
+            if ((flagPayload & FLAG_MASK) == FLAG_REDUCTION){
+                prev_reduction += flagPayload >> 2;
+                k--;
+
+            }
+
+        }
+}
+
+void down_sweep(uint threadidx, uint partition_index, uint prev_reduction){
+    for (uint i = gl_SubgroupInvocationID + subgroup_part_start(), k = 0; k < SUBGROUP_PARTITIONS; i += LANE_COUNT, ++k){
+        uvec4 t = s_lookback[i];
+        uvec4 t2 = AddToUvec4(prev_reduction , t);
+
+        scan[i + part_start(partition_index)] = t2.x;
+        scan[i + part_start(partition_index) + 1] = t2.y;
+        scan[i + part_start(partition_index) + 2] = t2.z;
+        scan[i + part_start(partition_index) + 3] = t2.w;
+    }
+}
+
+void down_sweep_partial(uint threadidx, uint partition_index, uint prev_reduction){
+    const uint final_part_size = vectorized_size - part_start(partition_index);
+    for (uint i = gl_SubgroupInvocationID + subgroup_part_start(), k = 0; k < SUBGROUP_PARTITIONS && i < final_part_size; i += LANE_COUNT, ++k){
+        uvec4 t = s_lookback[i];
+        uvec4 t2 = AddToUvec4(prev_reduction , t);
+
+        if (i < final_part_size){
+            scan[i + part_start(partition_index)] = t2.x;
+            scan[i + part_start(partition_index) + 1] = t2.y;
+            scan[i + part_start(partition_index) + 2] = t2.z;
+            scan[i + part_start(partition_index) + 3] = t2.w;
+        }
+    }
+}
+
+void prefix_sum(){
+    uint partition_index;
+    assign_partition_tile(gl_SubgroupInvocationID, partition_index);
+
+    if (partition_index < gl_NumWorkGroups.x - 1){
+        scan_exclusive(gl_LocalInvocationID.x, partition_index);
+    }
+
+    if (partition_index == gl_NumWorkGroups.x - 1){
+        scan_exclusive_partial(gl_LocalInvocationID.x, partition_index);
+    }
+
+    groupMemoryBarrier();
+    barrier();
+
+    if (LANE_COUNT < 16){
+
+    }
+
+    if (LANE_COUNT >= 16){
+        local_scan_inclusive_ge16(gl_LocalInvocationID.x, partition_index);
+    }
+
+    device_broadcast(gl_LocalInvocationID.x, partition_index);
+
+    if (partition_index != 0 && gl_LocalInvocationID.x < LANE_COUNT)
+        lookback(partition_index);
+    
+    groupMemoryBarrier();
+    barrier();
+
+    const uint prev_reduction = s_broadcast + (gl_LocalInvocationID.x >= LANE_COUNT ? s_reduction[gl_SubgroupID - 1] : 0);
+
+    if (partition_index < gl_NumWorkGroups.x - 1)
+        down_sweep(gl_LocalInvocationID.x, partition_index, prev_reduction);
+    
+    if (partition_index == gl_NumWorkGroups.x - 1)
+        down_sweep_partial(gl_LocalInvocationID.x, partition_index, prev_reduction);
+}
+
+void main(){
+
+    prefix_sum();
+}

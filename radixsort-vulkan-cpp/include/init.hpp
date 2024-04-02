@@ -3,8 +3,8 @@
 #include <glm/glm.hpp>
 #include <iostream>
 
-#define PARTITION_SIZE 7680
-#define BINNING_THREAD_BLOCKS  (n + PARTITION_SIZE - 1) / PARTITION_SIZE
+#define INIT_PARTITION_SIZE 7680
+#define BINNING_THREAD_BLOCKS  (n + INIT_PARTITION_SIZE - 1) / INIT_PARTITION_SIZE
 
 class Init : public ApplicationBase{
     public:

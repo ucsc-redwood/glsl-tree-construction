@@ -3,7 +3,7 @@
 #include <glm/glm.hpp>
 #include <iostream>
 
-#define PARTITION_SIZE 3072
+#define UNIQUE_PARTITION_SIZE 3072
 
 class Unique : public ApplicationBase{
     public:
@@ -34,7 +34,7 @@ class Unique : public ApplicationBase{
 	VkDescriptorSet descriptorSets[3] = {VkDescriptorSet{}, VkDescriptorSet{}, VkDescriptorSet{}};
 	VkDescriptorSetLayoutCreateInfo descriptorLayout[3] = {VkDescriptorSetLayoutCreateInfo{}, VkDescriptorSetLayoutCreateInfo{}, VkDescriptorSetLayoutCreateInfo{}};
 	struct PushConstant {
-		int n;
+		uint32_t n;
 	} unique_push_constant;
 };
 
@@ -88,7 +88,7 @@ void Unique::run(const int logical_block,
 	uint32_t aligned_size = ((n + 4 - 1)/ 4) * 4;
 	uint32_t vectorized_size = aligned_size/4;
     //uint32_t index[1] = {0};
-    const uint32_t num_blocks = (aligned_size + PARTITION_SIZE - 1) / PARTITION_SIZE;
+    const uint32_t num_blocks = (aligned_size + UNIQUE_PARTITION_SIZE - 1) / UNIQUE_PARTITION_SIZE;
 	//std::vector<uint32_t> reduction(num_blocks, 0);
 
     

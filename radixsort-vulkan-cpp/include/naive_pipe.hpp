@@ -3,7 +3,6 @@
 #include "application.hpp"
 #include "init.hpp"
 #include "morton.hpp"
-#include "radixsort.hpp"
 #include "radix_sort_64.hpp"
 #include "unique.hpp"
 #include "radix_tree.hpp"
@@ -372,34 +371,6 @@ void Pipe::morton(const int num_blocks, const int queue_idx){
  
 }
 
-void Pipe::radix_sort(const int num_blocks, const int queue_idx){
-  std::cout << "start radix sort"<<std::endl;
-  auto radixsort_stage = RadixSort();
-  radixsort_stage.run(num_blocks,
-  queue_idx,
-  u_morton_keys,
-  sort_tmp.u_sort_alt,
-  sort_tmp.u_global_histogram,
-  sort_tmp.u_index,
-  sort_tmp.u_pass_histogram,
-  u_morton_keys_buffer,
-  sort_tmp.u_sort_alt_buffer,
-  sort_tmp.u_global_histogram_buffer,
-  sort_tmp.u_index_buffer,
-  sort_tmp.u_pass_histogram_buffer,
-  params_.n);
-  
-  for (int i = 0; i < 200; ++i)
-    std::cout << "sorted_key[" << i << "]: " << u_morton_keys[i] << std::endl;
-  for (int i = 0; i < 1024; i++){
-    printf("sorted_key[%d]: %d\n", i, u_morton_keys[i]);
-  }
-  for (int i = params_.n-200; i < params_.n; i++){
-    printf("sorted_key[%d]: %d\n", i, u_morton_keys[i]);
-  }
-  
-}
-
 
 void Pipe::radix_sort_alt(const int num_blocks, const int queue_idx){
   std::cout << "start radix sort alt"<<std::endl;
@@ -417,6 +388,7 @@ void Pipe::radix_sort_alt(const int num_blocks, const int queue_idx){
   sort_tmp.u_index_buffer,
   sort_tmp.u_pass_histogram_64_buffer,
   params_.n);
+  /*
   for (int i = 0; i < 1024; ++i){
     printf("global_histogram[%d]: %d\n", i, sort_tmp.u_global_histogram[i]);
   }
@@ -426,6 +398,7 @@ void Pipe::radix_sort_alt(const int num_blocks, const int queue_idx){
   for (int i = 0; i < 1024; i++){
     printf("sorted_key[%d]: %d\n", i, u_morton_keys[i]);
   }
+  */
   for (int i = params_.n-200; i < params_.n; i++){
     printf("sorted_key[%d]: %d\n", i, u_morton_keys[i]);
   }
@@ -503,9 +476,11 @@ void Pipe::edge_count(const int num_blocks, const int queue_idx){
   std::cout <<"start edge count"<<std::endl;
   auto edge_count_stage = EdgeCount();
   edge_count_stage.run(num_blocks, queue_idx, brt.u_prefix_n , brt.u_parent, u_edge_count, brt.u_prefix_n_buffer, brt.u_parent_buffer, u_edge_count_buffer, n_unique_keys);
+  /*
   for (int i = 0; i < 1024; i++){
     printf("edge_count[%d]: %d\n", i, u_edge_count[i]);
   }
+  */
 }
 
 void Pipe::prefix_sum(const int num_blocks, const int queue_idx){

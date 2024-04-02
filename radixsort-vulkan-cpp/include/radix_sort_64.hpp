@@ -5,10 +5,10 @@
 #include <chrono>
 
 //#define HIST_PARTITIONS_SIZE 65536
-#define PARTITION_SIZE 3840
+#define SORT_PARTITION_SIZE 3840
 #define RADIX_BIN 256
 //#define HIST_THREAD_BLOCKS  (n + HIST_PARTITIONS_SIZE - 1) / HIST_PARTITIONS_SIZE
-#define THREAD_BLOCKS  (n + PARTITION_SIZE - 1) / PARTITION_SIZE
+#define THREAD_BLOCKS  (n + SORT_PARTITION_SIZE - 1) / SORT_PARTITION_SIZE
 
 class RadixSort64 : public ApplicationBase{
     public:
