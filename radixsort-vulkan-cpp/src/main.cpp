@@ -7,7 +7,7 @@
 
 int main(const int argc, const char *argv[])
 {
-    int n_blocks = 2;
+    int n_blocks = 1;
 
     if (argc > 1)
     {
@@ -28,14 +28,15 @@ int main(const int argc, const char *argv[])
     pipe.init(n_blocks, 0);
 
     pipe.morton(n_blocks, 0);
-
+    std::cout << "Morton: " << pipe.time() << std::endl;
     pipe.radix_sort(n_blocks, 0);
-
+    std::cout << "Radix sort: " << pipe.time() << std::endl;
     pipe.unique(n_blocks, 0);
-
+    std::cout << "Unique: " << pipe.time() << std::endl;
     pipe.radix_tree(n_blocks, 0);
-
+    std::cout << "Radix tree: " << pipe.time() << std::endl;
     pipe.edge_count(n_blocks, 0);
+    std::cout << "Edge count: " << pipe.time() << std::endl;
 
     pipe.prefix_sum(n_blocks, 0);
 

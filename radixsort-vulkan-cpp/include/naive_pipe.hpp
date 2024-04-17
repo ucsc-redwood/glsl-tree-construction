@@ -456,9 +456,10 @@ void Pipe::radix_tree(const int num_blocks, const int queue_idx)
 
 void Pipe::edge_count(const int num_blocks, const int queue_idx)
 {
-  std::cout << "start edge count" << std::endl;
+  // std::cout << "start edge count" << std::endl;
   auto edge_count_stage = EdgeCount();
   edge_count_stage.run(num_blocks, queue_idx, brt.u_prefix_n, brt.u_parent, u_edge_count, brt.u_prefix_n_buffer, brt.u_parent_buffer, u_edge_count_buffer, n_unique_keys);
+  run_time = edge_count_stage.time();
   // for (int i = 0; i < 1024; i++)
   // {
   //   printf("edge_count[%d]: %d\n", i, u_edge_count[i]);
@@ -486,7 +487,6 @@ void Pipe::prefix_sum(const int num_blocks, const int queue_idx)
 
 void Pipe::octree(const int num_blocks, const int queue_idx)
 {
-  std::cout << "start octree" << std::endl;
   n_brt_nodes = n_unique_keys - 1;
   auto build_octree_stage = Octree();
   build_octree_stage.run(num_blocks,
@@ -512,7 +512,7 @@ void Pipe::octree(const int num_blocks, const int queue_idx)
                          brt.u_has_leaf_right_buffer,
                          brt.u_parent_buffer,
                          brt.u_left_child_buffer);
-  std::cout << "done octree" << std::endl;
+  run_time = build_octree_stage.time();
 }
 
 // Returns the run time of the last run stage
