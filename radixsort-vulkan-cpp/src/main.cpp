@@ -4,7 +4,7 @@
 #include "volk.h"
 #include <chrono>
 
-#define BUFFER_ELEMENTS  500000
+#define BUFFER_ELEMENTS  50000
 
 int main(const int argc, const char* argv[]){
   if (volkInitialize() != VK_SUCCESS) {
@@ -35,14 +35,14 @@ int main(const int argc, const char* argv[]){
     //pipe.radix_sort(n_blocks, 0);
     pipe.radix_sort_alt(n_blocks, 0);
     
-    pipe.unique(n_blocks, 0);
+    //pipe.unique(n_blocks, 0);
 
-    pipe.radix_tree(n_blocks, 0);
+    // pipe.radix_tree(n_blocks, 0);
     
-    pipe.edge_count(n_blocks, 0);
+    // pipe.edge_count(n_blocks, 0);
     
-    pipe.prefix_sum(n_blocks, 0);
+    // pipe.prefix_sum(n_blocks, 0);
     
-    pipe.octree(n_blocks, 0);
+    // pipe.octree(n_blocks, 0);
     
 }

@@ -1,0 +1,103 @@
+#version 450
+#extension GL_KHR_shader_subgroup_basic:enable
+#extension GL_KHR_shader_subgroup_ballot:enable
+#extension GL_KHR_shader_subgroup_arithmetic:enable
+#extension GL_KHR_shader_subgroup_vote:enable
+#extension GL_KHR_shader_subgroup_shuffle_relative:enable
+#extension GL_KHR_shader_subgroup_shuffle:enable
+#extension  GL_EXT_shader_explicit_arithmetic_types_int64 : enable
+#extension GL_EXT_shader_subgroup_extended_types_int64 : enable
+//#extension GL_EXT_debug_printf:enable
+
+#define PARTITION_SIZE 768
+#define LANE_COUNT 16
+#define LANE_MASK 15
+
+#define WORKGROUP_SIZE 256
+#define SUBGROUP_PARTITIONS 3
+
+#define PART_START (partitionIndex * PARTITION_SIZE)
+
+
+layout(local_size_x=256)in;
+
+layout(push_constant)uniform Constants{
+    uint vectorized_size;
+};
+
+layout(set=0,binding=0) buffer Data{
+    uint scan[];
+};
+
+layout(set=0,binding=1)  buffer Reduction{
+    volatile uint workgroup_reduction[];
+};
+
+
+
+shared uvec4 s_lookback[PARTITION_SIZE];
+shared uint s_reduction[WORKGROUP_SIZE / LANE_COUNT];
+shared uint s_broadcast;
+
+uint subgroup_part_size(){
+    return SUBGROUP_PARTITIONS * LANE_COUNT;
+}
+
+uint subgroup_part_start(){
+    return gl_SubgroupID * subgroup_part_size();
+}
+
+uint part_start(uint partition_index){
+    return partition_index * PARTITION_SIZE;
+}
+
+void subgroup_reduce_full(uint threadidx, uint workgroupid){
+    uint subgroup_reduction = 0;
+    const uint part_end = (workgroupid + 1) * PARTITION_SIZE;
+    for (uint i = threadidx + part_start(workgroupid); i < part_end; i += WORKGROUP_SIZE){
+        uint curr_scan = scan[i*4]+ scan[i*4+1]+ scan[i*4+2]+scan[i*4+3];
+        subgroup_reduction += subgroupAdd(curr_scan);
+    }
+    if (gl_SubgroupInvocationID == 0)
+        s_reduction[gl_SubgroupID] = subgroup_reduction;
+}
+
+
+void subgroup_reduce_partial(uint threadidx, uint workgroupid){
+    uint subgroup_reduction = 0;
+    const uint part_end = (workgroupid + 1) * PARTITION_SIZE;
+    for (uint i = threadidx + part_start(workgroupid); i < part_end; i += WORKGROUP_SIZE){
+        uint curr_scan = scan[i*4]+ scan[i*4+1]+ scan[i*4+2]+scan[i*4+3];
+        subgroup_reduction += subgroupAdd(i < vectorized_size? curr_scan : 0);
+    }
+    if (gl_SubgroupInvocationID == 0)
+        s_reduction[gl_SubgroupID] = subgroup_reduction;
+}
+
+void local_reduce(uint threadidx, uint workgroupid){
+    uint reduction;
+    if (threadidx < WORKGROUP_SIZE / LANE_COUNT){
+        reduction =  subgroupAdd(s_reduction[workgroupid]);
+    }
+    if (threadidx == 0){
+        workgroup_reduction[workgroupid] = reduction;
+    }
+}
+
+
+void k_reduce(){
+    if (gl_WorkGroupID.x < gl_NumWorkGroups.x - 1){
+        subgroup_reduce_full(gl_LocalInvocationID.x, gl_WorkGroupID.x);
+    }
+
+    if (gl_WorkGroupID.x == gl_NumWorkGroups.x - 1){
+        subgroup_reduce_partial(gl_LocalInvocationID.x, gl_WorkGroupID.x);
+    }
+    groupMemoryBarrier();
+    barrier();
+    local_reduce(gl_LocalInvocationID.x, gl_WorkGroupID.x);
+
+}
+void main(){
+    k_reduce();
+}

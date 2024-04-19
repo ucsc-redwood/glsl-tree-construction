@@ -6,74 +6,83 @@
 #extension GL_KHR_shader_subgroup_shuffle_relative : enable
 #extension GL_KHR_shader_subgroup_shuffle : enable
 
-//#define input_size 2000000
 
-#define RADIX_BIN 256
-#define RADIX_LOG 8
-#define RADIX_MASK 255 // Mask of digit bins
-
-#define SEC_RADIX_START     256     //Offset for retrieving values from global buffer
-#define THIRD_RADIX_START   512     //Offset for retrieving values from global buffer
-#define FOURTH_RADIX_START  768     //Offset for retrieving values from global buffer
-
-#define LANE_COUNT 16 // number of threads in a subgroup
+#define PARTITION_SIZE 768
+#define LANE_COUNT 16
 #define LANE_MASK 15
-#define LANE_LOG 4
 
-#define LANE gl_LocalInvocationID.x // the idx of thread in the subgroup
-#define SUBGROUP_IDX  gl_SubgroupID // the idx of subgroup the thread belongs to might be wrong
-#define SUBGROUP_THREAD_IDX gl_GlobalInvocationID.x //(LANE + (SUBGROUP_IDX << LANE_LOG)) // the subgroup relative thread idx
+#define WORKGROUP_SIZE 256
+#define SUBGROUP_PARTITIONS 3
 
-#define FLAG_NOT_READY      0       //Flag value inidicating neither inclusive sum, or aggregate sum of a partition tile is ready
-#define FLAG_AGGREGATE      1       //Flag value indicating aggregate sum of a partition tile is ready
-#define FLAG_INCLUSIVE      2       //Flag value indicating inclusive sum of a partition tile is ready
-#define FLAG_MASK           3       //Mask used to retrieve flag values
+#define PART_START (partitionIndex * PARTITION_SIZE)
+
 
 layout(local_size_x = 256) in;
-layout(set = 2, binding = 1) buffer BGlobalHist{
-    uint b_globalHist[1024];
+
+layout(push_constant)uniform Constants{
+    uint vectorized_size;
 };
 
-layout(set = 2, binding = 4) coherent buffer BPassHist {
-    uint b_passHist[];
+layout(set=0,binding=0) buffer Data{
+    uint scan[];
 };
 
-layout(push_constant) uniform Constant{
-    uint pass_num;
-    uint radix_shift;
-    uint n;
-    uint e_workgroups;
+layout(set=0,binding=1)  buffer Reduction{
+    volatile uint workgroup_reduction[];
 };
 
+shared uint s_scan[WORKGROUP_SIZE];
 
+uint workgroup_scan_full(uint threadidx){
+    uint reduction = 0;
+    const uint part_end = gl_NumWorkGroups.x / WORKGROUP_SIZE * WORKGROUP_SIZE;
+    for (uint i = threadidx; i < part_end; i += WORKGROUP_SIZE){
+        s_scan[i] = workgroup_reduction[i];
+        s_scan[i] += subgroupExclusiveAdd(s_scan[threadidx]);
+        groupMemoryBarrier();
+        barrier();
 
-shared uint s_scan[RADIX_BIN];
+        if (threadidx < WORKGROUP_SIZE / LANE_COUNT){
+            s_scan[(threadidx + 1) * LANE_COUNT - 1] += subgroupExclusiveAdd(s_scan[(threadidx + 1) * LANE_COUNT - 1]);
+        }
+        groupMemoryBarrier();
+        barrier();
 
-void global_hist_exclusive_scan(uint threadidx, uint workgroupidx){
+        workgroup_reduction[i] = s_scan[threadidx] + 
+            (threadidx >= LANE_COUNT && gl_SubgroupInvocationID != LANE_MASK ? 
+                subgroupBroadcast(s_scan[threadidx -1], 0) : 0) + reduction;
+        groupMemoryBarrier();
+        barrier();
+    }
+    return reduction;
+}
+
+void workgroup_scan_partial(uint threadidx, uint reduction){
+    const uint i = threadidx + gl_NumWorkGroups.x / WORKGROUP_SIZE * WORKGROUP_SIZE;
+
+    if (i < gl_NumWorkGroups.x){
+        s_scan[threadidx] = workgroup_reduction[i];
+    }
+    s_scan[threadidx] += subgroupExclusiveAdd(s_scan[threadidx]);
     groupMemoryBarrier();
     barrier();
-    if(threadidx < (RADIX_BIN/ LANE_COUNT)){
+
+    if (threadidx < WORKGROUP_SIZE / LANE_COUNT){
         s_scan[(threadidx + 1) * LANE_COUNT - 1] += subgroupExclusiveAdd(s_scan[(threadidx + 1) * LANE_COUNT - 1]);
     }
     groupMemoryBarrier();
     barrier();
 
-    const uint laneMask = LANE_MASK;
-    const uint index = (gl_SubgroupInvocationID + 1 & laneMask) + (threadidx & ~laneMask);
-    b_passHist[index + workgroupidx * RADIX_BIN * e_workgroups] = ((gl_SubgroupInvocationID != laneMask ? s_scan[threadidx] : 0) +
-        (threadidx >= LANE_COUNT ? subgroupBroadcast(s_scan[threadidx - 1], 0) : 0)) << 2 | FLAG_INCLUSIVE;
+    if (i < gl_NumWorkGroups.x){
+        workgroup_reduction[i] = s_scan[threadidx] + 
+            (threadidx >= LANE_COUNT && gl_SubgroupInvocationID != LANE_MASK ? 
+                subgroupBroadcast(s_scan[threadidx -1], 0) : 0) + reduction;
+    }
 }
+
 void k_scan(){
-    const uint t = b_globalHist[gl_LocalInvocationID.x + gl_WorkGroupID.x * RADIX_BIN];
-    s_scan[gl_LocalInvocationID.x] = t + subgroupExclusiveAdd(t);
-
-    if (LANE_COUNT >= 16){
-        global_hist_exclusive_scan(gl_LocalInvocationID.x, gl_WorkGroupID.x);
-    }
-    
-    if (LANE_COUNT < 16){
-
-    }
+    uint reduction = workgroup_scan_full(gl_LocalInvocationID.x);
+    workgroup_scan_partial(gl_LocalInvocationID.x, reduction);
 }
 
 void main(){

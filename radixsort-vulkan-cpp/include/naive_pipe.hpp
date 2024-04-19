@@ -8,6 +8,7 @@
 #include "radix_tree.hpp"
 #include "edge_count.hpp"
 #include "prefix_sum.hpp"
+#include "downsweep.hpp"
 #include "octree.hpp"
 #include "octree.hpp"
 #include <glm/vec4.hpp>
@@ -399,9 +400,9 @@ void Pipe::radix_sort_alt(const int num_blocks, const int queue_idx){
     printf("sorted_key[%d]: %d\n", i, u_morton_keys[i]);
   }
   */
-  for (int i = params_.n-200; i < params_.n; i++){
-    printf("sorted_key[%d]: %d\n", i, u_morton_keys[i]);
-  }
+  // for (int i = params_.n-200; i < params_.n; i++){
+  //   printf("sorted_key[%d]: %d\n", i, u_morton_keys[i]);
+  // }
 
 }
 
@@ -486,7 +487,8 @@ void Pipe::edge_count(const int num_blocks, const int queue_idx){
 void Pipe::prefix_sum(const int num_blocks, const int queue_idx){
   std::cout << "start prefix sum"<<std::endl;
   memcpy(u_edge_offset, u_edge_count,  sizeof(uint32_t) * params_.n);
-  auto prefix_sum_stage = PrefixSum();
+  auto prefix_sum_stage = DownSweepPrefixSum();
+  //auto prefix_sum_stage = PrefixSum();
   prefix_sum_stage.run(num_blocks,
   queue_idx,
   u_edge_offset,
