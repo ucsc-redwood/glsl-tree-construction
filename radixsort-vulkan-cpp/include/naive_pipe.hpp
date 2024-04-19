@@ -456,19 +456,13 @@ void Pipe::radix_tree(const int num_blocks, const int queue_idx)
 
 void Pipe::edge_count(const int num_blocks, const int queue_idx)
 {
-  // std::cout << "start edge count" << std::endl;
   auto edge_count_stage = EdgeCount();
   edge_count_stage.run(num_blocks, queue_idx, brt.u_prefix_n, brt.u_parent, u_edge_count, brt.u_prefix_n_buffer, brt.u_parent_buffer, u_edge_count_buffer, n_unique_keys);
   run_time = edge_count_stage.time();
-  // for (int i = 0; i < 1024; i++)
-  // {
-  //   printf("edge_count[%d]: %d\n", i, u_edge_count[i]);
-  // }
 }
 
 void Pipe::prefix_sum(const int num_blocks, const int queue_idx)
 {
-  std::cout << "start prefix sum" << std::endl;
   memcpy(u_edge_offset, u_edge_count, sizeof(uint32_t) * params_.n);
   auto prefix_sum_stage = PrefixSum();
   prefix_sum_stage.run(num_blocks,
@@ -481,6 +475,7 @@ void Pipe::prefix_sum(const int num_blocks, const int queue_idx)
                        prefix_sum_tmp.index_buffer,
 
                        params_.n);
+  run_time = prefix_sum_stage.time();
 
   printf("last element: %d\n", u_edge_offset[params_.n - 1]);
 }

@@ -9,8 +9,8 @@
 namespace bm = benchmark;
 
 #define BUFFER_ELEMENTS 1920 * 1080
-#define MAX_BLOCKS 128
-#define ITERATIONS 20
+#define MAX_BLOCKS 1
+#define ITERATIONS 2
 
 class PipeBenchmark : public Pipe
 {
@@ -101,6 +101,16 @@ public:
         }
     }
 
+    void BM_GPU_PrefixSum(bm::State &st)
+    {
+        int n_blocks = st.range(0);
+        for (auto _ : st)
+        {
+            prefix_sum(n_blocks, 0);
+            st.SetIterationTime(time());
+        }
+    }
+
     void BM_GPU_Octree(bm::State &st)
     {
         int n_blocks = st.range(0);
@@ -152,6 +162,16 @@ static void RegisterBenchmarks(PipeBenchmark &BenchmarkInstance)
 
     benchmark::RegisterBenchmark("BM_GPU_EdgeCount", [&BenchmarkInstance](benchmark::State &st)
                                  { BenchmarkInstance.BM_GPU_EdgeCount(st); })
+        ->UseManualTime()
+        ->Unit(benchmark::kMillisecond)
+        ->RangeMultiplier(2)
+        ->Range(1, MAX_BLOCKS)
+        ->Iterations(ITERATIONS)
+        ->ArgName("GridSize");
+
+    benchmark::RegisterBenchmark("BM_GPU_PrefixSum", [&BenchmarkInstance](benchmark::State &st)
+                                 { BenchmarkInstance.BM_GPU_PrefixSum(st); })
+        ->UseManualTime()
         ->Unit(benchmark::kMillisecond)
         ->RangeMultiplier(2)
         ->Range(1, MAX_BLOCKS)
@@ -160,6 +180,7 @@ static void RegisterBenchmarks(PipeBenchmark &BenchmarkInstance)
 
     benchmark::RegisterBenchmark("BM_GPU_Octree", [&BenchmarkInstance](benchmark::State &st)
                                  { BenchmarkInstance.BM_GPU_Octree(st); })
+        ->UseManualTime()
         ->Unit(benchmark::kMillisecond)
         ->RangeMultiplier(2)
         ->Range(1, MAX_BLOCKS)

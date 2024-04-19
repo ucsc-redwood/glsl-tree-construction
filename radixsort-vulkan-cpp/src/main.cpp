@@ -37,8 +37,8 @@ int main(const int argc, const char *argv[])
     std::cout << "Radix tree: " << pipe.time() << std::endl;
     pipe.edge_count(n_blocks, 0);
     std::cout << "Edge count: " << pipe.time() << std::endl;
-
     pipe.prefix_sum(n_blocks, 0);
-
+    std::cout << "Prefix Sum: " << pipe.time() << std::endl;
     pipe.octree(n_blocks, 0);
+    std::cout << "Octree: " << pipe.time() << std::endl;
 }
