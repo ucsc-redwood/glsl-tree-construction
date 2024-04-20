@@ -1,0 +1,90 @@
+#version 450
+#extension GL_KHR_shader_subgroup_basic: enable
+#extension GL_KHR_shader_subgroup_ballot: enable
+#extension GL_KHR_shader_subgroup_arithmetic: enable
+#extension GL_KHR_shader_subgroup_vote: enable
+#extension GL_KHR_shader_subgroup_shuffle_relative : enable
+#extension GL_KHR_shader_subgroup_shuffle : enable
+
+
+#define PARTITION_SIZE 768
+#define LANE_COUNT 32
+#define LANE_MASK 31
+
+#define WORKGROUP_SIZE 256
+#define SUBGROUP_PARTITIONS 3
+
+#define PART_START (partitionIndex * PARTITION_SIZE)
+
+
+layout(local_size_x = 256) in;
+
+layout(push_constant)uniform Constants{
+    uint vectorized_size;
+};
+
+layout(set=0,binding=0) buffer Data{
+    uint scan[];
+};
+
+layout(set=0,binding=1)  buffer Reduction{
+    volatile uint workgroup_reduction[];
+};
+
+shared uint s_scan[WORKGROUP_SIZE];
+
+uint workgroup_scan_full(uint threadidx){
+    uint reduction = 0;
+    const uint part_end = gl_NumWorkGroups.x / WORKGROUP_SIZE * WORKGROUP_SIZE;
+    for (uint i = threadidx; i < part_end; i += WORKGROUP_SIZE){
+        s_scan[i] = workgroup_reduction[i];
+        s_scan[i] += subgroupExclusiveAdd(s_scan[threadidx]);
+        groupMemoryBarrier();
+        barrier();
+
+        if (threadidx < WORKGROUP_SIZE / LANE_COUNT){
+            s_scan[(threadidx + 1) * LANE_COUNT - 1] += subgroupExclusiveAdd(s_scan[(threadidx + 1) * LANE_COUNT - 1]);
+        }
+        groupMemoryBarrier();
+        barrier();
+
+        workgroup_reduction[i] = s_scan[threadidx] + 
+            (threadidx >= LANE_COUNT && gl_SubgroupInvocationID != LANE_MASK ? 
+                subgroupBroadcast(s_scan[threadidx -1], 0) : 0) + reduction;
+        groupMemoryBarrier();
+        barrier();
+    }
+    return reduction;
+}
+
+void workgroup_scan_partial(uint threadidx, uint reduction){
+    const uint i = threadidx + gl_NumWorkGroups.x / WORKGROUP_SIZE * WORKGROUP_SIZE;
+
+    if (i < gl_NumWorkGroups.x){
+        s_scan[threadidx] = workgroup_reduction[i];
+    }
+    s_scan[threadidx] += subgroupExclusiveAdd(s_scan[threadidx]);
+    groupMemoryBarrier();
+    barrier();
+
+    if (threadidx < WORKGROUP_SIZE / LANE_COUNT){
+        s_scan[(threadidx + 1) * LANE_COUNT - 1] += subgroupExclusiveAdd(s_scan[(threadidx + 1) * LANE_COUNT - 1]);
+    }
+    groupMemoryBarrier();
+    barrier();
+
+    if (i < gl_NumWorkGroups.x){
+        workgroup_reduction[i] = s_scan[threadidx] + 
+            (threadidx >= LANE_COUNT && gl_SubgroupInvocationID != LANE_MASK ? 
+                subgroupBroadcast(s_scan[threadidx -1], 0) : 0) + reduction;
+    }
+}
+
+void k_scan(){
+    uint reduction = workgroup_scan_full(gl_LocalInvocationID.x);
+    workgroup_scan_partial(gl_LocalInvocationID.x, reduction);
+}
+
+void main(){
+    k_scan();
+}

@@ -8,6 +8,7 @@
 #include "radix_tree.hpp"
 #include "edge_count.hpp"
 #include "prefix_sum.hpp"
+#include "downsweep.hpp"
 #include "octree.hpp"
 #include "octree.hpp"
 #include <glm/vec4.hpp>
@@ -464,7 +465,8 @@ void Pipe::edge_count(const int num_blocks, const int queue_idx)
 void Pipe::prefix_sum(const int num_blocks, const int queue_idx)
 {
   memcpy(u_edge_offset, u_edge_count, sizeof(uint32_t) * params_.n);
-  auto prefix_sum_stage = PrefixSum();
+  // auto prefix_sum_stage = PrefixSum();
+  auto prefix_sum_stage = DownSweepPrefixSum();
   prefix_sum_stage.run(num_blocks,
                        queue_idx,
                        u_edge_offset,
