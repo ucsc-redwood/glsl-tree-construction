@@ -8,8 +8,8 @@
 namespace bm = benchmark;
 
 #define BUFFER_ELEMENTS 1920 * 1080
-#define MAX_BLOCKS 1
-#define ITERATIONS 2
+#define MAX_BLOCKS 128
+#define ITERATIONS 20
 
 class PipeBenchmark : public Pipe
 {
@@ -189,6 +189,12 @@ static void RegisterBenchmarks(PipeBenchmark &BenchmarkInstance)
 
 int main(int argc, char **argv)
 {
+    if (volkInitialize() != VK_SUCCESS)
+    {
+        std::cerr << "Failed to initialize volk!" << std::endl;
+        return EXIT_FAILURE;
+    }
+
     AppParams app_params;
     app_params.n = BUFFER_ELEMENTS;
     app_params.min_coord = 0.0f;
@@ -206,4 +212,7 @@ int main(int argc, char **argv)
     // Run the benchmarks
     bm::Initialize(&argc, argv);
     bm::RunSpecifiedBenchmarks();
+
+    // print hello world
+    std::cout << "Hello, World!" << std::endl;
 }
