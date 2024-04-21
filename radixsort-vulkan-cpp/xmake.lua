@@ -26,7 +26,7 @@ before_build(function(target)
     os.exec("python3 compile_shaders.py")
 end)
 
-
+includes("benchmarks")
 target("app")
 set_default(true)
 set_plat("android")
