@@ -9,7 +9,7 @@ namespace bm = benchmark;
 
 #define BUFFER_ELEMENTS 1920 * 1080
 #define MAX_BLOCKS 128
-#define ITERATIONS 20
+#define ITERATIONS 1
 
 class PipeBenchmark : public Pipe
 {
@@ -27,25 +27,42 @@ public:
         }
     }
 
+    //   u_morton_keys, DONE
+    //   sort_tmp.u_sort_alt, DONE
+    //   sort_tmp.u_global_histogram, DONE
+    //   sort_tmp.u_index, DONE
+    //   sort_tmp.u_pass_histogram_64, DONE
+    //   u_morton_keys_buffer,
+    //   sort_tmp.u_sort_alt_buffer,
+    //   sort_tmp.u_global_histogram_buffer,
+    //   sort_tmp.u_index_buffer,
+    //   sort_tmp.u_pass_histogram_64_buffer,
+
     void BM_GPU_Sort(bm::State &st)
     {
         int n_blocks = st.range(0);
         constexpr auto radix = 256;
         constexpr auto passes = 4;
-        const auto binning_thread_blocks = (params_.n + 7680 - 1) / 7680;
+        const auto max_binning_thread_blocks = ((2 << 25) + 7680 - 1) / 7680;
         int iters = 1;
+        int n = params_.n;
+
+        // Allocate memory for the copy
+        uint32_t *u_morton_keys_copy = new uint32_t[n];
+
+        // Copy the elements
+        std::copy(u_morton_keys, u_morton_keys + n, u_morton_keys_copy);
+
         for (auto _ : st)
         {
-            radix_sort(n_blocks, 0);
+            radix_sort_alt(n_blocks, 0);
             st.SetIterationTime(time());
-            if (n_blocks != MAX_BLOCKS || iters < ITERATIONS)
-            {
-                std::fill_n(sort_tmp.u_sort_alt, params_.n, 0);
-                std::fill_n(sort_tmp.u_global_histogram, radix * passes, 0);
-                std::fill_n(sort_tmp.u_pass_histogram, radix * binning_thread_blocks, glm::uvec4(0, 0, 0, 0));
-                std::fill_n(sort_tmp.u_index, 4, 0);
-            }
-            iters++;
+            // Reset the data
+            std::fill_n(sort_tmp.u_sort_alt, params_.n, 0);
+            std::fill_n(sort_tmp.u_global_histogram, radix * passes, 0);
+            std::fill_n(sort_tmp.u_index, 4, 0);
+            std::fill_n(sort_tmp.u_pass_histogram_64, radix * passes * max_binning_thread_blocks, 0);
+            std::copy(u_morton_keys_copy, u_morton_keys_copy + n, u_morton_keys);
         }
     }
 
@@ -132,14 +149,14 @@ static void RegisterBenchmarks(PipeBenchmark &BenchmarkInstance)
         ->Iterations(ITERATIONS)
         ->ArgName("GridSize");
 
-    // benchmark::RegisterBenchmark("BM_GPU_Sort", [&BenchmarkInstance](benchmark::State &st)
-    //                              { BenchmarkInstance.BM_GPU_Sort(st); })
-    //     ->UseManualTime()
-    //     ->Unit(benchmark::kMillisecond)
-    //     ->RangeMultiplier(2)
-    //     ->Range(1, MAX_BLOCKS)
-    //     ->Iterations(ITERATIONS)
-    //     ->ArgName("GridSize");
+    benchmark::RegisterBenchmark("BM_GPU_Sort", [&BenchmarkInstance](benchmark::State &st)
+                                 { BenchmarkInstance.BM_GPU_Sort(st); })
+        ->UseManualTime()
+        ->Unit(benchmark::kMillisecond)
+        ->RangeMultiplier(2)
+        ->Range(1, MAX_BLOCKS)
+        ->Iterations(ITERATIONS)
+        ->ArgName("GridSize");
 
     // benchmark::RegisterBenchmark("BM_GPU_Unique", [&BenchmarkInstance](benchmark::State &st)
     //                              { BenchmarkInstance.BM_GPU_Unique(st); })

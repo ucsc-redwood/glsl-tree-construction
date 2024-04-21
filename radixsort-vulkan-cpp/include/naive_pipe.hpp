@@ -391,6 +391,7 @@ void Pipe::radix_sort_alt(const int num_blocks, const int queue_idx)
                       sort_tmp.u_index_buffer,
                       sort_tmp.u_pass_histogram_64_buffer,
                       params_.n);
+  run_time = radixsort_stage.time();
   /*
   for (int i = 0; i < 1024; ++i){
     printf("global_histogram[%d]: %d\n", i, sort_tmp.u_global_histogram[i]);
