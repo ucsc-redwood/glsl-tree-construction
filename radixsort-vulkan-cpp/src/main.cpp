@@ -1,10 +1,11 @@
 #include "app_params.hpp"
 #include "naive_pipe.hpp"
+#include <unistd.h>
 //#include <vulkan/vulkan.hpp>
 #include "volk.h"
 #include <chrono>
 
-#define BUFFER_ELEMENTS  50000
+#define BUFFER_ELEMENTS  1920*1080
 
 int main(const int argc, const char* argv[]){
   if (volkInitialize() != VK_SUCCESS) {
@@ -35,7 +36,8 @@ int main(const int argc, const char* argv[]){
     //pipe.radix_sort(n_blocks, 0);
     pipe.radix_sort_alt(n_blocks, 0);
     
-    //pipe.unique(n_blocks, 0);
+    sleep(5);
+    pipe.unique(n_blocks, 0);
 
     // pipe.radix_tree(n_blocks, 0);
     

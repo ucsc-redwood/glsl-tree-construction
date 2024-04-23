@@ -178,7 +178,7 @@ void RadixSort64::run(const int logical_blocks,
 	create_pipeline(&histogram_shader_stage,&pipelineLayout, &histogram_pipeline);
     
     // create pipeline for scan
-    VkPipelineShaderStageCreateInfo scan_shader_stage = load_shader("scan.spv", &scan_shaderModule);
+    VkPipelineShaderStageCreateInfo scan_shader_stage = load_shader("radix_sort_scan.spv", &scan_shaderModule);
     create_pipeline(&scan_shader_stage, &pipelineLayout, &scan_pipeline);
 	//create pipeline for binning
 	VkPipelineShaderStageCreateInfo binning_shader_stage = load_shader("radix_sort_64.spv", &binning_shaderModule);

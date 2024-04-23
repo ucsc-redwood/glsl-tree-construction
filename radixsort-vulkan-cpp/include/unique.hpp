@@ -10,7 +10,7 @@ class Unique : public ApplicationBase{
     Unique() : ApplicationBase() {};
     ~Unique() {};
     void        submit(const int queue_idx);
-	void 		 cleanup(VkPipeline *find_dup_pipeline, VkPipeline *prefix_sum_pipeline, VkPipeline *move_dup_pipeline);
+	void 		 cleanup(VkPipeline *find_dup_pipeline, /*VkPipeline *prefix_sum_pipeline,*/ VkPipeline *reduce_pipeline, VkPipeline *scan_pipeline, VkPipeline *downsweep_pipeline, VkPipeline *move_dup_pipeline);
 	void run(const int logical_block,
 	const int queue_idx,
 	uint32_t* sorted_keys,
@@ -27,8 +27,11 @@ class Unique : public ApplicationBase{
 
     private:
 	VkShaderModule find_dups_shaderModule;
-	VkShaderModule prefix_sum_shaderModule;
+	// VkShaderModule prefix_sum_shaderModule;
 	VkShaderModule move_dups_shaderModule;
+	VkShaderModule reduce_shaderModule;
+    VkShaderModule scan_shaderModule;
+    VkShaderModule downsweep_shaderModule;
 
 	VkDescriptorSetLayout descriptorSetLayouts[3] = {VkDescriptorSetLayout{}, VkDescriptorSetLayout{}, VkDescriptorSetLayout{}};
 	VkDescriptorSet descriptorSets[3] = {VkDescriptorSet{}, VkDescriptorSet{}, VkDescriptorSet{}};
@@ -53,16 +56,22 @@ void Unique::submit(const int queue_idx){
 
 }
 
-void Unique::cleanup(VkPipeline *find_dup_pipeline, VkPipeline *prefix_sum_pipeline, VkPipeline *move_dup_pipeline){
+void Unique::cleanup(VkPipeline *find_dup_pipeline, /*VkPipeline *prefix_sum_pipeline,*/ VkPipeline *reduce_pipeline, VkPipeline *scan_pipeline, VkPipeline *downsweep_pipeline, VkPipeline *move_dup_pipeline){
 
 		vkDestroyDescriptorSetLayout(singleton.device, descriptorSetLayouts[0], nullptr);
 		vkDestroyDescriptorSetLayout(singleton.device, descriptorSetLayouts[1], nullptr);
 		vkDestroyDescriptorSetLayout(singleton.device, descriptorSetLayouts[2], nullptr);
 		vkDestroyPipeline(singleton.device, *find_dup_pipeline, nullptr);
-		vkDestroyPipeline(singleton.device, *prefix_sum_pipeline, nullptr);
+		// vkDestroyPipeline(singleton.device, *prefix_sum_pipeline, nullptr);
+		vkDestroyPipeline(singleton.device, *reduce_pipeline, nullptr);
+		vkDestroyPipeline(singleton.device, *scan_pipeline, nullptr);
+		vkDestroyPipeline(singleton.device, *downsweep_pipeline, nullptr);
 		vkDestroyPipeline(singleton.device, *move_dup_pipeline, nullptr);
 		vkDestroyShaderModule(singleton.device, find_dups_shaderModule, nullptr);
-		vkDestroyShaderModule(singleton.device, prefix_sum_shaderModule, nullptr);
+		// vkDestroyShaderModule(singleton.device, prefix_sum_shaderModule, nullptr);
+		vkDestroyShaderModule(singleton.device, reduce_shaderModule, nullptr);
+		vkDestroyShaderModule(singleton.device, scan_shaderModule, nullptr);
+		vkDestroyShaderModule(singleton.device, downsweep_shaderModule, nullptr);
 		vkDestroyShaderModule(singleton.device, move_dups_shaderModule, nullptr);
 		
 }
@@ -82,7 +91,10 @@ void Unique::run(const int logical_block,
 	const int n){
 
     VkPipeline find_dup_pipeline;
-	VkPipeline prefix_sum_pipeline;
+	// VkPipeline prefix_sum_pipeline;
+	VkPipeline reduce_pipeline;
+    VkPipeline scan_pipeline;
+	VkPipeline downsweep_pipeline;
 	VkPipeline move_dup_pipeline;
 
 	uint32_t aligned_size = ((n + 4 - 1)/ 4) * 4;
@@ -112,7 +124,7 @@ void Unique::run(const int logical_block,
 	};
 
 	std::vector<VkDescriptorSetLayoutBinding> prefix_sum_set_layout_bindings = {
-		index_layoutBinding, contributions_layoutBinding, reduction_layoutBinding
+		/*index_layoutBinding,*/ contributions_layoutBinding, reduction_layoutBinding
 	};
 
 	std::vector<VkDescriptorSetLayoutBinding> move_dup_set_layout_bindings = {
@@ -144,8 +156,8 @@ void Unique::run(const int logical_block,
     VkWriteDescriptorSet contributions_descriptor_write_2  = create_descriptor_write(descriptorSets[0], 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &contributions_bufferDescriptor_2);
     VkDescriptorBufferInfo reduction_bufferDescriptor = { reduction_buffer, 0, VK_WHOLE_SIZE };
     VkWriteDescriptorSet reduction_descriptor_write = create_descriptor_write(descriptorSets[0],1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &reduction_bufferDescriptor);
-    VkDescriptorBufferInfo index_bufferDescriptor = { index_buffer, 0, VK_WHOLE_SIZE };
-    VkWriteDescriptorSet index_descriptor_write = create_descriptor_write(descriptorSets[0],2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &index_bufferDescriptor);
+    // VkDescriptorBufferInfo index_bufferDescriptor = { index_buffer, 0, VK_WHOLE_SIZE };
+    // VkWriteDescriptorSet index_descriptor_write = create_descriptor_write(descriptorSets[0],2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &index_bufferDescriptor);
 
 	// move dup
 	VkDescriptorBufferInfo contributions_bufferDescriptor_3 = { contributions_buffer, 0, VK_WHOLE_SIZE };
@@ -158,7 +170,7 @@ void Unique::run(const int logical_block,
 
 	
 	std::vector<VkWriteDescriptorSet> descriptor_writes = {
-		contributions_descriptor_write, sorted_keys_descriptor_write, contributions_descriptor_write_2, reduction_descriptor_write, index_descriptor_write, contributions_descriptor_write_3, sorted_keys_descriptor_write_2, u_keys_descriptor_write
+		contributions_descriptor_write, sorted_keys_descriptor_write, contributions_descriptor_write_2, reduction_descriptor_write, /*index_descriptor_write,*/ contributions_descriptor_write_3, sorted_keys_descriptor_write_2, u_keys_descriptor_write
 	};
 
 
@@ -167,8 +179,14 @@ void Unique::run(const int logical_block,
 	//create pipeline 
 	VkPipelineShaderStageCreateInfo find_dup_shader_stage = load_shader("find_dups.spv", &find_dups_shaderModule);
 	create_pipeline(&find_dup_shader_stage,&pipelineLayout, &find_dup_pipeline);
-	VkPipelineShaderStageCreateInfo prefix_sum_shader_stage = load_shader("prefix_sum.spv", &prefix_sum_shaderModule);
-	create_pipeline(&prefix_sum_shader_stage,&pipelineLayout, &prefix_sum_pipeline);
+	//VkPipelineShaderStageCreateInfo prefix_sum_shader_stage = load_shader("prefix_sum.spv", &prefix_sum_shaderModule);
+	// create_pipeline(&prefix_sum_shader_stage,&pipelineLayout, &prefix_sum_pipeline);
+	VkPipelineShaderStageCreateInfo reduce_shader_stage = load_shader("reduce.spv", &reduce_shaderModule);
+	create_pipeline(&reduce_shader_stage,&pipelineLayout, &reduce_pipeline);
+	VkPipelineShaderStageCreateInfo scan_shader_stage = load_shader("scan.spv", &scan_shaderModule);
+	create_pipeline(&scan_shader_stage,&pipelineLayout, &scan_pipeline);
+	VkPipelineShaderStageCreateInfo downsweep_shader_stage = load_shader("downsweep.spv", &downsweep_shaderModule);
+	create_pipeline(&downsweep_shader_stage,&pipelineLayout, &downsweep_pipeline);
 	VkPipelineShaderStageCreateInfo move_dup_shader_stage = load_shader("move_dups.spv", &move_dups_shaderModule);
 	create_pipeline(&move_dup_shader_stage,&pipelineLayout, &move_dup_pipeline);
 
@@ -208,7 +226,7 @@ void Unique::run(const int logical_block,
 	
 	// for prefix_sum
 	unique_push_constant.n = vectorized_size;
-	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, prefix_sum_pipeline);
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, reduce_pipeline);
 	vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstant), &unique_push_constant);
 	vkCmdDispatch(commandBuffer, num_blocks, 1, 1);
 
@@ -216,8 +234,22 @@ void Unique::run(const int logical_block,
 	create_pipeline_barrier(&contributions_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 	reduction_barrier = create_buffer_barrier(&reduction_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
 	create_pipeline_barrier(&reduction_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-	index_barrier = create_buffer_barrier(&index_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-	create_pipeline_barrier(&index_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, scan_pipeline);
+	vkCmdDispatch(commandBuffer, 1, 1, 1);
+
+	contributions_barrier = create_buffer_barrier(&contributions_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+	create_pipeline_barrier(&contributions_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+	reduction_barrier = create_buffer_barrier(&reduction_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+	create_pipeline_barrier(&reduction_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, downsweep_pipeline);
+	vkCmdDispatch(commandBuffer, num_blocks, 1, 1);
+
+	contributions_barrier = create_buffer_barrier(&contributions_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+	create_pipeline_barrier(&contributions_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+	reduction_barrier = create_buffer_barrier(&reduction_buffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+	create_pipeline_barrier(&reduction_barrier, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 	
 	// for move_dup
 	unique_push_constant.n = n;
@@ -237,6 +269,6 @@ void Unique::run(const int logical_block,
 	vkQueueWaitIdle(singleton.queues[queue_idx]);
 
 
-	cleanup(&find_dup_pipeline, &prefix_sum_pipeline, &move_dup_pipeline);
+	cleanup(&find_dup_pipeline, /*&prefix_sum_pipeline,*/ &reduce_pipeline, &scan_pipeline, &downsweep_pipeline, &move_dup_pipeline);
 }
 
