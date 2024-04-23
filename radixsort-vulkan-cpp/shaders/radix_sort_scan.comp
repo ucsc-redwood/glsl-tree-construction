@@ -34,7 +34,7 @@ layout(set = 2, binding = 1) buffer BGlobalHist{
     uint b_globalHist[1024];
 };
 
-layout(set = 2, binding = 4) coherent buffer BPassHist {
+layout(set = 2, binding = 4) buffer BPassHist {
     uint b_passHist[];
 };
 
@@ -62,13 +62,14 @@ void global_hist_exclusive_scan(uint threadidx, uint workgroupidx){
     const uint index = (gl_SubgroupInvocationID + 1 & laneMask) + (threadidx & ~laneMask);
     b_passHist[index + workgroupidx * RADIX_BIN * e_workgroups] = ((gl_SubgroupInvocationID != laneMask ? s_scan[threadidx] : 0) +
         (threadidx >= LANE_COUNT ? subgroupBroadcast(s_scan[threadidx - 1], 0) : 0)) << 2 | FLAG_INCLUSIVE;
+    // b_passHist[index + workgroupidx * RADIX_BIN * e_workgroups] = 20;
 }
-void k_scan(){
-    const uint t = b_globalHist[gl_LocalInvocationID.x + gl_WorkGroupID.x * RADIX_BIN];
+void k_scan(uint block_id, uint logical_blocks){
+    const uint t = b_globalHist[gl_LocalInvocationID.x + block_id * RADIX_BIN];
     s_scan[gl_LocalInvocationID.x] = t + subgroupExclusiveAdd(t);
 
     if (LANE_COUNT >= 16){
-        global_hist_exclusive_scan(gl_LocalInvocationID.x, gl_WorkGroupID.x);
+        global_hist_exclusive_scan(gl_LocalInvocationID.x, block_id);
     }
     
     if (LANE_COUNT < 16){
@@ -77,5 +78,8 @@ void k_scan(){
 }
 
 void main(){
-    k_scan();
+    uint logical_blocks = 256;
+    for (uint zheyuan_block_id = gl_WorkGroupID.x; zheyuan_block_id < logical_blocks; zheyuan_block_id += gl_NumWorkGroups.x){
+        k_scan(zheyuan_block_id, logical_blocks);
+    }
 }

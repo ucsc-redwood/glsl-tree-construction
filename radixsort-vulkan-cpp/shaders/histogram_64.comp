@@ -26,9 +26,6 @@
 #define SUBGROUP_THREAD_IDX gl_GlobalInvocationID.x //(LANE + (SUBGROUP_IDX << LANE_LOG)) // the subgroup relative thread idx                                 
 
 
-//For the upfront global histogram kernel
-#define G_HIST_PART_SIZE	65536
-#define G_HIST_VEC_SIZE		16384
 
 layout(set = 0, binding = 0)  buffer BSortBuffer {
     uint b_sort[];

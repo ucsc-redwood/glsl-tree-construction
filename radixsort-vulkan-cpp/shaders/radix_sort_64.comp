@@ -55,7 +55,7 @@ layout(set = 1, binding = 3) coherent buffer BIndex {
 };
 
 // todo: change it to uint
-layout(set = 1, binding = 4) coherent buffer BPassHist {
+layout(set = 1, binding = 4) buffer BPassHist {
     uint b_passHist[];
 };
 
@@ -422,7 +422,6 @@ void k_DigitBinning(uint block_id, uint logical_blocks){
     barrier();
 
     if (partition_index < logical_blocks - 1){
-        //scatter_device(gl_LocalInvocationID.x);
         scatter_device_ascending(gl_LocalInvocationID.x);
     }
     

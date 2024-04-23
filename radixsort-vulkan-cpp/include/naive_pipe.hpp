@@ -378,36 +378,37 @@ void Pipe::radix_sort_alt(const int num_blocks, const int queue_idx){
     for (int i = 0; i < 1024; i++){
     printf("unsorted_key[%d]: %d\n", i, u_morton_keys[i]);
   }
-  // auto radixsort_stage = RadixSort64();
-  // radixsort_stage.run(num_blocks,
-  // queue_idx,
-  // u_morton_keys,
-  // sort_tmp.u_sort_alt,
-  // sort_tmp.u_global_histogram,
-  // sort_tmp.u_index,
-  // sort_tmp.u_pass_histogram_64,
-  // u_morton_keys_buffer,
-  // sort_tmp.u_sort_alt_buffer,
-  // sort_tmp.u_global_histogram_buffer,
-  // sort_tmp.u_index_buffer,
-  // sort_tmp.u_pass_histogram_64_buffer,
-  // params_.n);
-  std::sort(u_morton_keys, u_morton_keys + params_.n);
-  /*
+  auto radixsort_stage = RadixSort64();
+  radixsort_stage.run(num_blocks,
+  queue_idx,
+  u_morton_keys,
+  sort_tmp.u_sort_alt,
+  sort_tmp.u_global_histogram,
+  sort_tmp.u_index,
+  sort_tmp.u_pass_histogram_64,
+  u_morton_keys_buffer,
+  sort_tmp.u_sort_alt_buffer,
+  sort_tmp.u_global_histogram_buffer,
+  sort_tmp.u_index_buffer,
+  sort_tmp.u_pass_histogram_64_buffer,
+  params_.n);
+  // std::sort(u_morton_keys, u_morton_keys + params_.n);
+  
   for (int i = 0; i < 1024; ++i){
     printf("global_histogram[%d]: %d\n", i, sort_tmp.u_global_histogram[i]);
   }
   for (int i = 0; i < 1024; i++){
     printf("pass_histogram[%d]: %d\n", i, sort_tmp.u_pass_histogram_64[i]);
   }
-  */
-  for (int i = 0; i < 1024; i++){
+  
+  for (int i = 0; i < 256; i++){
     printf("sorted_key[%d]: %d\n", i, u_morton_keys[i]);
   }
+
   
-  // for (int i = params_.n-200; i < params_.n; i++){
-  //   printf("sorted_key[%d]: %d\n", i, u_morton_keys[i]);
-  // }
+   for (int i = params_.n-200; i < params_.n; i++){
+     printf("sorted_key[%d]: %d\n", i, u_morton_keys[i]);
+   }
 
 }
 
