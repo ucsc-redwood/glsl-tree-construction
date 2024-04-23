@@ -1,0 +1,115 @@
+#version 450
+#extension GL_KHR_shader_subgroup_basic: enable
+#extension GL_KHR_shader_subgroup_ballot: enable
+#extension GL_KHR_shader_subgroup_arithmetic: enable
+#extension GL_KHR_shader_subgroup_vote: enable
+#extension GL_KHR_shader_subgroup_shuffle_relative : enable
+#extension GL_KHR_shader_subgroup_shuffle : enable
+
+//#define input_size 2000000
+#define SCAN_BLOCK_SIZE 256
+
+#define RADIX_BIN 256
+#define RADIX_LOG 8
+#define RADIX_MASK 255 // Mask of digit bins
+
+#define SEC_RADIX_START     256     //Offset for retrieving values from global buffer
+#define THIRD_RADIX_START   512     //Offset for retrieving values from global buffer
+#define FOURTH_RADIX_START  768     //Offset for retrieving values from global buffer
+
+#define LANE_COUNT 16 // number of threads in a subgroup
+#define LANE_MASK 15
+#define LANE_LOG 4
+
+#define LANE gl_LocalInvocationID.x // the idx of thread in the subgroup
+#define SUBGROUP_IDX  gl_SubgroupID // the idx of subgroup the thread belongs to might be wrong
+#define SUBGROUP_THREAD_IDX gl_GlobalInvocationID.x //(LANE + (SUBGROUP_IDX << LANE_LOG)) // the subgroup relative thread idx
+
+#define FLAG_NOT_READY      0       //Flag value inidicating neither inclusive sum, or aggregate sum of a partition tile is ready
+#define FLAG_AGGREGATE      1       //Flag value indicating aggregate sum of a partition tile is ready
+#define FLAG_INCLUSIVE      2       //Flag value indicating inclusive sum of a partition tile is ready
+#define FLAG_MASK           3       //Mask used to retrieve flag values
+
+layout(local_size_x = 256) in;
+layout(set = 2, binding = 1) buffer BGlobalHist{
+    uint b_globalHist[1024];
+};
+
+layout(set = 2, binding = 4) coherent buffer BPassHist {
+    uint b_passHist[];
+};
+
+layout(push_constant) uniform Constant{
+    uint pass_num;
+    uint radix_shift;
+    uint n;
+    uint e_workgroups;
+};
+
+
+
+shared uint s_scan[SCAN_BLOCK_SIZE];
+
+void exclusive_scan_full(uint threadidx, uint workgroupidx, uint circular_shift, uint part_end, uint device_offset, inout uint reduction){
+    for (uint i = threadidx; i < part_end; i += SCAN_BLOCK_SIZE){
+        s_scan[threadidx] = b_passHist[i + device_offset];
+        s_scan[threadidx] += subgroupExclusiveAdd(s_scan[threadidx]);
+        groupMemoryBarrier();
+        barrier();
+
+        if (threadidx < SCAN_BLOCK_SIZE / LANE_COUNT){
+            s_scan[(threadidx + 1) * LANE_COUNT - 1] += subgroupExclusiveAdd(s_scan[(threadidx + 1) * LANE_COUNT - 1]);
+        }
+        groupMemoryBarrier();
+        barrier();
+
+        b_passHist[circular_shift + (i & ~LANE_MASK) + device_offset] = 
+            (gl_SubgroupInvocationID != LANE_MASK ? s_scan[threadidx] : 0) +
+            (threadidx >= LANE_COUNT ? subgroupBroadcast(s_scan[threadidx - 1], 0) : 0) +
+            reduction;
+        
+        reduction += s_scan[SCAN_BLOCK_SIZE - 1];
+        groupMemoryBarrier();
+        barrier();
+    }
+}
+
+void exclusive_scan_partial(uint threadidx, uint workgroupidx, uint circular_shift, uint part_end, uint device_offset, uint reduction){
+    uint i = threadidx + part_end;
+    if (i < e_workgroups){
+        s_scan[threadidx] = b_passHist[i + device_offset];
+    }
+    s_scan[threadidx] += subgroupExclusiveAdd(s_scan[threadidx]);
+    groupMemoryBarrier();
+    barrier();
+
+    if (threadidx < SCAN_BLOCK_SIZE / LANE_COUNT){
+        s_scan[(threadidx + 1) * LANE_COUNT - 1] += subgroupExclusiveAdd(s_scan[(threadidx + 1) * LANE_COUNT - 1]);
+    }
+    groupMemoryBarrier();
+    barrier();
+
+    const uint index = circular_shift + (i & ~LANE_MASK);
+    if (index < e_workgroups){
+        b_passHist[index + device_offset] = 
+            (gl_SubgroupInvocationID != LANE_MASK ? s_scan[threadidx] : 0) +
+            (threadidx >= LANE_COUNT ? s_scan[(threadidx & ~LANE_MASK) - 1] : 0) +
+            reduction;
+    }
+    
+}
+void k_scan(){
+    uint reduction = 0;
+    const uint circular_shift = (gl_SubgroupInvocationID + 1) & LANE_MASK;
+    const uint partition_end = e_workgroups / SCAN_BLOCK_SIZE * SCAN_BLOCK_SIZE;
+    const uint device_offset = gl_WorkGroupID.x * e_workgroups;
+    
+    // exculsive scan
+    exclusive_scan_full(gl_LocalInvocationID.x, gl_WorkGroupID.x, circular_shift, partition_end, device_offset, reduction);
+    exclusive_scan_partial(gl_LocalInvocationID.x, gl_WorkGroupID.x, circular_shift, partition_end, device_offset, reduction);
+
+}
+
+void main(){
+    k_scan();
+}
