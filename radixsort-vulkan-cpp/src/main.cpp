@@ -5,7 +5,7 @@
 #include "volk.h"
 #include <chrono>
 
-#define BUFFER_ELEMENTS  1920*1080
+#define BUFFER_ELEMENTS  50000
 
 int main(const int argc, const char* argv[]){
   if (volkInitialize() != VK_SUCCESS) {
