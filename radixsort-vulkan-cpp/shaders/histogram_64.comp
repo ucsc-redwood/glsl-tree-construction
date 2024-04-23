@@ -48,7 +48,7 @@ layout(push_constant) uniform Constant{
 
 
 
-layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
 shared uint s_globalHistFirst[RADIX_BIN * 2];
 shared uint s_globalHistSec[RADIX_BIN * 2];
